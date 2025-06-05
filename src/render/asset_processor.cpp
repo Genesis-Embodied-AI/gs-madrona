@@ -300,6 +300,7 @@ MaterialData initMaterialData(
             tex_desc.filterMode = cudaFilterModeLinear;
             tex_desc.readMode = cudaReadModeNormalizedFloat;
             tex_desc.normalizedCoords = 1;
+            tex_desc.sRGB = 1;
 
             cudaTextureObject_t tex_obj = 0;
             REQ_CUDA(cudaCreateTextureObject(&tex_obj,
@@ -337,6 +338,7 @@ MaterialData initMaterialData(
             tex_desc.filterMode = cudaFilterModeLinear;
             tex_desc.readMode = cudaReadModeNormalizedFloat;
             tex_desc.normalizedCoords = 1;
+            tex_desc.sRGB = 1;
 
             cudaTextureObject_t tex_obj = 0;
             REQ_CUDA(cudaCreateTextureObject(&tex_obj,

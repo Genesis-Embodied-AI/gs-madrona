@@ -33,6 +33,8 @@ PerspectiveCameraData unpackViewData(PackedViewData packed)
     cam.xScale = d1.w;
     cam.yScale = d2.x;
     cam.zNear = d2.y;
+    cam.zFar = d2.z;
+    cam.worldID = asint(d2.w);
 
     return cam;
 }

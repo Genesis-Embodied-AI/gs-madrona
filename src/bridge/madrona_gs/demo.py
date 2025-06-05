@@ -180,13 +180,12 @@ def output_depth(output_dir, depth, i_env, i_cam, i_step):
     cv2.imwrite(f'{output_dir}/depth_env{i_env}_cam{i_cam}_{i_step:03d}.png', depth_uint8)
 
 def output_rgb_and_depth(output_dir, rgb, depth, i_step):
-    bgr = rgb[..., [2, 1, 0]]
     # loop over the first and second dimension of rgb and depth
-    for i_env in range(bgr.shape[0]):
-        for i_cam in range(bgr.shape[1]):
+    for i_env in range(rgb.shape[0]):
+        for i_cam in range(rgb.shape[1]):
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
-            output_rgb(output_dir, bgr, i_env, i_cam, i_step)
+            output_rgb(output_dir, rgb, i_env, i_cam, i_step)
             output_depth(output_dir, depth, i_env, i_cam, i_step)
 
 def output_rgb_single_cam(output_dir, rgb, i_env, i_step, cam_idx):
@@ -202,12 +201,11 @@ def output_depth_single_cam(output_dir, depth, i_env, i_step, cam_idx):
     cv2.imwrite(f'{output_dir}/depth_env{i_env}_cam{cam_idx}_{i_step:03d}.png', depth_uint8)
 
 def output_rgb_and_depth_single_cam(output_dir, rgb, depth, i_step, cam_idx):
-    bgr = rgb[..., [2, 1, 0]]
     # loop over the first and second dimension of rgb and depth
-    for i_env in range(bgr.shape[0]):
+    for i_env in range(rgb.shape[0]):
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        output_rgb_single_cam(output_dir, bgr, i_env, i_step, cam_idx)
+        output_rgb_single_cam(output_dir, rgb, i_env, i_step, cam_idx)
         output_depth_single_cam(output_dir, depth, i_env, i_step, cam_idx)
 
 

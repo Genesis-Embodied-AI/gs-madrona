@@ -328,6 +328,7 @@ inline void viewTransformUpdate(Context &ctx,
     cam_data.xScale = x_scale;
     cam_data.yScale = y_scale;
     cam_data.zNear = cam.zNear;
+    cam_data.zFar = cam.zFar;
 
     Vector3 camera_pos = pos + cam.cameraOffset;
     cam_data.position = camera_pos;
@@ -690,13 +691,14 @@ void attachEntityToView(Context &ctx,
                         Entity e,
                         float vfov_degrees,
                         float z_near,
+                        float z_far,
                         const math::Vector3 &camera_offset)
 {
     float fov_scale = 1.0f / tanf(toRadians(vfov_degrees * 0.5f));
 
     Entity camera_entity = ctx.makeEntity<RenderCameraArchetype>();
     ctx.get<RenderCamera>(e) = { 
-        camera_entity, fov_scale, z_near, camera_offset 
+        camera_entity, fov_scale, z_near, z_far, camera_offset 
     };
 
     PerspectiveCameraData &cam_data = 
@@ -728,8 +730,8 @@ void attachEntityToView(Context &ctx,
         { /* Rotation */ }, 
         x_scale, y_scale, 
         z_near, 
-        ctx.worldID().idx,
-        0 // Padding
+        z_far,
+        ctx.worldID().idx
     };
 
     if (raycast_enabled) {

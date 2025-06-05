@@ -790,7 +790,7 @@ static __device__ TraceResult traceRay(
                     cudaTextureObject_t *tex = &bvhParams.textures[mat->textureIdx];
 
                     float4 sampled_color = tex2D<float4>(*tex,
-                            tri_hit.uv.x, 1.f - tri_hit.uv.y);
+                            tri_hit.uv.x, tri_hit.uv.y);
 
                     Vector3 tex_color = { sampled_color.x,
                         sampled_color.y,
@@ -1023,14 +1023,14 @@ extern "C" __global__ void bvhRaycastEntry()
                 writeDepth(global_pixel_byte_off, result.depth);
             } else {
                 writeRGB(global_pixel_byte_off, { 0.f, 0.f, 0.f });
-                writeDepth(global_pixel_byte_off, 0.f);
+                writeDepth(global_pixel_byte_off, INFINITY);
             }
         } else {
             // Only write depth information
             if (result.hit) {
                 writeDepth(global_pixel_byte_off, result.depth);
             } else {
-                writeDepth(global_pixel_byte_off, 0.f);
+                writeDepth(global_pixel_byte_off, INFINITY);
             }
         }
 

@@ -50,7 +50,7 @@ def main():
         fov=45,
         GUI=True,
     )
-    cam_0.attach(franka.links[0], trans_to_T(np.array([0.0, 0.5, 0.0])))
+    cam_0.attach(franka.links[6], trans_to_T(np.array([0.0, 0.5, 0.0])))
     cam_1 = scene.add_camera(
         pos=(1.5, -0.5, 1.5),
         lookat=(0.0, 0.0, 0.5),
@@ -91,10 +91,10 @@ def main():
         scene.step()
         if do_batch_dump:
             rgb, depth, _, _ = scene.batch_render()
-            output_rgb_and_depth('img_output/test', rgb, depth, i)
+            export_rgb_and_depth('img_output/test', 10, rgb, depth, i, depth_scale='log')
         else:
             rgb, depth, _, _ = cam_0.render()
-            output_rgb_and_depth_single_cam('img_output/test', rgb, depth, i, cam_0.idx)
+            export_rgb_and_depth_single_cam('img_output/test', 10, rgb, depth, i, cam_0.idx, depth_scale='log')
     
     end_time = time()
     print(f'n_envs: {n_envs}')
@@ -103,51 +103,49 @@ def main():
     print(f'FPS: {n_envs * n_steps / (end_time - start_time)}')
     print(f'FPS per env: {n_steps / (end_time - start_time)}')
 
-
-# TODO: Dump image faster, e.g., asynchronously or generate a video instead of saving images.
-def output_rgb(output_dir, rgb, i_env, i_cam, i_step):
+# TODO: Export image faster, e.g., asynchronously or generate a video instead of saving images.
+def export_rgb(output_dir, rgb, i_env, i_cam, i_step):
     rgb = rgb.cpu().numpy()[i_env, i_cam]
     cv2.imwrite(f'{output_dir}/rgb_env{i_env}_cam{i_cam}_{i_step:03d}.png', rgb)
 
-def output_depth(output_dir, depth, i_env, i_cam, i_step):
+def export_depth(output_dir, depth_cutoff_dist, depth, i_env, i_cam, i_step, depth_scale='linear'):
     depth = depth.cpu().numpy()[i_env, i_cam]
-    depth = np.asarray(depth)
-    depth = np.clip(depth, 0, 100)
+    depth = np.clip(depth, 0, depth_cutoff_dist)
+    if depth_scale == 'log':
+        depth = np.log1p(depth)  # log1p is log(1+x) which handles 0 values safely
     depth_normalized = cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX)
     depth_uint8 = depth_normalized.astype(np.uint8)
     cv2.imwrite(f'{output_dir}/depth_env{i_env}_cam{i_cam}_{i_step:03d}.png', depth_uint8)
 
-def output_rgb_and_depth(output_dir, rgb, depth, i_step):
-    bgr = rgb[..., [2, 1, 0]]
+def export_rgb_and_depth(output_dir, depth_cutoff_dist, rgb, depth, i_step, depth_scale='linear'):
     # loop over the first and second dimension of rgb and depth
-    for i_env in range(bgr.shape[0]):
-        for i_cam in range(bgr.shape[1]):
+    for i_env in range(rgb.shape[0]):
+        for i_cam in range(rgb.shape[1]):
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
-            output_rgb(output_dir, bgr, i_env, i_cam, i_step)
-            output_depth(output_dir, depth, i_env, i_cam, i_step)
+            export_rgb(output_dir, rgb, i_env, i_cam, i_step)
+            export_depth(output_dir, depth_cutoff_dist, depth, i_env, i_cam, i_step, depth_scale)
 
-def output_rgb_single_cam(output_dir, rgb, i_env, i_step, cam_idx):
+def export_rgb_single_cam(output_dir, rgb, i_env, i_step, cam_idx):
     rgb = rgb.cpu().numpy()[i_env]
     cv2.imwrite(f'{output_dir}/rgb_env{i_env}_cam{cam_idx}_{i_step:03d}.png', rgb)
 
-def output_depth_single_cam(output_dir, depth, i_env, i_step, cam_idx):
+def export_depth_single_cam(output_dir, depth_cutoff_dist, depth, i_env, i_step, cam_idx, depth_scale='linear'):
     depth = depth.cpu().numpy()[i_env]
-    depth = np.asarray(depth)
-    depth = np.clip(depth, 0, 100)
+    depth = np.clip(depth, 0, depth_cutoff_dist)
+    if depth_scale == 'log':
+        depth = np.log1p(depth)  # log1p is log(1+x) which handles 0 values safely
     depth_normalized = cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX)
     depth_uint8 = depth_normalized.astype(np.uint8)
     cv2.imwrite(f'{output_dir}/depth_env{i_env}_cam{cam_idx}_{i_step:03d}.png', depth_uint8)
 
-def output_rgb_and_depth_single_cam(output_dir, rgb, depth, i_step, cam_idx):
-    bgr = rgb[..., [2, 1, 0]]
+def export_rgb_and_depth_single_cam(output_dir, depth_cutoff_dist, rgb, depth, i_step, cam_idx, depth_scale='linear'):
     # loop over the first and second dimension of rgb and depth
-    for i_env in range(bgr.shape[0]):
+    for i_env in range(rgb.shape[0]):
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        output_rgb_single_cam(output_dir, bgr, i_env, i_step, cam_idx)
-        output_depth_single_cam(output_dir, depth, i_env, i_step, cam_idx)
-
+        export_rgb_single_cam(output_dir, rgb, i_env, i_step, cam_idx)
+        export_depth_single_cam(output_dir, depth_cutoff_dist, depth, i_env, i_step, cam_idx, depth_scale)
 
 if __name__ == "__main__":
     main()

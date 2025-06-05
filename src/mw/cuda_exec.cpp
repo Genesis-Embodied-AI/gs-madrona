@@ -1034,27 +1034,40 @@ static __attribute__((always_inline)) inline void dispatch(
     };
 }
 
-static void checkAndLoadBVHKernelCache(
-    Optional<BVHKernelCache> &cache,
-    Optional<std::string> &cache_write_path)
+bool kernelCacheNeedsRecompile(
+    const std::string &cache_path,
+    const std::vector<std::string> &src_paths)
 {
-    auto *cache_path =
-        getenv("MADRONA_BVH_KERNEL_CACHE");
-
-    if (!cache_path || cache_path[0] == '\0') {
-        return;
-    }
-
     if (!std::filesystem::exists(cache_path)) {
-        cache_write_path.emplace(cache_path);
-        return;
+        return true;
+    }
+    std::filesystem::file_time_type cache_time = 
+        std::filesystem::last_write_time(cache_path);
+
+    // Check if any source file is newer than cache
+    for (const auto &src_path : src_paths) {
+        if (!std::filesystem::exists(src_path)) {
+            continue;
+        }
+
+        auto src_time = std::filesystem::last_write_time(src_path);
+        if (src_time > cache_time) {
+            return true;
+        }
     }
 
+    return false;
+}
+
+template<typename KernelCache>
+static void loadKernelCache(
+    Optional<KernelCache> &cache,
+    const std::string &cache_path)
+{
     std::ifstream cache_file(cache_path,
         std::ios::binary | std::ios::ate);
     if (!cache_file.is_open()) {
-        FATAL("Failed to open megakernel cache file at %s",
-              cache_path);
+        FATAL("Failed to open BVH kernel cache file at %s", cache_path.c_str());
     }
 
     size_t num_cache_bytes = cache_file.tellg();
@@ -1065,7 +1078,7 @@ static void checkAndLoadBVHKernelCache(
     void *cubin_ptr = cache_data.data();
     size_t num_cubin_bytes = num_cache_bytes;
 
-    cache.emplace(BVHKernelCache {
+    cache.emplace(KernelCache {
         .data = std::move(cache_data),
         .cubinStart = cubin_ptr,
         .numCubinBytes = num_cubin_bytes,
@@ -1080,21 +1093,22 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
 {
     using namespace std;
 
-    auto bvh_cache = Optional<BVHKernelCache>::none();
-    auto cache_write_path = Optional<std::string>::none();
-
-    checkAndLoadBVHKernelCache(bvh_cache, cache_write_path);
-
-    CUmodule mod;
-
-    if (bvh_cache.has_value()) {
-        printf("loading BVH kernels from cache\n");
-        REQ_CU(cuModuleLoadData(&mod, bvh_cache->cubinStart));
-    } else {
-        array bvh_srcs = {
+    const std::string cache_path = getenv("MADRONA_BVH_KERNEL_CACHE");
+    const std::vector<std::string> bvh_srcs = {
             MADRONA_MW_GPU_BVH_INTERNAL_CPP
         };
 
+    bool need_recompile = kernelCacheNeedsRecompile(
+        cache_path,
+        bvh_srcs);
+
+    auto bvh_cache = Optional<BVHKernelCache>::none();
+    CUmodule mod;
+    if (!need_recompile) {
+        loadKernelCache(bvh_cache, cache_path);
+        REQ_CU(cuModuleLoadData(&mod, bvh_cache->cubinStart));
+    }
+    else {
         const char *force_debug_env = getenv("MADRONA_MWGPU_FORCE_DEBUG");
         const char *enable_trace_split_env = getenv("MADRONA_TRACK_TRACE_SPLIT");
         const char *shadow_enable_env = getenv("MADRONA_RT_SHADOWS");
@@ -1218,16 +1232,16 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
             std::string bvh_src((std::istreambuf_iterator<char>(bvh_file_stream)),
                 std::istreambuf_iterator<char>());
 
-            printf("Compiling %s\n", bvh_srcs[i]);
+            printf("Compiling %s\n", bvh_srcs[i].c_str());
 
             // Gives us LTOIR
             auto jit_output = cu::jitCompileCPPSrc(
-                bvh_src.c_str(), bvh_srcs[i],
+                bvh_src.c_str(), bvh_srcs[i].c_str(),
                 cur_compile_flags.data(), cur_compile_flags.size(),
                 cur_compile_flags.data(), cur_compile_flags.size(),
                 true);
 
-            addToLinker(jit_output.outputBinary, bvh_srcs[i]);
+            addToLinker(jit_output.outputBinary, bvh_srcs[i].c_str());
         }
 
         checkLinker(nvJitLinkComplete(linker));
@@ -1237,8 +1251,8 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
         HeapArray<char> linked_cubin(cubin_size);
         REQ_NVJITLINK(nvJitLinkGetLinkedCubin(linker, linked_cubin.data()));
 
-        if (cache_write_path.has_value()) {
-            std::ofstream cache_file(*cache_write_path, std::ios::binary);
+        if (!cache_path.empty()) {
+            std::ofstream cache_file(cache_path, std::ios::binary);
             cache_file.write(linked_cubin.data(), linked_cubin.size());
             cache_file.close();
         }

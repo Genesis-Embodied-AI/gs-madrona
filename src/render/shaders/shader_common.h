@@ -225,6 +225,7 @@ struct PerspectiveCameraData {
     float xScale;
     float yScale;
     float zNear;
+    float zFar;
     int32_t worldID;
 };
 

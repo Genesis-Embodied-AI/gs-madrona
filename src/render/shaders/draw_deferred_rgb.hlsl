@@ -445,49 +445,23 @@ void lighting(uint3 idx : SV_DispatchThreadID)
     }
 
     uint3 vbuffer_pixel = uint3(idx.x, idx.y, 0);
+    uint2 depth_dim;
+    depthInBuffer[target_idx].GetDimensions(depth_dim.x, depth_dim.y);
+    float2 depth_uv = float2(vbuffer_pixel.x + x_pixel_offset + 0.5, 
+                             vbuffer_pixel.y + y_pixel_offset + 0.5) / 
+                      float2(depth_dim.x, depth_dim.y);
 
-    float2 vbuffer_pixel_clip =
-        float2(float(vbuffer_pixel.x) + 0.5f, float(vbuffer_pixel.y) + 0.5f) /
-        float2(pushConst.viewWidth, pushConst.viewHeight);
+    float depth_in = depthInBuffer[target_idx].SampleLevel(
+                         linearSampler, depth_uv, 0).x;
 
-    vbuffer_pixel_clip = vbuffer_pixel_clip * 2.0f - float2(1.0f, 1.0f);
-    vbuffer_pixel_clip.y *= -1.0;
-
-    uint2 sample_uv_u32 = vbuffer_pixel.xy + uint2(x_pixel_offset, y_pixel_offset);
-
-    float2 total_res = float2(pushConst.viewWidth * pushConst.maxImagesXPerTarget, pushConst.viewHeight * pushConst.maxImagesYPerTarget);
-
-    float2 sample_uv = float2(sample_uv_u32) / total_res;
-    sample_uv.y = 1.0 - sample_uv.y;
-
-    // Apply the offset when reading the pixel value from the image
-    // float depth = depthInBuffer[target_idx].SampleLevel(linearSampler,
-                                                        // sample_uv, 0).x;
+    // Calculate linear depth with reverse-z buffer
+    PerspectiveCameraData cam_data = unpackViewData(viewDataBuffer[0]);
+    float z_near = cam_data.zNear;
+    float z_far = cam_data.zFar;
+    float linear_depth = z_far * z_near / (z_near - depth_in * (z_near - z_far));
 
     float4 color = vizBuffer[target_idx][vbuffer_pixel + 
                      uint3(x_pixel_offset, y_pixel_offset, 0)];
-
-    uint2 depth_dim;
-    depthInBuffer[target_idx].GetDimensions(
-        depth_dim.x, depth_dim.y);
-
-    float2 depth_uv = float2(vbuffer_pixel.x + x_pixel_offset, 
-                             vbuffer_pixel.y + y_pixel_offset) / 
-                      float2(depth_dim.x, depth_dim.y);
-
-    // printf("%f %f\n", depth_uv.x, depth_uv.y);
-
-    float depth_in = // depthInBuffer[target_idx][vbuffer_pixel + 
-                     // uint3(x_pixel_offset, y_pixel_offset, 0)].x;
-                     depthInBuffer[target_idx].SampleLevel(
-                         linearSampler, depth_uv, 0).x;
-
-    float z_near = unpackViewData(viewDataBuffer[0]).zNear;
-
-    float depth = abs(z_near / depth_in);
-    // float depth = abs(depth_in);
-
-
     float3 out_color = color.rgb;
 
     out_color.x += zeroDummy();
@@ -497,5 +471,5 @@ void lighting(uint3 idx : SV_DispatchThreadID)
         idx.y * pushConst.viewWidth + idx.x;
 
     rgbOutputBuffer[out_pixel_idx] = linearToSRGB8(out_color); 
-    depthOutputBuffer[out_pixel_idx] = depth;
+    depthOutputBuffer[out_pixel_idx] = linear_depth;
 }

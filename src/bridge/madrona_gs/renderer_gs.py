@@ -146,8 +146,9 @@ class MadronaBatchRendererAdapter:
         cam_pos,
         cam_rot,
     )
-    rgb_torch = self.madrona.rgb_tensor().to_torch()
-    depth_torch = self.madrona.depth_tensor().to_torch()    
+    # BGR to RGB
+    rgb_torch = self.madrona.rgb_tensor().to_torch()[..., [2, 1, 0]]
+    depth_torch = self.madrona.depth_tensor().to_torch()
     return rgb_torch, depth_torch
 
   def get_texture_data(self, rigid):
