@@ -6,6 +6,7 @@ import genesis as gs
 from genesis.options.renderers import BatchRenderer
 import numpy as np
 from genesis.utils.geom import trans_to_T
+from genesis.utils.image_exporter import FrameImageExporter
 
 def main():
 
@@ -83,6 +84,10 @@ def main():
     scene.step()
     rgb, depth, _, _ = scene.batch_render()
 
+    # Create an image exporter
+    output_dir = 'img_output/test'
+    exporter = FrameImageExporter(output_dir)
+
     # timer
     from time import time
     start_time = time()
@@ -91,10 +96,10 @@ def main():
         scene.step()
         if do_batch_dump:
             rgb, depth, _, _ = scene.batch_render()
-            export_rgb_and_depth('img_output/test', 10, rgb, depth, i, depth_scale='log')
+            exporter.export_frame_batch_cam(i, rgb=rgb, depth=depth)
         else:
             rgb, depth, _, _ = cam_0.render()
-            export_rgb_and_depth_single_cam('img_output/test', 10, rgb, depth, i, cam_0.idx, depth_scale='log')
+            exporter.export_frame_single_cam(i, cam_0.idx, rgb=rgb, depth=depth)
     
     end_time = time()
     print(f'n_envs: {n_envs}')
@@ -103,49 +108,6 @@ def main():
     print(f'FPS: {n_envs * n_steps / (end_time - start_time)}')
     print(f'FPS per env: {n_steps / (end_time - start_time)}')
 
-# TODO: Export image faster, e.g., asynchronously or generate a video instead of saving images.
-def export_rgb(output_dir, rgb, i_env, i_cam, i_step):
-    rgb = rgb.cpu().numpy()[i_env, i_cam]
-    cv2.imwrite(f'{output_dir}/rgb_env{i_env}_cam{i_cam}_{i_step:03d}.png', rgb)
-
-def export_depth(output_dir, depth_cutoff_dist, depth, i_env, i_cam, i_step, depth_scale='linear'):
-    depth = depth.cpu().numpy()[i_env, i_cam]
-    depth = np.clip(depth, 0, depth_cutoff_dist)
-    if depth_scale == 'log':
-        depth = np.log1p(depth)  # log1p is log(1+x) which handles 0 values safely
-    depth_normalized = cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX)
-    depth_uint8 = depth_normalized.astype(np.uint8)
-    cv2.imwrite(f'{output_dir}/depth_env{i_env}_cam{i_cam}_{i_step:03d}.png', depth_uint8)
-
-def export_rgb_and_depth(output_dir, depth_cutoff_dist, rgb, depth, i_step, depth_scale='linear'):
-    # loop over the first and second dimension of rgb and depth
-    for i_env in range(rgb.shape[0]):
-        for i_cam in range(rgb.shape[1]):
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-            export_rgb(output_dir, rgb, i_env, i_cam, i_step)
-            export_depth(output_dir, depth_cutoff_dist, depth, i_env, i_cam, i_step, depth_scale)
-
-def export_rgb_single_cam(output_dir, rgb, i_env, i_step, cam_idx):
-    rgb = rgb.cpu().numpy()[i_env]
-    cv2.imwrite(f'{output_dir}/rgb_env{i_env}_cam{cam_idx}_{i_step:03d}.png', rgb)
-
-def export_depth_single_cam(output_dir, depth_cutoff_dist, depth, i_env, i_step, cam_idx, depth_scale='linear'):
-    depth = depth.cpu().numpy()[i_env]
-    depth = np.clip(depth, 0, depth_cutoff_dist)
-    if depth_scale == 'log':
-        depth = np.log1p(depth)  # log1p is log(1+x) which handles 0 values safely
-    depth_normalized = cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX)
-    depth_uint8 = depth_normalized.astype(np.uint8)
-    cv2.imwrite(f'{output_dir}/depth_env{i_env}_cam{cam_idx}_{i_step:03d}.png', depth_uint8)
-
-def export_rgb_and_depth_single_cam(output_dir, depth_cutoff_dist, rgb, depth, i_step, cam_idx, depth_scale='linear'):
-    # loop over the first and second dimension of rgb and depth
-    for i_env in range(rgb.shape[0]):
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        export_rgb_single_cam(output_dir, rgb, i_env, i_step, cam_idx)
-        export_depth_single_cam(output_dir, depth_cutoff_dist, depth, i_env, i_step, cam_idx, depth_scale)
 
 if __name__ == "__main__":
     main()
