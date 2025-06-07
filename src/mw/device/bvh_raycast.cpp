@@ -799,8 +799,25 @@ static __device__ TraceResult traceRay(
                 if (mat->textureIdx != -1) {
                     cudaTextureObject_t *tex = &bvhParams.textures[mat->textureIdx];
 
-                    float4 sampled_color = tex2D<float4>(*tex,
-                            tri_hit.uv.x, tri_hit.uv.y);
+                    // --- Mipmap LOD selection ---
+                    // Estimate LOD based on distance from camera and UV footprint
+                    float lod = 0.0f;
+                    // Estimate derivatives if possible (fallback to distance-based)
+                    // tri_hit.uv is the barycentric UV at the hit point
+                    // trace_info.rayOrigin is the camera position
+                    // tri_hit.instance is the hit instance (for transform)
+                    // tri_hit.normal is the surface normal
+                    //
+                    // We'll use the distance from the camera to the hit point as a proxy for LOD
+                    Vector3 hit_pos = trace_info.rayOrigin + trace_info.rayDirection * tri_hit.tHit;
+                    float dist = (hit_pos - trace_info.rayOrigin).length();
+                    // Heuristic: LOD increases with log2(distance)
+                    lod = log2f(dist + 1e-3f); // add epsilon to avoid log(0)
+                    // Clamp LOD to [0, 8]
+                    lod = fminf(fmaxf(lod, 0.0f), 8.0f);
+
+                    float4 sampled_color = tex2DLod<float4>(*tex,
+                            tri_hit.uv.x, tri_hit.uv.y, lod);
 
                     Vector3 tex_color = { sampled_color.x,
                         sampled_color.y,

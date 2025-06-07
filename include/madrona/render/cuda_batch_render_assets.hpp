@@ -24,6 +24,8 @@ struct MaterialData {
     cudaTextureObject_t *textures;
     uint32_t numTextureBuffers;
     cudaArray_t *textureBuffers;
+    uint32_t numMipmapTextureBuffers;
+    cudaMipmappedArray_t *mipmapTextureBuffers;
     Material *materials;
 };
 
