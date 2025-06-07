@@ -5,6 +5,7 @@ import taichi as ti
 from madrona_gs._madrona_gs_batch_renderer import MadronaBatchRenderer
 from madrona_gs._madrona_gs_batch_renderer.madrona import ExecMode
 from trimesh.visual.texture import TextureVisuals
+from trimesh.visual.color import ColorVisuals
 from PIL import Image
 
 class MadronaBatchRendererAdapter:
@@ -51,9 +52,8 @@ class MadronaBatchRendererAdapter:
     geom_data_ids = np.arange(n_vgeom, dtype=np.int32)
     geom_sizes = np.ones((n_vgeom, 3), dtype=np.float32)
     assert num_cameras > 0, "Must have at least one camera for Madrona to work!"
-    geom_rgba = rigid.vgeoms_info.color.to_numpy()
 
-    geom_mat_ids, mesh_texcoord_num, mesh_texcoord_offsets, mesh_texcoord_data, texture_widths, texture_heights, texture_nchans, texture_data, texture_offsets, material_texture_ids, material_rgba = self.get_texture_data(rigid)
+    geom_mat_ids, mesh_texcoord_num, mesh_texcoord_offsets, mesh_texcoord_data, texture_widths, texture_heights, texture_nchans, texture_data, texture_offsets, material_texture_ids, material_rgba, geom_rgba = self.get_material_data(rigid)
 
     # TODO: Support mutable camera fov
     cam_fovy = cam_fovs_tensor.cpu().numpy()
@@ -150,7 +150,7 @@ class MadronaBatchRendererAdapter:
     depth_torch = self.madrona.depth_tensor().to_torch()
     return rgb_torch, depth_torch
 
-  def get_texture_data(self, rigid):
+  def get_material_data(self, rigid):
     n_vgeom = rigid.n_vgeoms
     vgeoms = rigid.vgeoms
 
@@ -182,6 +182,7 @@ class MadronaBatchRendererAdapter:
     num_textures_per_material = 10 # Madrona allows up to 10 textures per material
     material_texture_ids = np.full((num_textures, num_textures_per_material), -1, dtype=np.int32)
     material_rgba = np.empty((num_textures, 4), dtype=np.float32)
+    geom_rgba = np.empty((n_vgeom, 4), dtype=np.float32)
 
     num_textures = 0 # reset index
     total_texcoord_data_size = 0 # reset size
@@ -212,8 +213,10 @@ class MadronaBatchRendererAdapter:
 
         # Bump texture index
         num_textures += 1
+      elif(isinstance(visual, ColorVisuals)):
+        geom_rgba[geomIdx] = visual.main_color.astype(np.float32) / 255.0
 
-    return geom_mat_ids, mesh_texcoord_num, mesh_texcoord_offsets, texcoord_data, texture_widths, texture_heights, texture_nchans, texture_data, texture_offsets, material_texture_ids, material_rgba
+    return geom_mat_ids, mesh_texcoord_num, mesh_texcoord_offsets, texcoord_data, texture_widths, texture_heights, texture_nchans, texture_data, texture_offsets, material_texture_ids, material_rgba, geom_rgba
 
 ########################## Utils ##########################  
   def get_camera_pos_rot_torch(self, cam_pos_tensor, cam_rot_tensor):

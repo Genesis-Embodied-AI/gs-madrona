@@ -175,6 +175,8 @@ struct MeshBVH {
     struct BVHVertex{
         madrona::math::Vector3 pos;
         madrona::math::Vector2 uv;
+        madrona::math::Vector3 normal;
+        madrona::math::Vector4 tangentAndSign;
     };
 
     // Helper struct for Ray-Triangle intersection

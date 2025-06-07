@@ -64,10 +64,6 @@ static inline Optional<render::RenderManager> initRenderManager(
     const Optional<VisualizerGPUHandles> &viz_gpu_hdls,
     const Optional<RenderGPUState> &render_gpu_state)
 {
-    if (mgr_cfg.useRT && !viz_gpu_hdls.has_value()) {
-        return Optional<render::RenderManager>::none();
-    }
-
     render::APIBackend *render_api;
     render::GPUDevice *render_dev;
 
@@ -99,91 +95,6 @@ static inline Optional<render::RenderManager> initRenderManager(
         .voxelCfg = {},
     });
 }
-
-struct JAXIO {
-    Vector3 *geomPositions;
-    Quat *geomRotations;
-    Vector3 *camPositions;
-    Quat *camRotations;
-    Diag3x3 *geomSizes;
-    int32_t *matIDs;
-    uint32_t *geomRGB;
-    Vector3 *lightPos;
-    Vector3 *lightDir;
-    bool *lightIsDir;
-    bool *lightCastShadow;
-    float *lightCutoff;
-    float *lightIntensity;
-    uint8_t *rgbOut;
-    float *depthOut;
-
-    static inline JAXIO makeInit(void **buffers)
-    {
-        CountT buf_idx = 0;
-        auto geom_positions = (Vector3 *)buffers[buf_idx++];
-        auto geom_rotations = (Quat *)buffers[buf_idx++];
-        auto cam_positions = (Vector3 *)buffers[buf_idx++];
-        auto cam_rotations = (Quat *)buffers[buf_idx++];
-        auto mat_ids = (int32_t *)buffers[buf_idx++];
-        auto geom_rgb = (uint32_t *)buffers[buf_idx++];
-        auto geom_sizes = (Diag3x3 *)buffers[buf_idx++];
-        auto light_pos = (Vector3 *)buffers[buf_idx++];
-        auto light_dir = (Vector3 *)buffers[buf_idx++];
-        auto light_isdir = (bool *)buffers[buf_idx++];
-        auto light_castshadow = (bool *)buffers[buf_idx++];
-        auto light_cutoff = (float *)buffers[buf_idx++];
-        auto light_intensity = (float *)buffers[buf_idx++];
-        auto rgb_out = (uint8_t *)buffers[buf_idx++];
-        auto depth_out = (float *)buffers[buf_idx++];
-
-        return JAXIO {
-            .geomPositions = geom_positions,
-            .geomRotations = geom_rotations,
-            .camPositions = cam_positions,
-            .camRotations = cam_rotations,
-            .geomSizes = geom_sizes,
-            .matIDs = mat_ids,
-            .geomRGB = geom_rgb,
-            .lightPos = light_pos,
-            .lightDir = light_dir,
-            .lightIsDir = light_isdir,
-            .lightCastShadow = light_castshadow,
-            .lightCutoff = light_cutoff,
-            .lightIntensity = light_intensity,
-            .rgbOut = rgb_out,
-            .depthOut = depth_out,
-        };
-    }
-
-    static inline JAXIO makeRender(void **buffers)
-    {
-        CountT buf_idx = 0;
-        auto geom_positions = (Vector3 *)buffers[buf_idx++];
-        auto geom_rotations = (Quat *)buffers[buf_idx++];
-        auto cam_positions = (Vector3 *)buffers[buf_idx++];
-        auto cam_rotations = (Quat *)buffers[buf_idx++];
-        auto rgb_out = (uint8_t *)buffers[buf_idx++];
-        auto depth_out = (float *)buffers[buf_idx++];
-
-        return JAXIO {
-            .geomPositions = geom_positions,
-            .geomRotations = geom_rotations,
-            .camPositions = cam_positions,
-            .camRotations = cam_rotations,
-            .geomSizes = nullptr,
-            .matIDs = nullptr,
-            .geomRGB = nullptr,
-            .lightPos = nullptr,
-            .lightDir = nullptr,
-            .lightIsDir = nullptr,
-            .lightCastShadow = nullptr,
-            .lightCutoff = nullptr,
-            .lightIntensity = nullptr,
-            .rgbOut = rgb_out,
-            .depthOut = depth_out,
-        };
-    }
-};
 
 struct Manager::Impl {
     Config cfg;
@@ -407,85 +318,6 @@ struct Manager::Impl {
         }
     }
 
-    inline void copyOutRendered(uint8_t *rgb_out, float *depth_out,
-                                cudaStream_t strm)
-    {  
-        cudaMemcpyAsync(depth_out, getDepthOut(),
-                        sizeof(float) *
-                        (size_t)cfg.batchRenderViewWidth *
-                        (size_t)cfg.batchRenderViewHeight *
-                        (size_t)cfg.numWorlds *
-                        (size_t)numCams,
-                        cudaMemcpyDeviceToDevice, strm);
-
-        cudaMemcpyAsync(rgb_out, getRGBOut(),
-                        sizeof(uint8_t) *
-                        (size_t)cfg.batchRenderViewWidth *
-                        (size_t)cfg.batchRenderViewHeight *
-                        (size_t)cfg.numWorlds *
-                        (size_t)numCams * 4,
-                        cudaMemcpyDeviceToDevice, strm);
-    }
-
-    inline void gpuStreamInit(cudaStream_t strm, void **buffers)
-    {
-        MWCudaLaunchGraph init_graph =
-            gpuExec.buildLaunchGraph(TaskGraphID::Init);
-        
-        MWCudaLaunchGraph render_init_graph =
-            gpuExec.buildLaunchGraph(TaskGraphID::RenderInit);
-
-        JAXIO jax_io = JAXIO::makeInit(buffers);
-
-        gpuExec.runAsync(init_graph, strm);
-
-        copyInTransforms(
-            jax_io.geomPositions,
-            jax_io.geomRotations,
-            jax_io.camPositions,
-            jax_io.camRotations,
-            strm);
-        
-        copyInProperties(
-            jax_io.geomSizes,
-            jax_io.matIDs,
-            jax_io.geomRGB,
-            jax_io.lightPos,
-            jax_io.lightDir,
-            jax_io.lightIsDir,
-            jax_io.lightCastShadow,
-            jax_io.lightCutoff,
-            jax_io.lightIntensity,
-            strm);
-
-        gpuExec.runAsync(render_init_graph, strm);
-
-        // Currently a CPU sync is needed to read back the total number of
-        // instances for Vulkan
-        REQ_CUDA(cudaStreamSynchronize(strm));
-
-        renderImpl();
-
-        copyOutRendered(jax_io.rgbOut, jax_io.depthOut, strm);
-    }
-
-    inline void gpuStreamRender(cudaStream_t strm, void **buffers)
-    {
-        JAXIO jax_io = JAXIO::makeRender(buffers);
-
-        copyInTransforms(jax_io.geomPositions, jax_io.geomRotations,
-                         jax_io.camPositions, jax_io.camRotations, strm);
-
-        gpuExec.runAsync(renderGraph, strm);
-        // Currently a CPU sync is needed to read back the total number of
-        // instances for Vulkan
-        REQ_CUDA(cudaStreamSynchronize(strm));
-
-        renderImpl();
-
-        copyOutRendered(jax_io.rgbOut, jax_io.depthOut, strm);
-    }
-
     inline Tensor exportTensor(ExportID slot,
         TensorElementType type,
         madrona::Span<const int64_t> dims) const
@@ -555,6 +387,10 @@ static RTAssets loadRenderObjects(
     meshes[(size_t)RenderPrimObjectIDs::Box] = CreateBox(generated_assets);
     meshes[(size_t)RenderPrimObjectIDs::Cylinder] = CreateCylinder(generated_assets);
     meshes[(size_t)RenderPrimObjectIDs::Capsule] = CreateCapsule(generated_assets);
+
+    // Allocate memory for normals and tangentAndSigns
+    HeapArray<Vector3> normals(model.meshGeo.numVertices);
+    HeapArray<Vector4> tangentAndSigns(model.meshGeo.numVertices);
     
     for (CountT mesh_idx = 0; mesh_idx < num_meshes; mesh_idx++) {
         uint32_t mesh_vert_offset = model.meshGeo.vertexOffsets[mesh_idx];
@@ -578,8 +414,8 @@ static RTAssets loadRenderObjects(
 
         meshes[mesh_idx + (size_t)RenderPrimObjectIDs::NumPrims] = {
             .positions = model.meshGeo.vertices + mesh_vert_offset,
-            .normals = nullptr,
-            .tangentAndSigns = nullptr,
+            .normals = normals.data() + mesh_vert_offset,
+            .tangentAndSigns = tangentAndSigns.data() + mesh_vert_offset,
             .uvs = uvs,
             .indices = model.meshGeo.indices + mesh_idx_offset,
             .faceCounts = nullptr,
@@ -883,18 +719,6 @@ void Manager::render(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
 {
     impl_->render(geom_pos, geom_rot, cam_pos, cam_rot);
 }
-
-#ifdef MADRONA_CUDA_SUPPORT
-void Manager::gpuStreamInit(cudaStream_t strm, void **buffers)
-{
-    impl_->gpuStreamInit(strm, buffers);
-}
-
-void Manager::gpuStreamRender(cudaStream_t strm, void **buffers)
-{
-    impl_->gpuStreamRender(strm, buffers);
-}
-#endif
 
 Tensor Manager::instancePositionsTensor() const
 {

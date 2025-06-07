@@ -101,11 +101,6 @@ public:
                            const madrona::math::Vector3 *cam_pos,
                            const madrona::math::Quat *cam_rot);
      
-#ifdef MADRONA_CUDA_SUPPORT
-    MGR_EXPORT void gpuStreamInit(cudaStream_t strm, void **buffers);
-    MGR_EXPORT void gpuStreamRender(cudaStream_t strm, void **buffers);
-#endif
-
     // These functions export Tensor objects that link the ECS
     // simulation state to the python bindings / PyTorch tensors (src/bindings.cpp)
     //

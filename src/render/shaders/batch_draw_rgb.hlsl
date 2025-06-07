@@ -142,8 +142,8 @@ PixelOutput frag(in V2F v2f,
         float4 color = mat_data.color;
         
         if (mat_data.textureIdx != -1) {
-            color *= materialTexturesArray[mat_data.textureIdx].SampleLevel(
-                    linearSampler, v2f.uv, 0);
+            color *= materialTexturesArray[mat_data.textureIdx].Sample(
+                    linearSampler, v2f.uv);
         }
 
         float3 normal = normalize(v2f.worldNormal);

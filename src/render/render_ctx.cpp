@@ -1601,6 +1601,134 @@ RenderContext::~RenderContext()
     dev.dt.destroyPipelineCache(dev.hdl, pipelineCache, nullptr);
 }
 
+static void copyBufferToImage(const vk::Device &dev,
+        VkCommandBuffer& cmdbuf,
+        const HostBuffer &texture_hb_staging,
+        VkImage& texture_image,
+        uint32_t width,
+        uint32_t height)
+{
+    VkBufferImageCopy copy = {};
+    copy.bufferOffset = 0;
+    copy.bufferRowLength = 0;
+    copy.bufferImageHeight = 0;
+    copy.imageExtent.width = width;
+    copy.imageExtent.height = height;
+    copy.imageExtent.depth = 1;
+    copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy.imageSubresource.mipLevel = 0;
+    copy.imageSubresource.baseArrayLayer = 0;
+    copy.imageSubresource.layerCount = 1;
+
+    dev.dt.cmdCopyBufferToImage(cmdbuf, texture_hb_staging.buffer,
+            texture_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+
+    VkImageMemoryBarrier finish_prepare {
+        VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            nullptr,
+            VK_ACCESS_MEMORY_WRITE_BIT,
+            VK_ACCESS_SHADER_READ_BIT,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_QUEUE_FAMILY_IGNORED,
+            VK_QUEUE_FAMILY_IGNORED,
+            texture_image,
+            {
+                VK_IMAGE_ASPECT_COLOR_BIT,
+                0, 1, 0, 1
+            },
+    };
+
+    dev.dt.cmdPipelineBarrier(cmdbuf,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0,
+            0, nullptr, 0, nullptr,
+            1, &finish_prepare);
+}
+
+static void generateMipmaps(const vk::Device &dev,
+                     VkCommandBuffer& cmdBuffer,
+                     VkImage& image,
+                     int32_t texWidth,
+                     int32_t texHeight,
+                     uint32_t mipLevels) {
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.image = image;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.subresourceRange.levelCount = 1;
+
+    int32_t mipWidth = texWidth;
+    int32_t mipHeight = texHeight;
+
+    for (uint32_t i = 1; i < mipLevels; i++) {
+        // Transition level i-1 to transfer src
+        barrier.subresourceRange.baseMipLevel = i - 1;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+        dev.dt.cmdPipelineBarrier(cmdBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+            0, nullptr, 0, nullptr, 1, &barrier);
+
+        // Blit from level i-1 to level i
+        VkImageBlit blit{};
+        blit.srcOffsets[0] = {0, 0, 0};
+        blit.srcOffsets[1] = {mipWidth, mipHeight, 1};
+        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.srcSubresource.mipLevel = i - 1;
+        blit.srcSubresource.baseArrayLayer = 0;
+        blit.srcSubresource.layerCount = 1;
+
+        blit.dstOffsets[0] = {0, 0, 0};
+        blit.dstOffsets[1] = {
+            mipWidth > 1 ? mipWidth / 2 : 1,
+            mipHeight > 1 ? mipHeight / 2 : 1,
+            1
+        };
+        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.dstSubresource.mipLevel = i;
+        blit.dstSubresource.baseArrayLayer = 0;
+        blit.dstSubresource.layerCount = 1;
+
+        dev.dt.cmdBlitImage(cmdBuffer,
+            image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &blit, VK_FILTER_LINEAR);
+
+        // Transition level i-1 to shader read
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        dev.dt.cmdPipelineBarrier(cmdBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+            0, nullptr, 0, nullptr, 1, &barrier);
+
+        mipWidth = std::max(1, mipWidth / 2);
+        mipHeight = std::max(1, mipHeight / 2);
+    }
+
+    // Final mip level to shader read
+    barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    dev.dt.cmdPipelineBarrier(cmdBuffer,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+        0, nullptr, 0, nullptr, 1, &barrier);
+}
+
 static DynArray<MaterialTexture> loadTextures(
     const vk::Device &dev, MemoryAllocator &alloc, VkQueue queue,
     Span<const imp::SourceTexture> textures)
@@ -1727,8 +1855,10 @@ static DynArray<MaterialTexture> loadTextures(
             uint32_t width = tx.width;
             uint32_t height = tx.height;
 
+            uint32_t mip_levels = std::max(1, (int32_t)std::floor(std::log2(std::max(width, height))));
+
             auto [texture, texture_reqs] = alloc.makeTexture2D(
-                    width, height, 1, VK_FORMAT_R8G8B8A8_SRGB);
+                    width, height, mip_levels, VK_FORMAT_R8G8B8A8_SRGB);
 
             HostBuffer texture_hb_staging = alloc.makeStagingBuffer(texture_reqs.size);
             memcpy(texture_hb_staging.ptr, pixels, width * height * 4 * sizeof(char));
@@ -1763,44 +1893,10 @@ static DynArray<MaterialTexture> loadTextures(
                     0, nullptr, 0, nullptr,
                     1, &copy_prepare);
 
-            VkBufferImageCopy copy = {};
-            copy.bufferOffset = 0;
-            copy.bufferRowLength = 0;
-            copy.bufferImageHeight = 0;
-            copy.imageExtent.width = width;
-            copy.imageExtent.height = height;
-            copy.imageExtent.depth = 1;
-            copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copy.imageSubresource.mipLevel = 0;
-            copy.imageSubresource.baseArrayLayer = 0;
-            copy.imageSubresource.layerCount = 1;
+            copyBufferToImage(dev, cmdbuf, texture_hb_staging, texture.image, width, height);
+            host_buffers.push_back(std::move(texture_hb_staging));
 
-            dev.dt.cmdCopyBufferToImage(cmdbuf, texture_hb_staging.buffer,
-                    texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
-
-            VkImageMemoryBarrier finish_prepare {
-                VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                    nullptr,
-                    VK_ACCESS_MEMORY_WRITE_BIT,
-                    VK_ACCESS_SHADER_READ_BIT,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_QUEUE_FAMILY_IGNORED,
-                    VK_QUEUE_FAMILY_IGNORED,
-                    texture.image,
-                    {
-                        VK_IMAGE_ASPECT_COLOR_BIT,
-                        0, 1, 0, 1
-                    },
-            };
-
-
-            dev.dt.cmdPipelineBarrier(cmdbuf,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    0,
-                    0, nullptr, 0, nullptr,
-                    1, &finish_prepare);
+            generateMipmaps(dev, cmdbuf, texture.image, width, height, mip_levels);
 
             VkImageViewCreateInfo view_info {};
             view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1808,7 +1904,7 @@ static DynArray<MaterialTexture> loadTextures(
             VkImageSubresourceRange &view_info_sr = view_info.subresourceRange;
             view_info_sr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             view_info_sr.baseMipLevel = 0;
-            view_info_sr.levelCount = 1;
+            view_info_sr.levelCount = mip_levels;  // Include all mip levels
             view_info_sr.baseArrayLayer = 0;
             view_info_sr.layerCount = 1;
 
@@ -1817,7 +1913,6 @@ static DynArray<MaterialTexture> loadTextures(
             view_info.format = VK_FORMAT_R8G8B8A8_SRGB;
             REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &view));
 
-            host_buffers.push_back(std::move(texture_hb_staging));
 
             dst_textures.emplace_back(std::move(texture), view, texture_backing.value());
         }
@@ -1949,70 +2044,63 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
             mesh_ptr[mesh_offset++] = mesh_data;
 
             // Compute new normals
-            auto new_normals = Optional<HeapArray<Vector3>>::none();
-            if (!mesh.normals) {
-                new_normals.emplace(num_mesh_verts);
+            HeapArray<Vector3> new_normals(num_mesh_verts);
+            memset(new_normals.data(), 0, num_mesh_verts * sizeof(Vector3));
 
-                for (int64_t vert_idx = 0; vert_idx < num_mesh_verts;
-                     vert_idx++) {
-                    (*new_normals)[vert_idx] = Vector3::zero();
+            for (CountT face_idx = 0; face_idx < (CountT)mesh.numFaces;
+                    face_idx++) {
+                CountT base_idx = face_idx * 3;
+                uint32_t i0 = mesh.indices[base_idx];
+                uint32_t i1 = mesh.indices[base_idx + 1];
+                uint32_t i2 = mesh.indices[base_idx + 2];
+
+                Vector3 v0 = mesh.positions[i0];
+                Vector3 v1 = mesh.positions[i1];
+                Vector3 v2 = mesh.positions[i2];
+
+                Vector3 e0 = v1 - v0;
+                Vector3 e1 = v2 - v0;
+
+                Vector3 face_normal = cross(e0, e1);
+                float face_len = face_normal.length();
+
+                if (face_len == 0.f) {
+                    // Degenerate triangle
+                    face_normal = math::up;
+                } else {
+                    face_normal /= face_len;
                 }
 
-                for (CountT face_idx = 0; face_idx < (CountT)mesh.numFaces;
-                     face_idx++) {
-                    CountT base_idx = face_idx * 3;
-                    uint32_t i0 = mesh.indices[base_idx];
-                    uint32_t i1 = mesh.indices[base_idx + 1];
-                    uint32_t i2 = mesh.indices[base_idx + 2];
+                new_normals[i0] += face_normal;
+                new_normals[i1] += face_normal;
+                new_normals[i2] += face_normal;
+            }
 
-                    Vector3 v0 = mesh.positions[i0];
-                    Vector3 v1 = mesh.positions[i1];
-                    Vector3 v2 = mesh.positions[i2];
-
-                    Vector3 e0 = v1 - v0;
-                    Vector3 e1 = v2 - v0;
-
-                    Vector3 face_normal = cross(e0, e1);
-                    float face_len = face_normal.length();
-
-                    if (face_len == 0.f) {
-                        // Degenerate triangle
-                        face_normal = math::up;
-                    } else {
-                        face_normal /= face_len;
-                    }
-
-                    (*new_normals)[i0] += face_normal;
-                    (*new_normals)[i1] += face_normal;
-                    (*new_normals)[i2] += face_normal;
-                }
-
-                for (int64_t vert_idx = 0; vert_idx < num_mesh_verts;
-                     vert_idx++) {
-                    (*new_normals)[vert_idx] =
-                        normalize((*new_normals)[vert_idx]);
-                }
+            for (int64_t vert_idx = 0; vert_idx < num_mesh_verts;
+                    vert_idx++) {
+                new_normals[vert_idx] =
+                    normalize(new_normals[vert_idx]);
             }
 
             for (int32_t i = 0; i < num_mesh_verts; i++) {
                 // printf("%u ", vert_mat_index);
 
                 Vector3 pos = mesh.positions[i];
-                Vector3 normal = mesh.normals ?
-                    mesh.normals[i] : (*new_normals)[i];
-                Vector4 tangent_sign;
-                // FIXME: use mikktspace at import time
-                if (mesh.tangentAndSigns != nullptr) {
-                    tangent_sign = mesh.tangentAndSigns[i];
-                } else {
-                    Vector3 a, b;
-                    normal.frame(&a, &b);
-                    tangent_sign = {
-                        a.x,
-                        a.y,
-                        a.z,
-                        1.f,
-                    };
+                Vector3 normal = new_normals[i];
+                if(mesh.normals) {
+                    mesh.normals[i] = normal;
+                }
+
+                Vector3 a, b;
+                normal.frame(&a, &b);
+                Vector4 tangent_sign = {
+                    a.x,
+                    a.y,
+                    a.z,
+                    1.f,
+                };
+                if(mesh.tangentAndSigns) {
+                    mesh.tangentAndSigns[i] = tangent_sign;
                 }
 
                 Vector2 uv = mesh.uvs ? mesh.uvs[i] : Vector2 { 0, 0 };
