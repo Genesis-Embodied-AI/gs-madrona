@@ -1,9 +1,7 @@
 import numpy as np
 import torch
-import taichi as ti
 
 from madrona_gs._madrona_gs_batch_renderer import MadronaBatchRenderer
-from madrona_gs._madrona_gs_batch_renderer.madrona import ExecMode
 from trimesh.visual.texture import TextureVisuals
 from trimesh.visual.color import ColorVisuals
 from PIL import Image
