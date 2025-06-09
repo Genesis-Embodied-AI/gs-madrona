@@ -195,15 +195,6 @@ struct ShadowViewData {
     float4 cameraForward;
 };
 
-// Deprecated
-/*
-struct DirectionalLight {
-    float4 lightDir;
-    float4 color;
-    float lightCutoff;
-};
-*/
-
 // Only used in shaders
 struct ShaderLightData {
     float3 position;

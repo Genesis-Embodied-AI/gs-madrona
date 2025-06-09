@@ -552,27 +552,13 @@ template <typename T> __global__ void submitRun(uint32_t) {}
     REQ_NVRTC(nvrtcDestroyProgram(&prog));
 }
 
-static void checkAndLoadMegakernelCache(
-    Optional<MegakernelCache> &cache,
-    Optional<std::string> &cache_write_path)
+static MegakernelCache loadMegakernelCache(const std::string &cache_path)
 {
-    auto *cache_path =
-        getenv("MADRONA_MWGPU_KERNEL_CACHE");
-
-    if (!cache_path || cache_path[0] == '\0') {
-        return;
-    }
-
-    if (!std::filesystem::exists(cache_path)) {
-        cache_write_path.emplace(cache_path);
-        return;
-    }
-
     std::ifstream cache_file(cache_path,
         std::ios::binary | std::ios::ate);
     if (!cache_file.is_open()) {
         FATAL("Failed to open megakernel cache file at %s",
-              cache_path);
+              cache_path.c_str());
     }
 
     size_t num_cache_bytes = cache_file.tellg();
@@ -623,14 +609,14 @@ static void checkAndLoadMegakernelCache(
     void *cubin_ptr = cache_data.data() + aligned_cubin_offset;
     size_t num_cubin_bytes = num_cache_bytes - aligned_cubin_offset;
 
-    cache.emplace(MegakernelCache {
+    return MegakernelCache {
         .data = std::move(cache_data),
         .cubinStart = cubin_ptr,
         .numCubinBytes = num_cubin_bytes,
         .initECSName = init_ecs_str,
         .initWorldsName = init_worlds_str,
         .initTasksName = init_tasks_str,
-    });
+    };
 }
 
 static std::string getMegakernelConfigSuffixStr(
@@ -639,6 +625,31 @@ static std::string getMegakernelConfigSuffixStr(
     return std::to_string(megakernel_cfg.numThreads) + "_" +
         std::to_string(megakernel_cfg.numBlocksPerSM) + "_" +
         std::to_string(megakernel_cfg.numSMs);
+}
+
+bool kernelCacheNeedsRecompile(
+    const std::string &cache_path,
+    const std::vector<std::string> &src_paths)
+{
+    if (!std::filesystem::exists(cache_path)) {
+        return true;
+    }
+    std::filesystem::file_time_type cache_time = 
+        std::filesystem::last_write_time(cache_path);
+
+    // Check if any source file is newer than cache
+    for (const auto &src_path : src_paths) {
+        if (!std::filesystem::exists(src_path)) {
+            continue;
+        }
+
+        auto src_time = std::filesystem::last_write_time(src_path);
+        if (src_time > cache_time) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static GPUCompileResults compileCode(
@@ -651,20 +662,22 @@ static GPUCompileResults compileCode(
     CompileConfig::OptMode opt_mode,
     ExecutorMode exec_mode, bool verbose_compile)
 {
-    auto kernel_cache = Optional<MegakernelCache>::none();
-    auto cache_write_path = Optional<std::string>::none();
-    checkAndLoadMegakernelCache(kernel_cache, cache_write_path);
+    const std::string cache_path = getenv("MADRONA_MWGPU_KERNEL_CACHE");
+    std::vector<std::string> src_paths(sources, sources + num_sources);
 
-    if (kernel_cache.has_value()) {
-        printf("Loading kernel cache from cache\n");
+    bool need_recompile = kernelCacheNeedsRecompile(cache_path, src_paths);
+    if (!need_recompile) {
+        auto kernel_cache = loadMegakernelCache(cache_path.c_str());
+
         CUmodule mod;
-        REQ_CU(cuModuleLoadData(&mod, kernel_cache->cubinStart));
+        REQ_CU(cuModuleLoadData(&mod, kernel_cache.cubinStart));
+        printf("Loaded megakernel cache from %s\n", cache_path.c_str());
 
         return {
             .mod = mod,
-            .initECSName = kernel_cache->initECSName,
-            .initWorldsName = kernel_cache->initWorldsName,
-            .initTasksName = kernel_cache->initTasksName,
+            .initECSName = kernel_cache.initECSName,
+            .initWorldsName = kernel_cache.initWorldsName,
+            .initTasksName = kernel_cache.initTasksName,
         };
     }
 
@@ -997,8 +1010,8 @@ static __attribute__((always_inline)) inline void dispatch(
     HeapArray<char> linked_cubin(cubin_size);
     REQ_NVJITLINK(nvJitLinkGetLinkedCubin(linker, linked_cubin.data()));
 
-    if (cache_write_path.has_value()) {
-        std::ofstream cache_file(*cache_write_path, std::ios::binary);
+    if (!cache_path.empty()) {
+        std::ofstream cache_file(cache_path.c_str(), std::ios::binary);
         cache_file.write(init_ecs_name.data(), init_ecs_name.size() + 1);
         cache_file.write(init_worlds_name.data(), init_worlds_name.size() + 1);
         cache_file.write(init_tasks_name.data(), init_tasks_name.size() + 1);
@@ -1034,35 +1047,8 @@ static __attribute__((always_inline)) inline void dispatch(
     };
 }
 
-bool kernelCacheNeedsRecompile(
-    const std::string &cache_path,
-    const std::vector<std::string> &src_paths)
-{
-    if (!std::filesystem::exists(cache_path)) {
-        return true;
-    }
-    std::filesystem::file_time_type cache_time = 
-        std::filesystem::last_write_time(cache_path);
-
-    // Check if any source file is newer than cache
-    for (const auto &src_path : src_paths) {
-        if (!std::filesystem::exists(src_path)) {
-            continue;
-        }
-
-        auto src_time = std::filesystem::last_write_time(src_path);
-        if (src_time > cache_time) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 template<typename KernelCache>
-static void loadKernelCache(
-    Optional<KernelCache> &cache,
-    const std::string &cache_path)
+static KernelCache loadKernelCache(const std::string &cache_path)
 {
     std::ifstream cache_file(cache_path,
         std::ios::binary | std::ios::ate);
@@ -1078,11 +1064,11 @@ static void loadKernelCache(
     void *cubin_ptr = cache_data.data();
     size_t num_cubin_bytes = num_cache_bytes;
 
-    cache.emplace(KernelCache {
+    return KernelCache {
         .data = std::move(cache_data),
         .cubinStart = cubin_ptr,
         .numCubinBytes = num_cubin_bytes,
-    });
+    };
 }
 
 // We still want to have the same compiler flags as passed to the megakernel
@@ -1102,11 +1088,11 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
         cache_path,
         bvh_srcs);
 
-    auto bvh_cache = Optional<BVHKernelCache>::none();
     CUmodule mod;
     if (!need_recompile) {
-        loadKernelCache(bvh_cache, cache_path);
-        REQ_CU(cuModuleLoadData(&mod, bvh_cache->cubinStart));
+        auto bvh_cache = loadKernelCache<BVHKernelCache>(cache_path);
+        REQ_CU(cuModuleLoadData(&mod, bvh_cache.cubinStart));
+        printf("Loaded BVH kernel cache from %s\n", cache_path.c_str());
     }
     else {
         const char *force_debug_env = getenv("MADRONA_MWGPU_FORCE_DEBUG");
@@ -2501,19 +2487,6 @@ MWCudaExecutor::~MWCudaExecutor()
 
     if (impl_->bvhKernels.materialData.materials) {
         REQ_CUDA(cudaFree(impl_->bvhKernels.materialData.materials));
-    }
-
-#if 0
-    if (impl_->bvhKernels.materialData.textureBuffers) {
-        cudaFree(impl_->bvhKernels.materialData.textures);
-    }
-#endif
-
-    for (uint32_t i = 0;
-            i < impl_->bvhKernels.materialData.numTextureBuffers;
-            ++i) {
-        REQ_CUDA(cudaFreeArray(
-            impl_->bvhKernels.materialData.textureBuffers[i]));
     }
 
 #ifdef MADRONA_TRACING

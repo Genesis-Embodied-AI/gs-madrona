@@ -473,6 +473,8 @@ MaterialData initMaterialData(
 
     free(cpu_mat_data.textures);
     free(cpu_mat_data.materials);
+    free(cpu_mat_data.textureBuffers);
+    free(cpu_mat_data.mipmapTextureBuffers);
 
     auto gpu_mat_data = cpu_mat_data;
     gpu_mat_data.textures = gpu_tex_buffer;
