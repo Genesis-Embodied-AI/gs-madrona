@@ -1,0 +1,33 @@
+name: Clang-Tidy
+
+on:
+  pull_request:
+    branches: [main, test-clang-tidy]
+  push:
+    branches: [main, test-clang-tidy]
+
+jobs:
+  clang-tidy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-tidy clang cmake build-essential
+
+      - name: Configure project
+        run: |
+          mkdir -p build
+          cd build
+          cmake .. -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          # Copy compile_commands.json to root if needed
+          cp compile_commands.json ../
+
+      - name: Run clang-tidy
+        run: |
+          cd build
+          clang-tidy $(find ../src -name '*.cpp') -- -I../include
