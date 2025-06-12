@@ -26,21 +26,21 @@ def parse_device_logs(events):
             "num_warps": num_warps,
             "num_blocks": num_blocks,
             "num_sms": num_sms,
-            "configs": {}
+            "configs": {},
         }
 
     for i in range(0, len(events), 40):
-        array = events[i:i + 40]
+        array = events[i : i + 40]
 
-        event = int.from_bytes(array[:4], byteorder='little')
-        funcID = int.from_bytes(array[4:8], byteorder='little')
-        numInvocations = int.from_bytes(array[8:12], byteorder='little')
-        nodeID = int.from_bytes(array[12:16], byteorder='little')
-        warpID = int.from_bytes(array[16:20], byteorder='little')
-        blockID = int.from_bytes(array[20:24], byteorder='little')
-        smID = int.from_bytes(array[24:28], byteorder='little')
-        logIndex = int.from_bytes(array[28:32], byteorder='little')
-        cycleCount = int.from_bytes(array[32:40], byteorder='little')
+        event = int.from_bytes(array[:4], byteorder="little")
+        funcID = int.from_bytes(array[4:8], byteorder="little")
+        numInvocations = int.from_bytes(array[8:12], byteorder="little")
+        nodeID = int.from_bytes(array[12:16], byteorder="little")
+        warpID = int.from_bytes(array[16:20], byteorder="little")
+        blockID = int.from_bytes(array[20:24], byteorder="little")
+        smID = int.from_bytes(array[24:28], byteorder="little")
+        logIndex = int.from_bytes(array[28:32], byteorder="little")
+        cycleCount = int.from_bytes(array[32:40], byteorder="little")
 
         if STEP != -1:
             # to make a unique warp id
@@ -51,59 +51,44 @@ def parse_device_logs(events):
             # for calibration event, we log kernel config instead of node
             # when logIndex == 0, it is the first node of the whole step
             if logIndex == 0:
-                new_step(num_warps=funcID,
-                         num_blocks=numInvocations,
-                         num_sms=nodeID)
+                new_step(num_warps=funcID, num_blocks=numInvocations, num_sms=nodeID)
                 LOG_STEPS[STEP]["start_timestamp"] = cycleCount
             else:
-                assert LOG_STEPS[STEP]["num_warps"] == funcID and LOG_STEPS[
-                    STEP]["num_sms"] == nodeID
+                assert LOG_STEPS[STEP]["num_warps"] == funcID and LOG_STEPS[STEP]["num_sms"] == nodeID
                 LOG_STEPS[STEP]["num_blocks"] = numInvocations
 
         elif event in [1, 2]:
             if nodeID not in LOG_STEPS[STEP]["mapping"]:
                 LOG_STEPS[STEP]["mapping"][nodeID] = (funcID, numInvocations)
             else:
-                assert LOG_STEPS[STEP]["mapping"][nodeID] == (funcID,
-                                                              numInvocations)
+                assert LOG_STEPS[STEP]["mapping"][nodeID] == (funcID, numInvocations)
 
             if nodeID not in LOG_STEPS[STEP]["events"]:
-                LOG_STEPS[STEP]["events"][nodeID] = {
-                    event: (smID, warpID, cycleCount)
-                }
+                LOG_STEPS[STEP]["events"][nodeID] = {event: (smID, warpID, cycleCount)}
             else:
                 assert event not in LOG_STEPS[STEP]["events"][nodeID]
-                LOG_STEPS[STEP]["events"][nodeID][event] = (smID, warpID,
-                                                            cycleCount)
+                LOG_STEPS[STEP]["events"][nodeID][event] = (smID, warpID, cycleCount)
             if nodeID not in LOG_STEPS[STEP]["configs"]:
-                LOG_STEPS[STEP]["configs"][nodeID] = {
-                    "num_blocks": LOG_STEPS[STEP]["num_blocks"]
-                }
+                LOG_STEPS[STEP]["configs"][nodeID] = {"num_blocks": LOG_STEPS[STEP]["num_blocks"]}
 
         elif event in [3, 4]:
             if smID not in LOG_STEPS[STEP]["SMs"]:
                 assert event == 3
-                LOG_STEPS[STEP]["SMs"][smID] = {
-                    (numInvocations, nodeID, warpID): [cycleCount]
-                }
+                LOG_STEPS[STEP]["SMs"][smID] = {(numInvocations, nodeID, warpID): [cycleCount]}
             else:
-                if (numInvocations, nodeID,
-                        warpID) in LOG_STEPS[STEP]["SMs"][smID]:
+                if (numInvocations, nodeID, warpID) in LOG_STEPS[STEP]["SMs"][smID]:
                     assert event == 4
-                    LOG_STEPS[STEP]["SMs"][smID][(numInvocations, nodeID,
-                                                  warpID)].append(cycleCount)
+                    LOG_STEPS[STEP]["SMs"][smID][(numInvocations, nodeID, warpID)].append(cycleCount)
                 else:
                     assert event == 3
-                    LOG_STEPS[STEP]["SMs"][smID][(numInvocations, nodeID,
-                                                  warpID)] = [cycleCount]
+                    LOG_STEPS[STEP]["SMs"][smID][(numInvocations, nodeID, warpID)] = [cycleCount]
 
         elif event == 5:
             # assert warpID not in LOG_STEPS[STEP]["final_cycles"]
             # LOG_STEPS[STEP]["final_cycles"][warpID] = cycleCount
-            LOG_STEPS[STEP]["final_timestamp"] = max(
-                LOG_STEPS[STEP]["final_timestamp"], cycleCount)
+            LOG_STEPS[STEP]["final_timestamp"] = max(LOG_STEPS[STEP]["final_timestamp"], cycleCount)
         else:
-            assert (False & "event {} not supported".format(event))
+            assert False & "event {} not supported".format(event)
 
     # drop the last step which might be corrupted
     # del LOG_STEPS[STEP]
@@ -127,27 +112,18 @@ def serialized_analysis(step_log, nodes_map):
         if i not in step_log["events"]:
             continue
         nodes_map[i] = {
-            "nodeID":
-                i,
-            "funcID":
-                step_log["mapping"][i][0],
-            "invocations":
-                step_log["mapping"][i][1],
-            "start":
-                calibrate(step_log["events"][i][1],
-                          step_log["start_timestamp"]),
-            "end":
-                calibrate(step_log["events"][i][2],
-                          step_log["start_timestamp"]),
-            "SM utilization": []
+            "nodeID": i,
+            "funcID": step_log["mapping"][i][0],
+            "invocations": step_log["mapping"][i][1],
+            "start": calibrate(step_log["events"][i][1], step_log["start_timestamp"]),
+            "end": calibrate(step_log["events"][i][2], step_log["start_timestamp"]),
+            "SM utilization": [],
         }
-        nodes_map[i][
-            "duration (ns)"] = nodes_map[i]["end"] - nodes_map[i]["start"]
+        nodes_map[i]["duration (ns)"] = nodes_map[i]["end"] - nodes_map[i]["start"]
 
     total_exec_time = sum(v["duration (ns)"] for v in nodes_map.values())
     for i in nodes_map:
-        nodes_map[i]["percentage (%)"] = nodes_map[i][
-            "duration (ns)"] / total_exec_time * 100
+        nodes_map[i]["percentage (%)"] = nodes_map[i]["duration (ns)"] / total_exec_time * 100
 
 
 def block_analysis(step_log, nodes_map):
@@ -159,7 +135,7 @@ def block_analysis(step_log, nodes_map):
 
     for sm in step_log["SMs"]:
         for (_, nodeID, warpID), time_stamps in step_log["SMs"][sm].items():
-            assert (len(time_stamps) == 2)
+            assert len(time_stamps) == 2
             start = time_stamps[0]
             end = max(time_stamps[1:])
             # confirm clock does proceed within an SM
@@ -173,19 +149,14 @@ def block_analysis(step_log, nodes_map):
                 block_exec_time["blocks"][sm][warpID] = [(start, end, nodeID)]
             else:
                 assert start > block_exec_time["blocks"][sm][warpID][-1][1]
-                block_exec_time["blocks"][sm][warpID].append(
-                    (start, end, nodeID))
+                block_exec_time["blocks"][sm][warpID].append((start, end, nodeID))
 
             if nodeID not in block_exec_time["nodes"][sm]:
                 block_exec_time["nodes"][sm][nodeID] = []
             block_exec_time["nodes"][sm][nodeID].append((start, end, warpID))
 
-        block_exec_time["blocks"][sm] = {
-            k: sorted(v) for k, v in block_exec_time["blocks"][sm].items()
-        }
-        block_exec_time["nodes"][sm] = {
-            k: sorted(v) for k, v in block_exec_time["nodes"][sm].items()
-        }
+        block_exec_time["blocks"][sm] = {k: sorted(v) for k, v in block_exec_time["blocks"][sm].items()}
+        block_exec_time["nodes"][sm] = {k: sorted(v) for k, v in block_exec_time["nodes"][sm].items()}
 
     for s in sm_execution:
         intervals = []
@@ -202,8 +173,7 @@ def block_analysis(step_log, nodes_map):
                     intervals.insert(p, (start, end))
                     break
                 else:
-                    intervals[p] = (min(start, intervals[p][0]),
-                                    max(end, intervals[p][1]))
+                    intervals[p] = (min(start, intervals[p][0]), max(end, intervals[p][1]))
                     break
             else:
                 intervals.insert(p, (start, end))
@@ -220,27 +190,37 @@ def block_analysis(step_log, nodes_map):
                     i_pointer += 1
                     continue
                 else:
-                    assert (False and "no intersections")
-            nodes_map[k]["SM utilization"].append(occupied_time /
-                                                  nodes_map[k]["duration (ns)"])
+                    assert False and "no intersections"
+            nodes_map[k]["SM utilization"].append(occupied_time / nodes_map[k]["duration (ns)"])
 
     for i in nodes_map:
-        assert (len(nodes_map[i]["SM utilization"]) == len(sm_execution))
-        nodes_map[i]["SM utilization"] = sum(
-            nodes_map[i]["SM utilization"]) / len(sm_execution)
+        assert len(nodes_map[i]["SM utilization"]) == len(sm_execution)
+        nodes_map[i]["SM utilization"] = sum(nodes_map[i]["SM utilization"]) / len(sm_execution)
 
     print(
-        "For each SM on average, {:.3f}% of the time there is at least one block is running on"
-        .format(
-            sum(v["SM utilization"] * v["percentage (%)"]
-                for v in nodes_map.values())))
+        "For each SM on average, {:.3f}% of the time there is at least one block is running on".format(
+            sum(v["SM utilization"] * v["percentage (%)"] for v in nodes_map.values())
+        )
+    )
 
     return block_exec_time
 
 
 COLORS = [
-    "blue", "orange", "red", "green", "purple", "cyan", "pink", "magenta",
-    "olive", "navy", "teal", "maroon", "yellow", "black"
+    "blue",
+    "orange",
+    "red",
+    "green",
+    "purple",
+    "cyan",
+    "pink",
+    "magenta",
+    "olive",
+    "navy",
+    "teal",
+    "maroon",
+    "yellow",
+    "black",
 ]
 
 
@@ -258,11 +238,14 @@ def plot_events(step_log, nodes_map, blocks, file_name, args):
     x_limit = y_limit * args.aspect_ratio
     print("the figure size will be {}x{}".format(x_limit, y_limit))
 
-    top_nodes = sorted([
-        i[0] for i in sorted(nodes_map.items(),
-                             key=lambda item: item[1]["duration (ns)"])
-        [len(nodes_map) - args.num_highlight_nodes:]
-    ])
+    top_nodes = sorted(
+        [
+            i[0]
+            for i in sorted(nodes_map.items(), key=lambda item: item[1]["duration (ns)"])[
+                len(nodes_map) - args.num_highlight_nodes :
+            ]
+        ]
+    )
 
     colors = {}
     if HIDE_SEEK:
@@ -283,7 +266,7 @@ def plot_events(step_log, nodes_map, blocks, file_name, args):
             # Compute Visibility System
             54: (90, 184, 168),
             # LIDAR System
-            56: (148, 112, 206)
+            56: (148, 112, 206),
         }
     else:
         for n in top_nodes:
@@ -296,7 +279,7 @@ def plot_events(step_log, nodes_map, blocks, file_name, args):
     draw = ImageDraw.Draw(img)
 
     def cast_coor(timestamp, limit=x_limit):
-        assert (timestamp <= step_log["final_timestamp"])
+        assert timestamp <= step_log["final_timestamp"]
         if args.fixed_scale:
             return int(timestamp / args.tpp)
         else:
@@ -306,8 +289,7 @@ def plot_events(step_log, nodes_map, blocks, file_name, args):
     for n in nodes_map:
         if nodes_map[n]["funcID"] not in colors:
             continue
-        left, right = cast_coor(nodes_map[n]["start"]), cast_coor(
-            nodes_map[n]["end"])
+        left, right = cast_coor(nodes_map[n]["start"]), cast_coor(nodes_map[n]["end"])
         color_span[(left, right)] = colors[nodes_map[n]["funcID"]]
     sorted_color_span = sorted(color_span.keys())
 
@@ -326,17 +308,12 @@ def plot_events(step_log, nodes_map, blocks, file_name, args):
                 if e[2] not in node_pixels_sm:
                     node_pixels_sm[e[2]] = [start, end]
                 else:
-                    node_pixels_sm[e[2]] = [
-                        min(node_pixels_sm[e[2]][0], start),
-                        max(node_pixels_sm[e[2]][1], end)
-                    ]
+                    node_pixels_sm[e[2]] = [min(node_pixels_sm[e[2]][0], start), max(node_pixels_sm[e[2]][1], end)]
                 for i in range(start, end + 1):
                     if i not in vertical_pixels:
-                        vertical_pixels[i] = 1 * MAX_BLOCKS_PER_SM / step_log[
-                            "configs"][e[2]]["num_blocks"]
+                        vertical_pixels[i] = 1 * MAX_BLOCKS_PER_SM / step_log["configs"][e[2]]["num_blocks"]
                     else:
-                        vertical_pixels[i] += 1 * MAX_BLOCKS_PER_SM / step_log[
-                            "configs"][e[2]]["num_blocks"]
+                        vertical_pixels[i] += 1 * MAX_BLOCKS_PER_SM / step_log["configs"][e[2]]["num_blocks"]
                 last_end_pixel = end
 
         n_pointer = 0
@@ -365,32 +342,27 @@ def plot_events(step_log, nodes_map, blocks, file_name, args):
                 draw.line(
                     (p, y, p, y - int(vertical_pixels[p] * num_pixel_per_warp)),
                     fill=bar_color,
-                    width=1 if vertical_pixels[p] != 0 else 0)
+                    width=1 if vertical_pixels[p] != 0 else 0,
+                )
                 y_low = y - int(vertical_pixels[p] * num_pixel_per_warp)
                 y_low -= 1 if vertical_pixels[p] != 0 else 0
                 y_high = y - num_warp_per_sm * num_pixel_per_warp
                 if y_low <= y_high:
                     pass
                 else:
-                    draw.line((p, y_low, p, y_high),
-                              fill=(211, 211, 211),
-                              width=1)
+                    draw.line((p, y_low, p, y_high), fill=(211, 211, 211), width=1)
 
     if SPLIT_LINES:
         # indicate the start of each splitted kernel
         nodes = sorted(nodes_map.keys())
         last_node = nodes[0]
         for n in nodes[1:]:
-            if step_log["configs"][n]["num_blocks"] != step_log["configs"][
-                    last_node]["num_blocks"]:
+            if step_log["configs"][n]["num_blocks"] != step_log["configs"][last_node]["num_blocks"]:
                 node_start = cast_coor(nodes_map[n]["start"])
-                draw.line((node_start, 0, node_start, y_limit - y_blank / 2),
-                        fill="plum",
-                        width=2)
+                draw.line((node_start, 0, node_start, y_limit - y_blank / 2), fill="plum", width=2)
             last_node = n
 
-    print("Percentage of active warps is {:.2f}%".format(active_warps /
-                                                         num_stamps * 100))
+    print("Percentage of active warps is {:.2f}%".format(active_warps / num_stamps * 100))
 
     fontsize = 65
     font = ImageFont.load_default(size=fontsize)
@@ -400,16 +372,17 @@ def plot_events(step_log, nodes_map, blocks, file_name, args):
         y_shift = 0.9
         for n in top_nodes:
             # for n, v in nodes_map.items():
-            left, right = cast_coor(nodes_map[n]["start"]), cast_coor(
-                nodes_map[n]["end"])
+            left, right = cast_coor(nodes_map[n]["start"]), cast_coor(nodes_map[n]["end"])
             draw.line((left, 0, left, y_limit), fill="red", width=1)
             draw.line((right, 0, right, y_limit), fill="green", width=1)
-            draw.text((left, y_limit - y_blank * y_shift),
-                      " f: {}\n t: {:.3f}ms\n {:.1f}%".format(
-                          nodes_map[n]["funcID"],
-                          (nodes_map[n]["duration (ns)"]) / 1000000,
-                          nodes_map[n]["percentage (%)"]),
-                      fill=(0, 0, 0), font = font)
+            draw.text(
+                (left, y_limit - y_blank * y_shift),
+                " f: {}\n t: {:.3f}ms\n {:.1f}%".format(
+                    nodes_map[n]["funcID"], (nodes_map[n]["duration (ns)"]) / 1000000, nodes_map[n]["percentage (%)"]
+                ),
+                fill=(0, 0, 0),
+                font=font,
+            )
             y_shift = 1.3 - y_shift
 
     img.save(file_name)
@@ -424,35 +397,23 @@ def step_analysis(step_log, file_name, tabular_data, args=None):
         plot_events(step_log, nodes_map, block_exec_time["blocks"], file_name, args)
 
     for n in nodes_map:
-        tabular_data = pd.concat([
-            tabular_data,
-            pd.DataFrame({k: [v] for k, v in nodes_map[n].items()})
-        ])
+        tabular_data = pd.concat([tabular_data, pd.DataFrame({k: [v] for k, v in nodes_map[n].items()})])
     return tabular_data
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--trace_file", type=str, required=True)
-    parser.add_argument("--start_step",
-                        type=int,
-                        default=10,
-                        help="analysis start from which step")
-    parser.add_argument("--num_steps",
-                        type=int,
-                        default=5,
-                        help="number of steps to be analyzed")
+    parser.add_argument("--start_step", type=int, default=10, help="analysis start from which step")
+    parser.add_argument("--num_steps", type=int, default=5, help="number of steps to be analyzed")
     parser.add_argument("--num_highlight_nodes", type=int, default=16)
     parser.add_argument("--aspect_ratio", type=float, default=2)
     parser.add_argument("--fixed_scale", action="store_true")
-    parser.add_argument("--tpp",
-                        type=int,
-                        default=8000,
-                        help="time(ns) per pixel")
+    parser.add_argument("--tpp", type=int, default=8000, help="time(ns) per pixel")
 
     args = parser.parse_args()
 
-    with open(args.trace_file, 'rb') as f:
+    with open(args.trace_file, "rb") as f:
         events = bytearray(f.read())
         assert len(events) % 40 == 0
         print("{} events were logged in total".format(len(events) // 40))
@@ -470,20 +431,21 @@ if __name__ == "__main__":
     end_at = min(start_from + steps, len(LOG_STEPS))
 
     tabular_data = [
-        pd.DataFrame({
-            "nodeID": [],
-            "funcID": [],
-            "duration (ns)": [],
-            "invocations": [],
-            "percentage (%)": [],
-            "SM utilization": []
-        }) for _ in range(start_from, end_at)
+        pd.DataFrame(
+            {
+                "nodeID": [],
+                "funcID": [],
+                "duration (ns)": [],
+                "invocations": [],
+                "percentage (%)": [],
+                "SM utilization": [],
+            }
+        )
+        for _ in range(start_from, end_at)
     ]
 
     with pd.ExcelWriter(dir_path + "/metrics.xlsx") as writer:
         for s in range(start_from, end_at):
-            step_analysis(LOG_STEPS[s], dir_path + "/step{}.png".format(s),
-                          tabular_data[s - start_from],
-                          args).to_excel(writer,
-                                         sheet_name="step{}".format(s),
-                                         index=False)
+            step_analysis(
+                LOG_STEPS[s], dir_path + "/step{}.png".format(s), tabular_data[s - start_from], args
+            ).to_excel(writer, sheet_name="step{}".format(s), index=False)

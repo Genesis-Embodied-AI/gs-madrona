@@ -22,23 +22,22 @@ init_custom_call_name = f"{custom_call_prefix}_init"
 step_custom_call_name = f"{custom_call_prefix}_step"
 del sim_obj
 
-xla_client.register_custom_call_target(
-    init_custom_call_name, init_custom_call_capsule,
-    platform=custom_call_platform)
+xla_client.register_custom_call_target(init_custom_call_name, init_custom_call_capsule, platform=custom_call_platform)
 
-xla_client.register_custom_call_target(
-    step_custom_call_name, step_custom_call_capsule,
-    platform=custom_call_platform)
+xla_client.register_custom_call_target(step_custom_call_name, step_custom_call_capsule, platform=custom_call_platform)
+
 
 def _row_major_layout(shape):
-    return tuple(range(len(shape) -1, -1, -1))
+    return tuple(range(len(shape) - 1, -1, -1))
+
 
 def _shape_dtype_to_abstract_vals(vs):
     return tuple(ShapedArray(v.shape, v.dtype) for v in vs)
 
+
 def _lower_shape_dtypes(shape_dtypes):
-    return [ir.RankedTensorType.get(i.shape, dtype_to_ir_type(i.dtype))
-        for i in shape_dtypes]
+    return [ir.RankedTensorType.get(i.shape, dtype_to_ir_type(i.dtype)) for i in shape_dtypes]
+
 
 # Below code uses ordered effects, which is internal logic taken from
 # jax io_callback code and emit_python_callback code. The idea is a
@@ -51,23 +50,26 @@ def _lower_shape_dtypes(shape_dtypes):
 # and write to the rest of the buffers normally, leaving the final token
 # output buffer untouched.
 
+
 def _fake_token_type():
-    return ir.RankedTensorType.get((0,), dtype_to_ir_type(np.dtype('float32')))
+    return ir.RankedTensorType.get((0,), dtype_to_ir_type(np.dtype("float32")))
+
 
 def _prepend_token_to_inputs(types, layouts):
     return [_fake_token_type(), *types], [(0,), *layouts]
 
+
 def _append_token_to_results(types, layouts):
     return [*types, _fake_token_type()], [*layouts, (0,)]
+
 
 def _init_lowering(ctx):
     token = mlir.ir_constant(np.empty((0,), np.float32))
 
-    result_types = _lower_shape_dtypes(step_outputs_iface['obs'].values())
+    result_types = _lower_shape_dtypes(step_outputs_iface["obs"].values())
     result_layouts = [_row_major_layout(t.shape) for t in result_types]
 
-    result_types, result_layouts = _append_token_to_results(
-        result_types, result_layouts)
+    result_types, result_layouts = _append_token_to_results(result_types, result_layouts)
 
     results = custom_call(
         init_custom_call_name,
@@ -82,18 +84,18 @@ def _init_lowering(ctx):
     *results, token = results
     return token, *results
 
+
 def _init_abstract():
-    return (ShapedArray((0,), jnp.float32), *_shape_dtype_to_abstract_vals(
-         step_outputs_iface['obs'].values()))
+    return (ShapedArray((0,), jnp.float32), *_shape_dtype_to_abstract_vals(step_outputs_iface["obs"].values()))
 
 
 def _flatten_step_output_shape_dtypes():
-    result_shape_dtypes = list(step_outputs_iface['obs'].values())
+    result_shape_dtypes = list(step_outputs_iface["obs"].values())
 
-    result_shape_dtypes.append(step_outputs_iface['rewards'])
-    result_shape_dtypes.append(step_outputs_iface['dones'])
+    result_shape_dtypes.append(step_outputs_iface["rewards"])
+    result_shape_dtypes.append(step_outputs_iface["dones"])
 
-    result_shape_dtypes += step_outputs_iface['pbt'].values()
+    result_shape_dtypes += step_outputs_iface["pbt"].values()
 
     return result_shape_dtypes
 
@@ -103,13 +105,11 @@ def _step_lowering(ctx, *flattened_inputs):
 
     input_types = [ir.RankedTensorType(i.type) for i in flattened_inputs]
     input_layouts = [_row_major_layout(t.shape) for t in input_types]
-    input_types, input_layouts = _prepend_token_to_inputs(
-        input_types, input_layouts)
+    input_types, input_layouts = _prepend_token_to_inputs(input_types, input_layouts)
 
     result_types = _lower_shape_dtypes(_flatten_step_output_shape_dtypes())
     result_layouts = [_row_major_layout(t.shape) for t in result_types]
-    result_types, result_layouts = _append_token_to_results(
-        result_types, result_layouts)
+    result_types, result_layouts = _append_token_to_results(result_types, result_layouts)
 
     inputs = [token, *flattened_inputs]
 
@@ -128,8 +128,7 @@ def _step_lowering(ctx, *flattened_inputs):
 
 
 def _step_abstract(*inputs):
-    return (ShapedArray((0,), jnp.float32),
-        *_shape_dtype_to_abstract_vals(_flatten_step_output_shape_dtypes()))
+    return (ShapedArray((0,), jnp.float32), *_shape_dtype_to_abstract_vals(_flatten_step_output_shape_dtypes()))
 
 
 _init_primitive = core.Primitive(init_custom_call_name)
@@ -154,28 +153,24 @@ mlir.register_lowering(
     platform=custom_call_platform,
 )
 
+
 def init_func():
     sim_state, *flattened_out = _init_primitive.bind()
-    return {
-        'state': sim_state,
-        'obs': {
-            k: o for k, o in zip(step_outputs_iface['obs'].keys(), flattened_out)
-        }
-    }
+    return {"state": sim_state, "obs": {k: o for k, o in zip(step_outputs_iface["obs"].keys(), flattened_out)}}
 
 
 def step_func(step_inputs):
-    flattened_in = [step_inputs['state']]
+    flattened_in = [step_inputs["state"]]
 
-    for k in step_inputs_iface['actions'].keys():
-        print(step_inputs['actions'])
-        flattened_in.append(step_inputs['actions'][k])
+    for k in step_inputs_iface["actions"].keys():
+        print(step_inputs["actions"])
+        flattened_in.append(step_inputs["actions"][k])
 
-    flattened_in.append(step_inputs['resets'])
-    flattened_in.append(step_inputs['sim_ctrl'])
+    flattened_in.append(step_inputs["resets"])
+    flattened_in.append(step_inputs["sim_ctrl"])
 
-    for k in step_inputs_iface['pbt'].keys():
-        flattened_in.append(step_inputs['pbt'][k])
+    for k in step_inputs_iface["pbt"].keys():
+        flattened_in.append(step_inputs["pbt"][k])
 
     sim_state, *flattened_out = _step_primitive.bind(*flattened_in)
 
@@ -189,19 +184,20 @@ def step_func(step_inputs):
         cur_idx += 1
         return o
 
-    out['state'] = sim_state
-    out['obs'] = {}
-    for k in step_outputs_iface['obs'].keys():
-        out['obs'][k] = next_out()
+    out["state"] = sim_state
+    out["obs"] = {}
+    for k in step_outputs_iface["obs"].keys():
+        out["obs"][k] = next_out()
 
-    out['rewards'] = next_out()
-    out['dones'] = next_out()
+    out["rewards"] = next_out()
+    out["dones"] = next_out()
 
-    out['pbt'] = {}
-    for k in step_outputs_iface['pbt'].keys():
-        out['pbt'][k] = next_out()
+    out["pbt"] = {}
+    for k in step_outputs_iface["pbt"].keys():
+        out["pbt"][k] = next_out()
 
     return out
+
 
 init_func = jax.jit(init_func)
 step_func = jax.jit(step_func)
@@ -211,33 +207,30 @@ if ckpt_iface != None:
     restore_ckpts_custom_call_name = f"{custom_call_prefix}_restore_ckpts"
 
     xla_client.register_custom_call_target(
-        save_ckpts_custom_call_name, save_ckpts_custom_call_capsule,
-        platform=custom_call_platform)
-    
-    xla_client.register_custom_call_target(
-        restore_ckpts_custom_call_name, restore_ckpts_custom_call_capsule,
-        platform=custom_call_platform)
+        save_ckpts_custom_call_name, save_ckpts_custom_call_capsule, platform=custom_call_platform
+    )
 
+    xla_client.register_custom_call_target(
+        restore_ckpts_custom_call_name, restore_ckpts_custom_call_capsule, platform=custom_call_platform
+    )
 
     def _flatten_save_ckpts_output_shape_dtypes():
-        result_shape_dtypes = [ckpt_iface['data']]
+        result_shape_dtypes = [ckpt_iface["data"]]
         return result_shape_dtypes
 
     def _save_ckpts_lowering(ctx, *flattened_inputs):
         token, *flattened_inputs = flattened_inputs
-    
+
         input_types = [ir.RankedTensorType(i.type) for i in flattened_inputs]
         input_layouts = [_row_major_layout(t.shape) for t in input_types]
-        input_types, input_layouts = _prepend_token_to_inputs(
-            input_types, input_layouts)
-    
+        input_types, input_layouts = _prepend_token_to_inputs(input_types, input_layouts)
+
         result_types = _lower_shape_dtypes(_flatten_save_ckpts_output_shape_dtypes())
         result_layouts = [_row_major_layout(t.shape) for t in result_types]
-        result_types, result_layouts = _append_token_to_results(
-            result_types, result_layouts)
-    
+        result_types, result_layouts = _append_token_to_results(result_types, result_layouts)
+
         inputs = [token, *flattened_inputs]
-    
+
         results = custom_call(
             save_ckpts_custom_call_name,
             backend_config=sim_encode,
@@ -247,19 +240,18 @@ if ckpt_iface != None:
             result_layouts=result_layouts,
             has_side_effect=True,
         ).results
-    
+
         *results, token = results
         return token, *results
-    
+
     def _save_ckpts_abstract(*inputs):
-        return (core.abstract_token,
-            *_shape_dtype_to_abstract_vals(_flatten_save_ckpts_output_shape_dtypes()))
-    
+        return (core.abstract_token, *_shape_dtype_to_abstract_vals(_flatten_save_ckpts_output_shape_dtypes()))
+
     _save_ckpts_primitive = core.Primitive(save_ckpts_custom_call_name)
     _save_ckpts_primitive.multiple_results = True
     _save_ckpts_primitive.def_impl(partial(xla.apply_primitive, _save_ckpts_primitive))
     _save_ckpts_primitive.def_abstract_eval(_save_ckpts_abstract)
-    
+
     mlir.register_lowering(
         _save_ckpts_primitive,
         _save_ckpts_lowering,
@@ -267,24 +259,22 @@ if ckpt_iface != None:
     )
 
     def _flatten_restore_ckpts_output_shape_dtypes():
-        result_shape_dtypes = list(step_outputs_iface['obs'].values())
+        result_shape_dtypes = list(step_outputs_iface["obs"].values())
         return result_shape_dtypes
 
     def _restore_ckpts_lowering(ctx, *flattened_inputs):
         token, *flattened_inputs = flattened_inputs
-    
+
         input_types = [ir.RankedTensorType(i.type) for i in flattened_inputs]
         input_layouts = [_row_major_layout(t.shape) for t in input_types]
-        input_types, input_layouts = _prepend_token_to_inputs(
-            input_types, input_layouts)
-    
+        input_types, input_layouts = _prepend_token_to_inputs(input_types, input_layouts)
+
         result_types = _lower_shape_dtypes(_flatten_restore_ckpts_output_shape_dtypes())
         result_layouts = [_row_major_layout(t.shape) for t in result_types]
-        result_types, result_layouts = _append_token_to_results(
-            result_types, result_layouts)
-    
+        result_types, result_layouts = _append_token_to_results(result_types, result_layouts)
+
         inputs = [token, *flattened_inputs]
-    
+
         results = custom_call(
             restore_ckpts_custom_call_name,
             backend_config=sim_encode,
@@ -294,53 +284,45 @@ if ckpt_iface != None:
             result_layouts=result_layouts,
             has_side_effect=True,
         ).results
-    
+
         *results, token = results
         return token, *results
 
     def _restore_ckpts_abstract(*inputs):
-        return (core.abstract_token,
-            *_shape_dtype_to_abstract_vals(_flatten_restore_ckpts_output_shape_dtypes()))
-        
+        return (core.abstract_token, *_shape_dtype_to_abstract_vals(_flatten_restore_ckpts_output_shape_dtypes()))
+
     _restore_ckpts_primitive = core.Primitive(restore_ckpts_custom_call_name)
     _restore_ckpts_primitive.multiple_results = True
     _restore_ckpts_primitive.def_impl(partial(xla.apply_primitive, _restore_ckpts_primitive))
     _restore_ckpts_primitive.def_abstract_eval(_restore_ckpts_abstract)
-    
+
     mlir.register_lowering(
         _restore_ckpts_primitive,
         _restore_ckpts_lowering,
         platform=custom_call_platform,
     )
-    
-    
+
     def save_ckpts_func(save_inputs):
-        flattened_in = [save_inputs['state']]
-        flattened_in.append(save_inputs['should_save'])
+        flattened_in = [save_inputs["state"]]
+        flattened_in.append(save_inputs["should_save"])
 
         sim_state, *flattened_out = _save_ckpts_primitive.bind(*flattened_in)
 
         return {
-            'state': sim_state,
-            'ckpts': flattened_out[0],
+            "state": sim_state,
+            "ckpts": flattened_out[0],
         }
 
     def restore_ckpts_func(restore_inputs):
-        flattened_in = [restore_inputs['state']]
-        flattened_in.append(restore_inputs['should_restore'])
-        flattened_in.append(restore_inputs['ckpt_data'])
+        flattened_in = [restore_inputs["state"]]
+        flattened_in.append(restore_inputs["should_restore"])
+        flattened_in.append(restore_inputs["ckpt_data"])
 
         sim_state, *flattened_out = _restore_ckpts_primitive.bind(*flattened_in)
 
-        return {
-            'state': sim_state,
-            'obs': {
-                k: o for k, o in zip(step_outputs_iface['obs'].keys(), flattened_out)
-            }
-        }
-    
-    
+        return {"state": sim_state, "obs": {k: o for k, o in zip(step_outputs_iface["obs"].keys(), flattened_out)}}
+
     save_ckpts_func = jax.jit(save_ckpts_func)
     restore_ckpts_func = jax.jit(restore_ckpts_func)
 
-#)==="
+# )==="

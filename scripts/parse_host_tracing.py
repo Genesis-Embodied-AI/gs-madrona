@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw
 
 
 def read_binary_file(file_name):
-    with open(file_name, 'rb') as f:
+    with open(file_name, "rb") as f:
         # Read the contents of the file into a NumPy array
         events, time_stamps = np.fromfile(f, dtype=np.int64).reshape(2, -1)
         # set the time stamp of first event to be 0
@@ -15,26 +15,21 @@ def read_binary_file(file_name):
 
 # apt to change
 event_dict = {0: 1, 2: 3, 4: 5}
-color_dict = {1: 'r', 3: 'g', 5: 'b'}
+color_dict = {1: "r", 3: "g", 5: "b"}
 
 
 def get_steps(events, time_stamps):
     steps = []
     for i in range(len(events)):
-        if events[i:i + 4].tolist() == [2, 3, 4, 5]:
-            steps.append(time_stamps[i:i + 4])
+        if events[i : i + 4].tolist() == [2, 3, 4, 5]:
+            steps.append(time_stamps[i : i + 4])
     return steps
 
 
-def plot_events(events,
-                time_stamps,
-                file_name,
-                exclude_init=True,
-                drop_warmup=2,
-                display_steps=20):
+def plot_events(events, time_stamps, file_name, exclude_init=True, drop_warmup=2, display_steps=20):
 
     steps = get_steps(events, time_stamps)
-    steps = steps[drop_warmup:drop_warmup + display_steps]
+    steps = steps[drop_warmup : drop_warmup + display_steps]
     steps = [[i - s[0] for i in s] for s in steps]
 
     max_time = max(max(s) for s in steps)
@@ -55,15 +50,11 @@ def plot_events(events,
     for i, s in enumerate(steps):
         s = [i - s[0] for i in s]
         y = pixel_per_step / 2 + i * (pixel_per_step + bar_interval)
-        draw.line((0, y, cast_coor(s[1]), y),
-                  fill="green",
-                  width=pixel_per_step)
-        draw.line((cast_coor(s[2]), y, cast_coor(s[3]), y),
-                  fill="blue",
-                  width=pixel_per_step)
+        draw.line((0, y, cast_coor(s[1]), y), fill="green", width=pixel_per_step)
+        draw.line((cast_coor(s[2]), y, cast_coor(s[3]), y), fill="blue", width=pixel_per_step)
         # print(s[1]/1000000, (s[3] - s[2])/1000000, s[1] / (s[3] - s[2] + s[1]) )
 
-    img.save(file_name + '_events.png')
+    img.save(file_name + "_events.png")
 
     # num_events = len(events) // 2
     # event_stack = [0]
@@ -104,4 +95,3 @@ if __name__ == "__main__":
 
     events, time_stamps = read_binary_file(sys.argv[1])
     plot_events(events, time_stamps, sys.argv[1])
-

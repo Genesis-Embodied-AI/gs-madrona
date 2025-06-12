@@ -2,3 +2,28 @@
 /build-debug
 /py/__pycache__
 /scripts/__pycache__
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Virtual environment
+venv/
+.venv/
+
+# IDE/editor config
+.vscode/
+.idea/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Miscellaneous
+.DS_Store
+Thumbs.db

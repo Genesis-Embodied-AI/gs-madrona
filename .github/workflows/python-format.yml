@@ -1,0 +1,29 @@
+name: Python Format Check
+
+on:
+  pull_request:
+    branches: [main, yiling/250612_python_format]
+  push:
+    branches: [main, yiling/250612_python_format]
+
+jobs:
+  python-format:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'  # or any version you use
+
+      - name: Install black
+        run: |
+          python -m pip install --upgrade pip
+          pip install black
+
+      - name: Run black check
+        run: |
+          black --line-length 120 --check scripts/ py/ src/
