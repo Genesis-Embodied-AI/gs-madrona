@@ -22,8 +22,8 @@ conda activate madgs312
 ```
 mkdir gs_render
 cd gs_render
-git clone --recurse-submodules git@github.com:yuhongyi/madrona.git
-git clone git@github.com:yuhongyi/Genesis.git
+git clone --recurse-submodules -b release git@github.com:genesis-company/gs-madrona.git
+git clone -b release git@github.com:genesis-company/Genesis.git
 ```
 
 ### Install Madrona
@@ -31,7 +31,7 @@ git clone git@github.com:yuhongyi/Genesis.git
 
 2. Install
 ```sh
-cd  madrona
+cd  gs-madrona
 mkdir  build
 cd  build
 cmake ..
@@ -64,4 +64,10 @@ Images will be generated in `image_output`
             use_rasterizer=True,
             batch_render_res=(512, 512),
         )
+```
+
+### Training
+1. In `gs_render/Genesis`, run
+```
+python examples/rigid/batch_render_with_ppo.py
 ```
