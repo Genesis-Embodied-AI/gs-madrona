@@ -2,9 +2,9 @@ name: Python Format Check
 
 on:
   pull_request:
-    branches: [main, yiling/250612_python_format]
+    branches: [main]
   push:
-    branches: [main, yiling/250612_python_format]
+    branches: [main]
 
 jobs:
   python-format:
