@@ -53,9 +53,9 @@ def main():
     )
     cam_0.attach(franka.links[6], trans_to_T(np.array([0.0, 0.5, 0.0])))
     cam_1 = scene.add_camera(
-        pos=(1.5, -0.5, 1.5),
-        lookat=(0.0, 0.0, 0.5),
-        fov=45,
+        pos=(3.5, 0.0, 2.5),
+        lookat=(0, 0, 0.5),
+        fov=30,
         GUI=True,
     )
     scene.add_light(
@@ -82,7 +82,7 @@ def main():
 
     # warmup
     scene.step()
-    rgb, depth, _, _ = scene.batch_render()
+    rgb, depth, _, _ = scene.render_all_cams()
 
     # Create an image exporter
     output_dir = 'img_output/test'
@@ -95,8 +95,8 @@ def main():
     for i in range(n_steps):
         scene.step()
         if do_batch_dump:
-            rgb, depth, _, _ = scene.batch_render()
-            exporter.export_frame_batch_cam(i, rgb=rgb, depth=depth)
+            rgb, depth, _, _ = scene.render_all_cams()
+            exporter.export_frame_all_cams(i, rgb=rgb, depth=depth)
         else:
             rgb, depth, _, _ = cam_0.render()
             exporter.export_frame_single_cam(i, cam_0.idx, rgb=rgb, depth=depth)

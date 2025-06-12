@@ -12,14 +12,14 @@ def main():
     scene = gs.Scene(
         sim_options=gs.options.SimOptions(),
         viewer_options=gs.options.ViewerOptions(
-            res=(1920, 1080),
+            res=(1600, 900),
             camera_pos=(8.5, 0.0, 4.5),
             camera_lookat=(3.0, 0.0, 0.5),
             camera_fov=50,
         ),
         rigid_options=gs.options.RigidOptions(enable_collision=False, gravity=(0, 0, 0)),
         renderer = gs.options.renderers.BatchRenderer(
-            use_rasterizer=True,
+            use_rasterizer=False,
             batch_render_res=(1920, 1080),
         ),
     )
@@ -137,19 +137,19 @@ def main():
     )
     ########################## cameras ##########################
     cam_0 = scene.add_camera(
-        pos=(8.5, 0.0, 4.5),
-        lookat=(3.0, 0.0, 0.5),
-        fov=50,
+        pos=(8.5, 0.0, 1.5),
+        lookat=(3.0, 0.0, 0.7),
+        fov=60,
         GUI=True,
         spp=512,
     )
     scene.add_light(
         pos=[0.0, 0.0, 1.5],
-        dir=[1.0, 1.0, -2.0],
+        dir=[-1.0, -1.0, -1.0],
         directional=1,
         castshadow=1,
         cutoff=45.0,
-        intensity=0.5
+        intensity=1.0
     )
     scene.build()
 
@@ -163,8 +163,8 @@ def main():
 
     for i in range(horizon):
         scene.step()
-        rgb, depth, _, _ = scene.batch_render()
-        exporter.export_frame_batch_cam(i, rgb=rgb, depth=depth)
+        rgb, depth, _, _ = scene.render_all_cams()
+        exporter.export_frame_all_cams(i, rgb=rgb, depth=depth)
 
 
 if __name__ == "__main__":
