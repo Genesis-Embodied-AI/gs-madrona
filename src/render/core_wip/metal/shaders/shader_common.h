@@ -67,7 +67,8 @@ struct alignas(16) PerspectiveCameraData {
     float xScale;
     float yScale;
     float zNear;
-    uint32_t pad[2];
+    float zFar;
+    uint32_t pad[1];
 };
 
 struct alignas(16) DrawInstanceData {

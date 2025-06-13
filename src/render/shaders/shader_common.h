@@ -3,6 +3,7 @@
 
 struct BatchDrawPushConst {
     uint drawDataOffset;
+    uint numLights;
 };
 
 struct GridDrawPushConst {
@@ -36,7 +37,8 @@ struct PrepareViewPushConstant {
 struct DeferredLightingPushConstBR {
     uint32_t maxImagesXPerTarget;
     uint32_t maxImagesYPerTarget;
-    uint32_t viewDim;
+    uint32_t viewWidth;
+    uint32_t viewHeight;
 };
 
 struct BlurPushConst {
@@ -193,9 +195,19 @@ struct ShadowViewData {
     float4 cameraForward;
 };
 
-struct DirectionalLight {
-    float4 lightDir;
-    float4 color;
+// Only used in shaders
+struct ShaderLightData {
+    float3 position;
+    float3 direction;
+    float cutoffAngle;
+    float intensity;
+    uint32_t isDirectional;
+    uint32_t castShadow;
+    uint32_t active;
+};
+
+struct PackedLightData {
+    float4 data[3];
 };
 
 struct PerspectiveCameraData {
@@ -204,6 +216,7 @@ struct PerspectiveCameraData {
     float xScale;
     float yScale;
     float zNear;
+    float zFar;
     int32_t worldID;
 };
 
