@@ -457,7 +457,8 @@ struct MWCudaExecutor::Impl {
     CUfunction destroyKernel;
 
     uint32_t numWorlds;
-    uint32_t renderOutputResolution;
+    uint32_t renderOutputWidth;
+    uint32_t renderOutputHeight;
     uint32_t sharedMemPerSM;
 
     std::vector<TimingGroup> timingGroups;
@@ -551,27 +552,13 @@ template <typename T> __global__ void submitRun(uint32_t) {}
     REQ_NVRTC(nvrtcDestroyProgram(&prog));
 }
 
-static void checkAndLoadMegakernelCache(
-    Optional<MegakernelCache> &cache,
-    Optional<std::string> &cache_write_path)
+static MegakernelCache loadMegakernelCache(const std::string &cache_path)
 {
-    auto *cache_path =
-        getenv("MADRONA_MWGPU_KERNEL_CACHE");
-
-    if (!cache_path || cache_path[0] == '\0') {
-        return;
-    }
-
-    if (!std::filesystem::exists(cache_path)) {
-        cache_write_path.emplace(cache_path);
-        return;
-    }
-
     std::ifstream cache_file(cache_path,
         std::ios::binary | std::ios::ate);
     if (!cache_file.is_open()) {
         FATAL("Failed to open megakernel cache file at %s",
-              cache_path);
+              cache_path.c_str());
     }
 
     size_t num_cache_bytes = cache_file.tellg();
@@ -622,14 +609,14 @@ static void checkAndLoadMegakernelCache(
     void *cubin_ptr = cache_data.data() + aligned_cubin_offset;
     size_t num_cubin_bytes = num_cache_bytes - aligned_cubin_offset;
 
-    cache.emplace(MegakernelCache {
+    return MegakernelCache {
         .data = std::move(cache_data),
         .cubinStart = cubin_ptr,
         .numCubinBytes = num_cubin_bytes,
         .initECSName = init_ecs_str,
         .initWorldsName = init_worlds_str,
         .initTasksName = init_tasks_str,
-    });
+    };
 }
 
 static std::string getMegakernelConfigSuffixStr(
@@ -638,6 +625,31 @@ static std::string getMegakernelConfigSuffixStr(
     return std::to_string(megakernel_cfg.numThreads) + "_" +
         std::to_string(megakernel_cfg.numBlocksPerSM) + "_" +
         std::to_string(megakernel_cfg.numSMs);
+}
+
+bool kernelCacheNeedsRecompile(
+    const std::string &cache_path,
+    const std::vector<std::string> &src_paths)
+{
+    if (!std::filesystem::exists(cache_path)) {
+        return true;
+    }
+    std::filesystem::file_time_type cache_time = 
+        std::filesystem::last_write_time(cache_path);
+
+    // Check if any source file is newer than cache
+    for (const auto &src_path : src_paths) {
+        if (!std::filesystem::exists(src_path)) {
+            continue;
+        }
+
+        auto src_time = std::filesystem::last_write_time(src_path);
+        if (src_time > cache_time) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static GPUCompileResults compileCode(
@@ -650,19 +662,22 @@ static GPUCompileResults compileCode(
     CompileConfig::OptMode opt_mode,
     ExecutorMode exec_mode, bool verbose_compile)
 {
-    auto kernel_cache = Optional<MegakernelCache>::none();
-    auto cache_write_path = Optional<std::string>::none();
-    checkAndLoadMegakernelCache(kernel_cache, cache_write_path);
+    const std::string cache_path = getenv("MADRONA_MWGPU_KERNEL_CACHE");
+    std::vector<std::string> src_paths(sources, sources + num_sources);
 
-    if (kernel_cache.has_value()) {
+    bool need_recompile = kernelCacheNeedsRecompile(cache_path, src_paths);
+    if (!need_recompile) {
+        auto kernel_cache = loadMegakernelCache(cache_path.c_str());
+
         CUmodule mod;
-        REQ_CU(cuModuleLoadData(&mod, kernel_cache->cubinStart));
+        REQ_CU(cuModuleLoadData(&mod, kernel_cache.cubinStart));
+        printf("Loaded megakernel cache from %s\n", cache_path.c_str());
 
         return {
             .mod = mod,
-            .initECSName = kernel_cache->initECSName,
-            .initWorldsName = kernel_cache->initWorldsName,
-            .initTasksName = kernel_cache->initTasksName,
+            .initECSName = kernel_cache.initECSName,
+            .initWorldsName = kernel_cache.initWorldsName,
+            .initTasksName = kernel_cache.initTasksName,
         };
     }
 
@@ -995,8 +1010,8 @@ static __attribute__((always_inline)) inline void dispatch(
     HeapArray<char> linked_cubin(cubin_size);
     REQ_NVJITLINK(nvJitLinkGetLinkedCubin(linker, linked_cubin.data()));
 
-    if (cache_write_path.has_value()) {
-        std::ofstream cache_file(*cache_write_path, std::ios::binary);
+    if (!cache_path.empty()) {
+        std::ofstream cache_file(cache_path.c_str(), std::ios::binary);
         cache_file.write(init_ecs_name.data(), init_ecs_name.size() + 1);
         cache_file.write(init_worlds_name.data(), init_worlds_name.size() + 1);
         cache_file.write(init_tasks_name.data(), init_tasks_name.size() + 1);
@@ -1032,27 +1047,13 @@ static __attribute__((always_inline)) inline void dispatch(
     };
 }
 
-static void checkAndLoadBVHKernelCache(
-    Optional<BVHKernelCache> &cache,
-    Optional<std::string> &cache_write_path)
+template<typename KernelCache>
+static KernelCache loadKernelCache(const std::string &cache_path)
 {
-    auto *cache_path =
-        getenv("MADRONA_BVH_KERNEL_CACHE");
-
-    if (!cache_path || cache_path[0] == '\0') {
-        return;
-    }
-
-    if (!std::filesystem::exists(cache_path)) {
-        cache_write_path.emplace(cache_path);
-        return;
-    }
-
     std::ifstream cache_file(cache_path,
         std::ios::binary | std::ios::ate);
     if (!cache_file.is_open()) {
-        FATAL("Failed to open megakernel cache file at %s",
-              cache_path);
+        FATAL("Failed to open BVH kernel cache file at %s", cache_path.c_str());
     }
 
     size_t num_cache_bytes = cache_file.tellg();
@@ -1063,11 +1064,11 @@ static void checkAndLoadBVHKernelCache(
     void *cubin_ptr = cache_data.data();
     size_t num_cubin_bytes = num_cache_bytes;
 
-    cache.emplace(BVHKernelCache {
+    return KernelCache {
         .data = std::move(cache_data),
         .cubinStart = cubin_ptr,
         .numCubinBytes = num_cubin_bytes,
-    });
+    };
 }
 
 // We still want to have the same compiler flags as passed to the megakernel
@@ -1078,21 +1079,22 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
 {
     using namespace std;
 
-    auto bvh_cache = Optional<BVHKernelCache>::none();
-    auto cache_write_path = Optional<std::string>::none();
-
-    checkAndLoadBVHKernelCache(bvh_cache, cache_write_path);
-
-    CUmodule mod;
-
-    if (bvh_cache.has_value()) {
-        printf("loading BVH kernels from cache\n");
-        REQ_CU(cuModuleLoadData(&mod, bvh_cache->cubinStart));
-    } else {
-        array bvh_srcs = {
+    const std::string cache_path = getenv("MADRONA_BVH_KERNEL_CACHE");
+    const std::vector<std::string> bvh_srcs = {
             MADRONA_MW_GPU_BVH_INTERNAL_CPP
         };
 
+    bool need_recompile = kernelCacheNeedsRecompile(
+        cache_path,
+        bvh_srcs);
+
+    CUmodule mod;
+    if (!need_recompile) {
+        auto bvh_cache = loadKernelCache<BVHKernelCache>(cache_path);
+        REQ_CU(cuModuleLoadData(&mod, bvh_cache.cubinStart));
+        printf("Loaded BVH kernel cache from %s\n", cache_path.c_str());
+    }
+    else {
         const char *force_debug_env = getenv("MADRONA_MWGPU_FORCE_DEBUG");
         const char *enable_trace_split_env = getenv("MADRONA_TRACK_TRACE_SPLIT");
         const char *shadow_enable_env = getenv("MADRONA_RT_SHADOWS");
@@ -1216,16 +1218,16 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
             std::string bvh_src((std::istreambuf_iterator<char>(bvh_file_stream)),
                 std::istreambuf_iterator<char>());
 
-            printf("Compiling %s\n", bvh_srcs[i]);
+            printf("Compiling %s\n", bvh_srcs[i].c_str());
 
             // Gives us LTOIR
             auto jit_output = cu::jitCompileCPPSrc(
-                bvh_src.c_str(), bvh_srcs[i],
+                bvh_src.c_str(), bvh_srcs[i].c_str(),
                 cur_compile_flags.data(), cur_compile_flags.size(),
                 cur_compile_flags.data(), cur_compile_flags.size(),
                 true);
 
-            addToLinker(jit_output.outputBinary, bvh_srcs[i]);
+            addToLinker(jit_output.outputBinary, bvh_srcs[i].c_str());
         }
 
         checkLinker(nvJitLinkComplete(linker));
@@ -1235,8 +1237,8 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
         HeapArray<char> linked_cubin(cubin_size);
         REQ_NVJITLINK(nvJitLinkGetLinkedCubin(linker, linked_cubin.data()));
 
-        if (cache_write_path.has_value()) {
-            std::ofstream cache_file(*cache_write_path, std::ios::binary);
+        if (!cache_path.empty()) {
+            std::ofstream cache_file(cache_path, std::ios::binary);
             cache_file.write(linked_cubin.data(), linked_cubin.size());
             cache_file.close();
         }
@@ -1816,12 +1818,14 @@ static GPUEngineState initEngineAndUserState(
     void *bvh_internals;
     void *bvh_ptrs;
     uint32_t num_bvhs;
-    uint32_t raycast_output_resolution;
+    uint32_t raycast_output_width;
+    uint32_t raycast_output_height;
     if (render_cfg.has_value()) {
         bvh_ptrs = render_cfg->geoBVHData.meshBVHs;
         num_bvhs = (uint32_t)render_cfg->geoBVHData.numBVHs;
 
-        raycast_output_resolution = render_cfg->renderResolution;
+        raycast_output_width = render_cfg->renderWidth;
+        raycast_output_height = render_cfg->renderHeight;
 
         bvh_internals = cu::allocGPU(
             sizeof(mwGPU::madrona::BVHInternalData));
@@ -1829,7 +1833,8 @@ static GPUEngineState initEngineAndUserState(
         bvh_ptrs = nullptr;
         num_bvhs = 0;
 
-        raycast_output_resolution = 0;
+        raycast_output_width = 0;
+        raycast_output_height = 0;
 
         bvh_internals = nullptr;
     }
@@ -1842,7 +1847,8 @@ static GPUEngineState initEngineAndUserState(
                                                    gpu_state_size_readback,
                                                    bvh_ptrs,
                                                    num_bvhs,
-                                                   raycast_output_resolution,
+                                                   raycast_output_width,
+                                                   raycast_output_height,
                                                    bvh_internals,
                                                    bvh_kernels.raycastRGBD);
 
@@ -2337,6 +2343,17 @@ MWCudaExecutor::MWCudaExecutor(
         const Optional<CudaBatchRenderConfig> &render_cfg)
     : impl_(nullptr)
 {
+    // Setup CUDA cache directory
+    if(!std::filesystem::exists("/tmp/madrona_cache")) {
+        std::filesystem::create_directories("/tmp/madrona_cache");
+    }
+    std::string kernel_cache_path = "/tmp/madrona_cache/kernel_cache";
+    std::string bvh_cache_path = "/tmp/madrona_cache/bvh_cache";
+    setenv("MADRONA_MWGPU_KERNEL_CACHE", kernel_cache_path.c_str(), 1);
+    setenv("MADRONA_BVH_KERNEL_CACHE", bvh_cache_path.c_str(), 1);
+    printf("Kernel cache directory set to: %s\n", kernel_cache_path.c_str());
+    printf("BVH cache directory set to: %s\n", bvh_cache_path.c_str());
+
     const ExecutorMode exec_mode = ExecutorMode::TaskGraph;
 
     auto strm = cu::makeStream();
@@ -2411,7 +2428,8 @@ MWCudaExecutor::MWCudaExecutor(
         bvh_kernels,
         gpu_kernels.destroyECS,
         state_cfg.numWorlds,
-        render_cfg.has_value() ? render_cfg->renderResolution : 0,
+        render_cfg.has_value() ? render_cfg->renderWidth : 0,
+        render_cfg.has_value() ? render_cfg->renderHeight : 0,
         (uint32_t)shared_mem_per_sm,
         {}
     });
@@ -2469,19 +2487,6 @@ MWCudaExecutor::~MWCudaExecutor()
 
     if (impl_->bvhKernels.materialData.materials) {
         REQ_CUDA(cudaFree(impl_->bvhKernels.materialData.materials));
-    }
-
-#if 0
-    if (impl_->bvhKernels.materialData.textureBuffers) {
-        cudaFree(impl_->bvhKernels.materialData.textures);
-    }
-#endif
-
-    for (uint32_t i = 0;
-            i < impl_->bvhKernels.materialData.numTextureBuffers;
-            ++i) {
-        REQ_CUDA(cudaFreeArray(
-            impl_->bvhKernels.materialData.textureBuffers[i]));
     }
 
 #ifdef MADRONA_TRACING
@@ -2665,13 +2670,13 @@ MWCudaLaunchGraph MWCudaExecutor::buildRenderGraph()
 
     const uint32_t pixels_per_block = 8;
 
-    uint32_t grid_dim = impl_->renderOutputResolution / pixels_per_block;
-
+    uint32_t grid_dimY = impl_->renderOutputWidth / pixels_per_block;
+    uint32_t grid_dimZ = impl_->renderOutputHeight / pixels_per_block;
     CUDA_KERNEL_NODE_PARAMS bvh_launch_raycast = {
         .func = bvh_kernels.raycast,
         .gridDimX = bvh_kernels.numSMs * num_resident_views_per_sm,
-        .gridDimY = grid_dim,
-        .gridDimZ = grid_dim,
+        .gridDimY = grid_dimY,
+        .gridDimZ = grid_dimZ,
         .blockDimX = pixels_per_block,
         .blockDimY = pixels_per_block,
         .blockDimZ = 1,

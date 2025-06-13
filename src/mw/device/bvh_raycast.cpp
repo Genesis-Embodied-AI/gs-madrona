@@ -63,10 +63,11 @@ inline Vector3 calculateOutRay(PerspectiveCameraData *view_data,
     Vector3 look_at = rot.inv().rotateVec({0, 1, 0});
  
     // const float h = tanf(theta / 2);
-    const float h = 1.0f / (-view_data->yScale);
+    const float w = 1.0f / view_data->xScale;
+    const float h = 1.0f / -view_data->yScale;
 
     const auto viewport_height = 2 * h;
-    const auto viewport_width = viewport_height;
+    const auto viewport_width = 2 * w;
     const auto forward = look_at.normalize();
 
     auto u = rot.inv().rotateVec({1, 0, 0});
@@ -77,8 +78,8 @@ inline Vector3 calculateOutRay(PerspectiveCameraData *view_data,
 
     auto lower_left_corner = ray_start - horizontal / 2 - vertical / 2 + forward;
   
-    float pixel_u = ((float)pixel_x + 0.5f) / (float)bvhParams.renderOutputResolution;
-    float pixel_v = ((float)pixel_y + 0.5f) / (float)bvhParams.renderOutputResolution;
+    float pixel_u = ((float)pixel_x + 0.5f) / (float)bvhParams.renderOutputWidth;
+    float pixel_v = ((float)pixel_y + 0.5f) / (float)bvhParams.renderOutputHeight;
 
     Vector3 ray_dir = lower_left_corner + pixel_u * horizontal + 
         pixel_v * vertical - ray_start;
@@ -296,6 +297,8 @@ struct TriHitInfo {
 struct TriangleFetch {
     Vector3 a, b, c;
     Vector2 uva, uvb, uvc;
+    Vector3 normalA, normalB, normalC;
+    Vector4 tangentAndSignA, tangentAndSignB, tangentAndSignC;
 };
 
 static TriangleFetch fetchLeafTriangle(int32_t leaf_idx,
@@ -309,6 +312,12 @@ static TriangleFetch fetchLeafTriangle(int32_t leaf_idx,
         .uva = mesh_bvh->vertices[(leaf_idx + offset)*3 + 0].uv,
         .uvb = mesh_bvh->vertices[(leaf_idx + offset)*3 + 1].uv,
         .uvc = mesh_bvh->vertices[(leaf_idx + offset)*3 + 2].uv,
+        .normalA = mesh_bvh->vertices[(leaf_idx + offset)*3 + 0].normal,
+        .normalB = mesh_bvh->vertices[(leaf_idx + offset)*3 + 1].normal,
+        .normalC = mesh_bvh->vertices[(leaf_idx + offset)*3 + 2].normal,
+        .tangentAndSignA = mesh_bvh->vertices[(leaf_idx + offset)*3 + 0].tangentAndSign,
+        .tangentAndSignB = mesh_bvh->vertices[(leaf_idx + offset)*3 + 1].tangentAndSign,
+        .tangentAndSignC = mesh_bvh->vertices[(leaf_idx + offset)*3 + 2].tangentAndSign,
     };
 
     return fetched;
@@ -316,6 +325,7 @@ static TriangleFetch fetchLeafTriangle(int32_t leaf_idx,
 
 static bool rayTriangleIntersection(
     Vector3 tri_a, Vector3 tri_b, Vector3 tri_c,
+    Vector3 normalA, Vector3 normalB, Vector3 normalC,
     int32_t kx, int32_t ky, int32_t kz,
     float Sx, float Sy, float Sz,
     Vector3 org,
@@ -442,7 +452,7 @@ static bool rayTriangleIntersection(
     *bary_out = Vector3{U,V,W} * rcpDet;
 
     // FIXME better way to get geo normal?
-    *out_hit_normal = normalize(cross(B - A, C - A));
+    *out_hit_normal = normalize(normalA * U + normalB * V + normalC * W);
 
     return true;
 }
@@ -464,6 +474,7 @@ static TriHitInfo triangleIntersect(int32_t leaf_idx,
 
     bool intersects = rayTriangleIntersection(
             fetched.a, fetched.b, fetched.c,
+            fetched.normalA, fetched.normalB, fetched.normalC,
             isect_info.kx,  isect_info.ky, isect_info.kz, 
             isect_info.Sx,  isect_info.Sy, isect_info.Sz, 
             ray_o,
@@ -788,8 +799,25 @@ static __device__ TraceResult traceRay(
                 if (mat->textureIdx != -1) {
                     cudaTextureObject_t *tex = &bvhParams.textures[mat->textureIdx];
 
-                    float4 sampled_color = tex2D<float4>(*tex,
-                            tri_hit.uv.x, 1.f - tri_hit.uv.y);
+                    // --- Mipmap LOD selection ---
+                    // Estimate LOD based on distance from camera and UV footprint
+                    float lod = 0.0f;
+                    // Estimate derivatives if possible (fallback to distance-based)
+                    // tri_hit.uv is the barycentric UV at the hit point
+                    // trace_info.rayOrigin is the camera position
+                    // tri_hit.instance is the hit instance (for transform)
+                    // tri_hit.normal is the surface normal
+                    //
+                    // We'll use the distance from the camera to the hit point as a proxy for LOD
+                    Vector3 hit_pos = trace_info.rayOrigin + trace_info.rayDirection * tri_hit.tHit;
+                    float dist = (hit_pos - trace_info.rayOrigin).length();
+                    // Heuristic: LOD increases with log2(distance)
+                    lod = log2f(dist + 1e-3f); // add epsilon to avoid log(0)
+                    // Clamp LOD to [0, 8]
+                    lod = fminf(fmaxf(lod, 0.0f), 8.0f);
+
+                    float4 sampled_color = tex2DLod<float4>(*tex,
+                            tri_hit.uv.x, tri_hit.uv.y, lod);
 
                     Vector3 tex_color = { sampled_color.x,
                         sampled_color.y,
@@ -838,6 +866,22 @@ static __device__ void writeDepth(uint32_t pixel_byte_offset,
     *depth_out = depth;
 }
 
+static __device__ float linearToSRGB(float color) {
+    if (color <= 0.00031308f) {
+        return 12.92f * color;
+    } else {
+        return 1.055f*pow(color,(1.f / 2.4f)) - 0.055f;
+    }
+}
+
+static __device__ Vector3 linearToSRGB(Vector3 color) {
+    return Vector3(
+        linearToSRGB(color.x),
+        linearToSRGB(color.y),
+        linearToSRGB(color.z)
+    );
+}
+
 struct FragmentResult {
     bool hit;
     Vector3 color;
@@ -866,67 +910,70 @@ static __device__ FragmentResult computeFragment(
         Vector3 hit_pos = trace_info.rayOrigin +
                           first_hit.depth * trace_info.rayDirection;
 
-        Vector3 acc_color = Vector3{ 0.f, 0.f, 0.f };
-
-        float light_contrib = 0.f;
+        float totalLighting = 0.f;
 
         for (int i = 0; i < world_info.numLights; ++i) {
-            LightDesc desc = world_info.lights[i];
-
-            float cutoff = -1.f;
-
-            Vector3 light_dir = -desc.direction;
-            if (desc.type == LightDesc::Type::Spotlight) {
-                light_dir = (desc.position - hit_pos).normalize();
-                cutoff = desc.cutoff;
+            const LightDesc& light = world_info.lights[i];
+            if(!light.active) {
+                continue;
             }
 
-            if (cutoff != -1.f && desc.type == LightDesc::Type::Spotlight) {
-                // Dot the vector going from point to light with the direction
-                // of the light.
-                float d = (-light_dir).dot(desc.direction);
-                d /= (light_dir.length() * desc.direction.length());
-                float angle = acosf(d);
-
-                // This pixel isn't affected by this light.
-                if (std::abs(angle) > std::abs(desc.cutoff)) {
-                    continue;
+            Vector3 ray_dir;
+            if(light.type == LightDesc::Type::Directional) {
+                ray_dir = light.direction.normalize();
+            } else {
+                ray_dir = (hit_pos - light.position).normalize();
+                if(light.cutoffAngle >= 0) {
+                    float angle = acosf(ray_dir.dot(light.direction));
+                    if (std::abs(angle) > light.cutoffAngle) {
+                        continue;
+                    }
                 }
             }
 
+            /*
+            // TODO: Temporarily disable shadow casting.
             // Make sure the surface is actually pointing to the light
             // when casting shadow.
-            if (desc.castShadow) {
-                if (light_dir.dot(first_hit.normal) > 0.f) {
+            if (light.castShadow) {
+                if (ray_dir.dot(first_hit.normal) < 0.f) {
                     // TODO: Definitely do some sort of ray fetching because there will
                     // be threads doing nothing potentially.
                     TraceResult shadow_hit = traceRay(
                             TraceInfo {
                             .rayOrigin = hit_pos,
-                            .rayDirection = light_dir,
+                            .rayDirection = -ray_dir,
                             .tMin = 0.000001f,
                             .tMax = 10000.f,
                             .dOnly = true
                             }, world_info);
-
-                    if (!shadow_hit.hit) {
-                        light_contrib += fminf(fmaxf(first_hit.normal.dot(light_dir), 0.f), 1.f);
+                    if(shadow_hit.hit) {
+                        continue;
                     }
                 }
-            } else {
-                light_contrib += fminf(fmaxf(first_hit.normal.dot(light_dir), 0.f), 1.f);
             }
+            */
+
+            float n_dot_l = max(0.0, dot(first_hit.normal, -ray_dir));
+            totalLighting += n_dot_l * light.intensity;
         }
 
-        acc_color = fmaxf(0.2, light_contrib) * first_hit.color;
-        acc_color.x = fminf(1.f, acc_color.x);
-        acc_color.y = fminf(1.f, acc_color.y);
-        acc_color.z = fminf(1.f, acc_color.z);
+        Vector3 finalColor = totalLighting * first_hit.color;
+
+        // Add ambient term
+        float ambient = 0.2;
+        finalColor += first_hit.color * ambient;
+
+        // Convert to sRGB
+        finalColor = linearToSRGB(finalColor);
+
+        // Clamp to 0-1
+        finalColor = Vector3::max(Vector3::zero(), Vector3::min(Vector3::one(), finalColor));
 
         // If we are still here, just do normal lighting calculation.
         return FragmentResult {
             .hit = true,
-            .color = acc_color,
+            .color = finalColor,
             .normal = first_hit.normal,
             .depth = first_hit.depth
         };
@@ -953,7 +1000,7 @@ extern "C" __global__ void bvhRaycastEntry()
     uint32_t current_view_offset = resident_view_offset;
 
     uint32_t bytes_per_view =
-        bvhParams.renderOutputResolution * bvhParams.renderOutputResolution * 4;
+        bvhParams.renderOutputWidth * bvhParams.renderOutputHeight * 4;
 
     uint32_t num_processed_pixels = 0;
 
@@ -997,7 +1044,7 @@ extern "C" __global__ void bvhRaycastEntry()
 
 
         uint32_t linear_pixel_idx = 4 * 
-            (pixel_x + pixel_y * bvhParams.renderOutputResolution);
+            (pixel_x + pixel_y * bvhParams.renderOutputWidth);
 
         uint32_t global_pixel_byte_off = current_view_offset * bytes_per_view +
             linear_pixel_idx;
@@ -1009,14 +1056,14 @@ extern "C" __global__ void bvhRaycastEntry()
                 writeDepth(global_pixel_byte_off, result.depth);
             } else {
                 writeRGB(global_pixel_byte_off, { 0.f, 0.f, 0.f });
-                writeDepth(global_pixel_byte_off, 0.f);
+                writeDepth(global_pixel_byte_off, INFINITY);
             }
         } else {
             // Only write depth information
             if (result.hit) {
                 writeDepth(global_pixel_byte_off, result.depth);
             } else {
-                writeDepth(global_pixel_byte_off, 0.f);
+                writeDepth(global_pixel_byte_off, INFINITY);
             }
         }
 
