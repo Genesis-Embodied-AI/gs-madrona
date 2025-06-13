@@ -72,16 +72,22 @@ def _write_wheel(wheel_path, record_member, contents):
     wheel_file = zipfile.ZipFile(wheel_path, "w", compression=zipfile.ZIP_DEFLATED)
 
     record_data = io.StringIO()
-    record_writer = csv.writer(record_data, delimiter=",", quotechar='"', lineterminator="\n")
+    record_writer = csv.writer(
+        record_data, delimiter=",", quotechar='"', lineterminator="\n"
+    )
 
     for k, v in contents.items():
         _add_wheel_member(wheel_file, k, v, timestamp)
         member_hash = hashlib.sha256(v).digest()
-        hash_encoded = base64.urlsafe_b64encode(member_hash).rstrip(b"=").decode("ascii")
+        hash_encoded = (
+            base64.urlsafe_b64encode(member_hash).rstrip(b"=").decode("ascii")
+        )
         record_writer.writerow((k, f"sha256={hash_encoded}", len(v)))
 
     record_writer.writerow((record_member, "", ""))
-    _add_wheel_member(wheel_file, record_member, record_data.getvalue().encode("utf-8"), timestamp)
+    _add_wheel_member(
+        wheel_file, record_member, record_data.getvalue().encode("utf-8"), timestamp
+    )
 
     wheel_file.close()
 
@@ -120,7 +126,9 @@ def _build_redir_py(toml, config_settings):
         if len(pkgs) == 0:
             raise KeyError()
     except KeyError:
-        raise RuntimeError("pyproject.toml doesn't specify any packages in [tool.madrona.packages]")
+        raise RuntimeError(
+            "pyproject.toml doesn't specify any packages in [tool.madrona.packages]"
+        )
 
     redir = (Path(__file__).parent / "_redir_template.py").read_text()
 
@@ -207,4 +215,9 @@ def build_editable(wheel_directory, config_settings=None, metadata_directory=Non
 
 
 def get_requires_for_build_editable(config_settings=None):
-    return ["scikit-build-core>=0.4.7", "tomli>=2.0.1", "pyproject_metadata>=0.7.1", "packaging>=23.1"]
+    return [
+        "scikit-build-core>=0.4.7",
+        "tomli>=2.0.1",
+        "pyproject_metadata>=0.7.1",
+        "packaging>=23.1",
+    ]

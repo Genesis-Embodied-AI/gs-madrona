@@ -21,7 +21,11 @@ def profile_madrona(bench_cmd, block_config=range(1, 7), cache="/tmp/madcache"):
 
     for config in block_config:
         profile_command = "MADRONA_MWGPU_ENABLE_PGO=1 MADRONA_MWGPU_TRACE_NAME=profile_{block}_block MADRONA_MWGPU_EXEC_CONFIG_OVERRIDE={thread},{block},{sm} MADRONA_MWGPU_KERNEL_CACHE={cache} {bench_cmd}".format(
-            thread=NUM_THREADS_PER_BLOCK, block=config, sm=NUM_SMS, cache=cache, bench_cmd=bench_cmd
+            thread=NUM_THREADS_PER_BLOCK,
+            block=config,
+            sm=NUM_SMS,
+            cache=cache,
+            bench_cmd=bench_cmd,
         )
         subprocess.run(profile_command, shell=True, text=True)
 
@@ -57,13 +61,18 @@ def parse_traces(block_config=range(1, 7)):
         assert len(log_steps) > BASE_STEP
 
         with pd.ExcelWriter(DIR_PATH + "/block_{}_metrics.xlsx".format(i)) as writer:
-            step_analysis(log_steps[BASE_STEP], DIR_PATH + "/block_{}.png".format(i), tabular_data[i - 1]).to_excel(
-                writer, index=False
-            )
+            step_analysis(
+                log_steps[BASE_STEP],
+                DIR_PATH + "/block_{}.png".format(i),
+                tabular_data[i - 1],
+            ).to_excel(writer, index=False)
 
 
 def generate_json(block_config=range(1, 7)):
-    tabular_data = [pd.read_excel(DIR_PATH + "/block_{}_metrics.xlsx".format(i)) for i in block_config]
+    tabular_data = [
+        pd.read_excel(DIR_PATH + "/block_{}_metrics.xlsx".format(i))
+        for i in block_config
+    ]
     tabular_data = ["paddding"] + tabular_data
 
     overall_durations = {i: sum(tabular_data[i]["duration (ns)"]) for i in block_config}
@@ -74,13 +83,25 @@ def generate_json(block_config=range(1, 7)):
     for i, node in enumerate(tabular_data[base_config]["nodeID"]):
         min_duration = tabular_data[base_config]["duration (ns)"][i]
         for b in block_config:
-            if min_duration - tabular_data[b]["duration (ns)"][i] > base_duration / THRESHOLD:
+            if (
+                min_duration - tabular_data[b]["duration (ns)"][i]
+                > base_duration / THRESHOLD
+            ):
                 duration_deduction += min_duration - tabular_data[b]["duration (ns)"][i]
                 min_duration = tabular_data[b]["duration (ns)"][i]
                 split_nodes[node] = b
 
-    print("with default {} block per SM config and following exceptions:".format(base_config), split_nodes)
-    print("the estimated acceleration will be {:.3f}%".format(duration_deduction / base_duration * 100))
+    print(
+        "with default {} block per SM config and following exceptions:".format(
+            base_config
+        ),
+        split_nodes,
+    )
+    print(
+        "the estimated acceleration will be {:.3f}%".format(
+            duration_deduction / base_duration * 100
+        )
+    )
 
     with open(DIR_PATH + "/node_blocks.json", "w") as f:
         json.dump(split_nodes, f)

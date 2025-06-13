@@ -8,6 +8,7 @@ import numpy as np
 from genesis.utils.geom import trans_to_T
 from genesis.utils.image_exporter import FrameImageExporter
 
+
 def main():
 
     parser = argparse.ArgumentParser()
@@ -29,10 +30,10 @@ def main():
         rigid_options=gs.options.RigidOptions(
             # constraint_solver=gs.constraint_solver.Newton,
         ),
-        renderer = gs.options.renderers.BatchRenderer(
+        renderer=gs.options.renderers.BatchRenderer(
             use_rasterizer=True,
             batch_render_res=(512, 512),
-        )
+        ),
     )
 
     ########################## entities ##########################
@@ -64,7 +65,7 @@ def main():
         directional=1,
         castshadow=1,
         cutoff=45.0,
-        intensity=0.5
+        intensity=0.5,
     )
     scene.add_light(
         pos=[4, -4, 4],
@@ -72,7 +73,7 @@ def main():
         directional=0,
         castshadow=1,
         cutoff=45.0,
-        intensity=0.5
+        intensity=0.5,
     )
     ########################## build ##########################
     n_envs = 3
@@ -85,11 +86,12 @@ def main():
     rgb, depth, _, _ = scene.render_all_cams()
 
     # Create an image exporter
-    output_dir = 'img_output/test'
+    output_dir = "img_output/test"
     exporter = FrameImageExporter(output_dir)
 
     # timer
     from time import time
+
     start_time = time()
 
     for i in range(n_steps):
@@ -100,13 +102,13 @@ def main():
         else:
             rgb, depth, _, _ = cam_0.render()
             exporter.export_frame_single_cam(i, cam_0.idx, rgb=rgb, depth=depth)
-    
+
     end_time = time()
-    print(f'n_envs: {n_envs}')
-    print(f'Time taken: {end_time - start_time} seconds')
-    print(f'Time taken per env: {(end_time - start_time) / n_envs} seconds')
-    print(f'FPS: {n_envs * n_steps / (end_time - start_time)}')
-    print(f'FPS per env: {n_steps / (end_time - start_time)}')
+    print(f"n_envs: {n_envs}")
+    print(f"Time taken: {end_time - start_time} seconds")
+    print(f"Time taken per env: {(end_time - start_time) / n_envs} seconds")
+    print(f"FPS: {n_envs * n_steps / (end_time - start_time)}")
+    print(f"FPS per env: {n_steps / (end_time - start_time)}")
 
 
 if __name__ == "__main__":

@@ -17,8 +17,10 @@ def main():
             camera_lookat=(3.0, 0.0, 0.5),
             camera_fov=50,
         ),
-        rigid_options=gs.options.RigidOptions(enable_collision=False, gravity=(0, 0, 0)),
-        renderer = gs.options.renderers.BatchRenderer(
+        rigid_options=gs.options.RigidOptions(
+            enable_collision=False, gravity=(0, 0, 0)
+        ),
+        renderer=gs.options.renderers.BatchRenderer(
             use_rasterizer=False,
             batch_render_res=(1920, 1080),
         ),
@@ -149,7 +151,7 @@ def main():
         directional=1,
         castshadow=1,
         cutoff=45.0,
-        intensity=1.0
+        intensity=1.0,
     )
     scene.build()
 
@@ -158,7 +160,7 @@ def main():
     horizon = 10
 
     # Create an image exporter
-    output_dir = 'img_output/test'
+    output_dir = "img_output/test"
     exporter = FrameImageExporter(output_dir)
 
     for i in range(horizon):
