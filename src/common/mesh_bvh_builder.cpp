@@ -267,10 +267,12 @@ MeshBVH MeshBVHBuilder::build(
         for(uint32_t vert_idx = 0; vert_idx < mesh.numVertices; vert_idx++) {
             madrona::math::Vector3 v1 = mesh.positions[vert_idx];
             madrona::math::Vector2 uv = mesh.uvs ? mesh.uvs[vert_idx] : Vector2{0,0};
+            madrona::math::Vector3 normal = mesh.normals ? mesh.normals[vert_idx] : Vector3{0,0,0};
+            madrona::math::Vector4 tangentAndSign = mesh.tangentAndSigns ? mesh.tangentAndSigns[vert_idx] : Vector4{0,0,0,0};
             assert(vert_idx + offsets[mesh_idx] < vertices.size());
 
 #ifdef MADRONA_COMPRESSED_DEINDEXED_TEX
-            vertices[vert_idx + offsets[mesh_idx]] = MeshBVH::BVHVertex{.pos=v1,.uv=uv};
+            vertices[vert_idx + offsets[mesh_idx]] = MeshBVH::BVHVertex{.pos=v1,.uv=uv,.normal=normal,.tangentAndSign=tangentAndSign};
 #else
             vertices[vert_idx + offsets[mesh_idx]] = MeshBVH::BVHVertex{.pos=v1};
 #endif
