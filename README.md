@@ -44,7 +44,10 @@ cd ..
 ### Install Genesis
 1. Install **PyTorch** first following the [official instructions](https://pytorch.org/get-started/locally/).
 
-2. Install Genesis locally
+2. Install **CUDA Toolkit** by following the [official instructions](https://developer.nvidia.com/cuda-downloads?target_os=Linux&target_arch=x86_64&Distribution=Ubuntu&target_version=22.04&target_type=deb_network)
+This page provides the instructions to install the latest CUDA Toolkit, but please make sure to make changes to the install instructions to install the same version that is being used by the currently installed pytorch, otherwise you may encounter NVRTC JIT compiling issue.
+
+3. Install Genesis locally
 ```
 cd Genesis
 pip install -e ".[dev]"
