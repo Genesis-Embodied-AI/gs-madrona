@@ -173,7 +173,10 @@ def block_analysis(step_log, nodes_map):
                     intervals.insert(p, (start, end))
                     break
                 else:
-                    intervals[p] = (min(start, intervals[p][0]), max(end, intervals[p][1]))
+                    intervals[p] = (
+                        min(start, intervals[p][0]),
+                        max(end, intervals[p][1]),
+                    )
                     break
             else:
                 intervals.insert(p, (start, end))
@@ -308,7 +311,10 @@ def plot_events(step_log, nodes_map, blocks, file_name, args):
                 if e[2] not in node_pixels_sm:
                     node_pixels_sm[e[2]] = [start, end]
                 else:
-                    node_pixels_sm[e[2]] = [min(node_pixels_sm[e[2]][0], start), max(node_pixels_sm[e[2]][1], end)]
+                    node_pixels_sm[e[2]] = [
+                        min(node_pixels_sm[e[2]][0], start),
+                        max(node_pixels_sm[e[2]][1], end),
+                    ]
                 for i in range(start, end + 1):
                     if i not in vertical_pixels:
                         vertical_pixels[i] = 1 * MAX_BLOCKS_PER_SM / step_log["configs"][e[2]]["num_blocks"]
@@ -359,7 +365,11 @@ def plot_events(step_log, nodes_map, blocks, file_name, args):
         for n in nodes[1:]:
             if step_log["configs"][n]["num_blocks"] != step_log["configs"][last_node]["num_blocks"]:
                 node_start = cast_coor(nodes_map[n]["start"])
-                draw.line((node_start, 0, node_start, y_limit - y_blank / 2), fill="plum", width=2)
+                draw.line(
+                    (node_start, 0, node_start, y_limit - y_blank / 2),
+                    fill="plum",
+                    width=2,
+                )
             last_node = n
 
     print("Percentage of active warps is {:.2f}%".format(active_warps / num_stamps * 100))
@@ -378,7 +388,9 @@ def plot_events(step_log, nodes_map, blocks, file_name, args):
             draw.text(
                 (left, y_limit - y_blank * y_shift),
                 " f: {}\n t: {:.3f}ms\n {:.1f}%".format(
-                    nodes_map[n]["funcID"], (nodes_map[n]["duration (ns)"]) / 1000000, nodes_map[n]["percentage (%)"]
+                    nodes_map[n]["funcID"],
+                    (nodes_map[n]["duration (ns)"]) / 1000000,
+                    nodes_map[n]["percentage (%)"],
                 ),
                 fill=(0, 0, 0),
                 font=font,
@@ -447,5 +459,8 @@ if __name__ == "__main__":
     with pd.ExcelWriter(dir_path + "/metrics.xlsx") as writer:
         for s in range(start_from, end_at):
             step_analysis(
-                LOG_STEPS[s], dir_path + "/step{}.png".format(s), tabular_data[s - start_from], args
+                LOG_STEPS[s],
+                dir_path + "/step{}.png".format(s),
+                tabular_data[s - start_from],
+                args,
             ).to_excel(writer, sheet_name="step{}".format(s), index=False)

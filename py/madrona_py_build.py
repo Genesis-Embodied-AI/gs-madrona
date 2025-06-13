@@ -207,4 +207,9 @@ def build_editable(wheel_directory, config_settings=None, metadata_directory=Non
 
 
 def get_requires_for_build_editable(config_settings=None):
-    return ["scikit-build-core>=0.4.7", "tomli>=2.0.1", "pyproject_metadata>=0.7.1", "packaging>=23.1"]
+    return [
+        "scikit-build-core>=0.4.7",
+        "tomli>=2.0.1",
+        "pyproject_metadata>=0.7.1",
+        "packaging>=23.1",
+    ]

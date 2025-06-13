@@ -86,7 +86,10 @@ def _init_lowering(ctx):
 
 
 def _init_abstract():
-    return (ShapedArray((0,), jnp.float32), *_shape_dtype_to_abstract_vals(step_outputs_iface["obs"].values()))
+    return (
+        ShapedArray((0,), jnp.float32),
+        *_shape_dtype_to_abstract_vals(step_outputs_iface["obs"].values()),
+    )
 
 
 def _flatten_step_output_shape_dtypes():
@@ -128,7 +131,10 @@ def _step_lowering(ctx, *flattened_inputs):
 
 
 def _step_abstract(*inputs):
-    return (ShapedArray((0,), jnp.float32), *_shape_dtype_to_abstract_vals(_flatten_step_output_shape_dtypes()))
+    return (
+        ShapedArray((0,), jnp.float32),
+        *_shape_dtype_to_abstract_vals(_flatten_step_output_shape_dtypes()),
+    )
 
 
 _init_primitive = core.Primitive(init_custom_call_name)
@@ -156,7 +162,10 @@ mlir.register_lowering(
 
 def init_func():
     sim_state, *flattened_out = _init_primitive.bind()
-    return {"state": sim_state, "obs": {k: o for k, o in zip(step_outputs_iface["obs"].keys(), flattened_out)}}
+    return {
+        "state": sim_state,
+        "obs": {k: o for k, o in zip(step_outputs_iface["obs"].keys(), flattened_out)},
+    }
 
 
 def step_func(step_inputs):
@@ -207,11 +216,15 @@ if ckpt_iface != None:
     restore_ckpts_custom_call_name = f"{custom_call_prefix}_restore_ckpts"
 
     xla_client.register_custom_call_target(
-        save_ckpts_custom_call_name, save_ckpts_custom_call_capsule, platform=custom_call_platform
+        save_ckpts_custom_call_name,
+        save_ckpts_custom_call_capsule,
+        platform=custom_call_platform,
     )
 
     xla_client.register_custom_call_target(
-        restore_ckpts_custom_call_name, restore_ckpts_custom_call_capsule, platform=custom_call_platform
+        restore_ckpts_custom_call_name,
+        restore_ckpts_custom_call_capsule,
+        platform=custom_call_platform,
     )
 
     def _flatten_save_ckpts_output_shape_dtypes():
@@ -245,7 +258,10 @@ if ckpt_iface != None:
         return token, *results
 
     def _save_ckpts_abstract(*inputs):
-        return (core.abstract_token, *_shape_dtype_to_abstract_vals(_flatten_save_ckpts_output_shape_dtypes()))
+        return (
+            core.abstract_token,
+            *_shape_dtype_to_abstract_vals(_flatten_save_ckpts_output_shape_dtypes()),
+        )
 
     _save_ckpts_primitive = core.Primitive(save_ckpts_custom_call_name)
     _save_ckpts_primitive.multiple_results = True
@@ -289,7 +305,10 @@ if ckpt_iface != None:
         return token, *results
 
     def _restore_ckpts_abstract(*inputs):
-        return (core.abstract_token, *_shape_dtype_to_abstract_vals(_flatten_restore_ckpts_output_shape_dtypes()))
+        return (
+            core.abstract_token,
+            *_shape_dtype_to_abstract_vals(_flatten_restore_ckpts_output_shape_dtypes()),
+        )
 
     _restore_ckpts_primitive = core.Primitive(restore_ckpts_custom_call_name)
     _restore_ckpts_primitive.multiple_results = True
@@ -320,7 +339,10 @@ if ckpt_iface != None:
 
         sim_state, *flattened_out = _restore_ckpts_primitive.bind(*flattened_in)
 
-        return {"state": sim_state, "obs": {k: o for k, o in zip(step_outputs_iface["obs"].keys(), flattened_out)}}
+        return {
+            "state": sim_state,
+            "obs": {k: o for k, o in zip(step_outputs_iface["obs"].keys(), flattened_out)},
+        }
 
     save_ckpts_func = jax.jit(save_ckpts_func)
     restore_ckpts_func = jax.jit(restore_ckpts_func)
