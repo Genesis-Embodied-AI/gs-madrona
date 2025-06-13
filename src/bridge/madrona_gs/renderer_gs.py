@@ -23,17 +23,11 @@ class MadronaBatchRendererAdapter:
         add_cam_debug_geo=False,
         use_rasterizer=False,
     ):
-        assert (
-            rigid is not None
-        ), "Rigid body model is required for MadronaBatchRendererAdapter"
+        assert rigid is not None, "Rigid body model is required for MadronaBatchRendererAdapter"
         assert gpu_id >= 0, "GPU ID must be greater than or equal to 0"
         assert num_worlds > 0, "Number of worlds must be greater than 0"
-        assert (
-            batch_render_view_width > 0
-        ), "Batch render view width must be greater than 0"
-        assert (
-            batch_render_view_height > 0
-        ), "Batch render view height must be greater than 0"
+        assert batch_render_view_width > 0, "Batch render view width must be greater than 0"
+        assert batch_render_view_height > 0, "Batch render view height must be greater than 0"
 
         # defaults
         default_geom_group = 2
@@ -208,9 +202,7 @@ class MadronaBatchRendererAdapter:
         texture_data = np.empty(total_texture_data_size, dtype=np.uint8)
         texture_offsets = np.empty(num_textures, dtype=np.int32)
         num_textures_per_material = 10  # Madrona allows up to 10 textures per material
-        material_texture_ids = np.full(
-            (num_textures, num_textures_per_material), -1, dtype=np.int32
-        )
+        material_texture_ids = np.full((num_textures, num_textures_per_material), -1, dtype=np.int32)
         material_rgba = np.empty((num_textures, 4), dtype=np.float32)
         geom_rgba = np.empty((n_vgeom, 4), dtype=np.float32)
 
@@ -226,43 +218,29 @@ class MadronaBatchRendererAdapter:
                 mesh_texcoord_offsets[geomIdx] = total_texcoord_data_size
                 total_texcoord_data_size += mesh_texcoord_num[geomIdx]
                 texcoord_data[
-                    mesh_texcoord_offsets[geomIdx] : mesh_texcoord_offsets[geomIdx]
-                    + mesh_texcoord_num[geomIdx]
+                    mesh_texcoord_offsets[geomIdx] : mesh_texcoord_offsets[geomIdx] + mesh_texcoord_num[geomIdx]
                 ] = visual.uv.astype(np.float32)
 
                 # Copy texture data
                 texture_widths[num_textures] = visual.material.image.width
                 texture_heights[num_textures] = visual.material.image.height
-                texture_nchans[num_textures] = (
-                    4 if visual.material.image.mode == "RGBA" else 3
-                )
+                texture_nchans[num_textures] = 4 if visual.material.image.mode == "RGBA" else 3
                 texture_data_size = (
-                    texture_widths[num_textures]
-                    * texture_heights[num_textures]
-                    * texture_nchans[num_textures]
+                    texture_widths[num_textures] * texture_heights[num_textures] * texture_nchans[num_textures]
                 )
                 texture_offsets[num_textures] = total_texture_data_size
                 total_texture_data_size += texture_data_size
-                texture_data[
-                    texture_offsets[num_textures] : texture_offsets[num_textures]
-                    + texture_data_size
-                ] = np.array(
-                    list(
-                        visual.material.image.transpose(
-                            method=Image.Transpose.FLIP_TOP_BOTTOM
-                        ).getdata()
-                    ),
-                    dtype=np.uint8,
-                ).flatten()
+                texture_data[texture_offsets[num_textures] : texture_offsets[num_textures] + texture_data_size] = (
+                    np.array(
+                        list(visual.material.image.transpose(method=Image.Transpose.FLIP_TOP_BOTTOM).getdata()),
+                        dtype=np.uint8,
+                    ).flatten()
+                )
 
                 # Set material id
                 geom_mat_ids[geomIdx] = num_textures
-                material_texture_ids[num_textures, 0] = (
-                    num_textures  # Use first texture as diffuse
-                )
-                material_rgba[num_textures] = (
-                    visual.material.diffuse.astype(np.float32) / 255.0
-                )
+                material_texture_ids[num_textures, 0] = num_textures  # Use first texture as diffuse
+                material_rgba[num_textures] = visual.material.diffuse.astype(np.float32) / 255.0
 
                 # Bump texture index
                 num_textures += 1
@@ -300,9 +278,7 @@ class MadronaBatchRendererAdapter:
     def get_geom_properties_torch(self, rigid):
         geom_rgb_torch = rigid.vgeoms_info.color.to_torch()
         geom_rgb_int = (geom_rgb_torch * 255).to(torch.int32)  # Cast to int32
-        geom_rgb_uint = (
-            (geom_rgb_int[:, 0] << 16) | (geom_rgb_int[:, 1] << 8) | geom_rgb_int[:, 2]
-        )
+        geom_rgb_uint = (geom_rgb_int[:, 0] << 16) | (geom_rgb_int[:, 1] << 8) | geom_rgb_int[:, 2]
         geom_rgb = geom_rgb_uint.unsqueeze(0).repeat(self.num_worlds, 1)
 
         geom_mat_ids = torch.full((rigid.n_vgeoms,), -1, dtype=torch.int32)
@@ -322,42 +298,12 @@ class MadronaBatchRendererAdapter:
         lights_castshadow_tensor,
         lights_cutoff_tensor,
     ):
-        light_pos = (
-            lights_pos_tensor.to_torch()
-            .reshape(-1, 3)
-            .unsqueeze(0)
-            .repeat(self.num_worlds, 1, 1)
-        )
-        light_dir = (
-            lights_dir_tensor.to_torch()
-            .reshape(-1, 3)
-            .unsqueeze(0)
-            .repeat(self.num_worlds, 1, 1)
-        )
-        light_directional = (
-            lights_directional_tensor.to_torch()
-            .reshape(-1)
-            .unsqueeze(0)
-            .repeat(self.num_worlds, 1)
-        )
-        light_castshadow = (
-            lights_castshadow_tensor.to_torch()
-            .reshape(-1)
-            .unsqueeze(0)
-            .repeat(self.num_worlds, 1)
-        )
-        light_cutoff = (
-            lights_cutoff_tensor.to_torch()
-            .reshape(-1)
-            .unsqueeze(0)
-            .repeat(self.num_worlds, 1)
-        )
-        light_intensity = (
-            lights_intensity_tensor.to_torch()
-            .reshape(-1)
-            .unsqueeze(0)
-            .repeat(self.num_worlds, 1)
-        )
+        light_pos = lights_pos_tensor.to_torch().reshape(-1, 3).unsqueeze(0).repeat(self.num_worlds, 1, 1)
+        light_dir = lights_dir_tensor.to_torch().reshape(-1, 3).unsqueeze(0).repeat(self.num_worlds, 1, 1)
+        light_directional = lights_directional_tensor.to_torch().reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
+        light_castshadow = lights_castshadow_tensor.to_torch().reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
+        light_cutoff = lights_cutoff_tensor.to_torch().reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
+        light_intensity = lights_intensity_tensor.to_torch().reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
         return (
             light_pos,
             light_dir,

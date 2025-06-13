@@ -17,9 +17,7 @@ def main():
             camera_lookat=(3.0, 0.0, 0.5),
             camera_fov=50,
         ),
-        rigid_options=gs.options.RigidOptions(
-            enable_collision=False, gravity=(0, 0, 0)
-        ),
+        rigid_options=gs.options.RigidOptions(enable_collision=False, gravity=(0, 0, 0)),
         renderer=gs.options.renderers.BatchRenderer(
             use_rasterizer=False,
             batch_render_res=(1920, 1080),

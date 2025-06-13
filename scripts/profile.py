@@ -69,10 +69,7 @@ def parse_traces(block_config=range(1, 7)):
 
 
 def generate_json(block_config=range(1, 7)):
-    tabular_data = [
-        pd.read_excel(DIR_PATH + "/block_{}_metrics.xlsx".format(i))
-        for i in block_config
-    ]
+    tabular_data = [pd.read_excel(DIR_PATH + "/block_{}_metrics.xlsx".format(i)) for i in block_config]
     tabular_data = ["paddding"] + tabular_data
 
     overall_durations = {i: sum(tabular_data[i]["duration (ns)"]) for i in block_config}
@@ -83,25 +80,16 @@ def generate_json(block_config=range(1, 7)):
     for i, node in enumerate(tabular_data[base_config]["nodeID"]):
         min_duration = tabular_data[base_config]["duration (ns)"][i]
         for b in block_config:
-            if (
-                min_duration - tabular_data[b]["duration (ns)"][i]
-                > base_duration / THRESHOLD
-            ):
+            if min_duration - tabular_data[b]["duration (ns)"][i] > base_duration / THRESHOLD:
                 duration_deduction += min_duration - tabular_data[b]["duration (ns)"][i]
                 min_duration = tabular_data[b]["duration (ns)"][i]
                 split_nodes[node] = b
 
     print(
-        "with default {} block per SM config and following exceptions:".format(
-            base_config
-        ),
+        "with default {} block per SM config and following exceptions:".format(base_config),
         split_nodes,
     )
-    print(
-        "the estimated acceleration will be {:.3f}%".format(
-            duration_deduction / base_duration * 100
-        )
-    )
+    print("the estimated acceleration will be {:.3f}%".format(duration_deduction / base_duration * 100))
 
     with open(DIR_PATH + "/node_blocks.json", "w") as f:
         json.dump(split_nodes, f)

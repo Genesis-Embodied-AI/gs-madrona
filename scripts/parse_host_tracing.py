@@ -26,9 +26,7 @@ def get_steps(events, time_stamps):
     return steps
 
 
-def plot_events(
-    events, time_stamps, file_name, exclude_init=True, drop_warmup=2, display_steps=20
-):
+def plot_events(events, time_stamps, file_name, exclude_init=True, drop_warmup=2, display_steps=20):
 
     steps = get_steps(events, time_stamps)
     steps = steps[drop_warmup : drop_warmup + display_steps]
@@ -53,9 +51,7 @@ def plot_events(
         s = [i - s[0] for i in s]
         y = pixel_per_step / 2 + i * (pixel_per_step + bar_interval)
         draw.line((0, y, cast_coor(s[1]), y), fill="green", width=pixel_per_step)
-        draw.line(
-            (cast_coor(s[2]), y, cast_coor(s[3]), y), fill="blue", width=pixel_per_step
-        )
+        draw.line((cast_coor(s[2]), y, cast_coor(s[3]), y), fill="blue", width=pixel_per_step)
         # print(s[1]/1000000, (s[3] - s[2])/1000000, s[1] / (s[3] - s[2] + s[1]) )
 
     img.save(file_name + "_events.png")
