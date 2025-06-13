@@ -32,7 +32,7 @@ public:
 
         uint32_t numWorlds;
         uint32_t maxViewsPerWorld;
-
+        uint32_t maxLightsPerWorld;
         uint32_t maxInstancesPerWorld;
         ExecMode execMode;
 
@@ -52,7 +52,7 @@ public:
                        Span<const imp::SourceTexture> textures,
                        bool override_materials = false);
 
-    void configureLighting(Span<const LightConfig> lights);
+    void configureLighting(Span<const LightDesc> lights);
 
     const RenderECSBridge * bridge() const;
     inline RenderContext & renderContext() const;

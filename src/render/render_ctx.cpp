@@ -64,8 +64,8 @@ using DrawCmd = render::shader::DrawCmd;
 using DrawData = render::shader::DrawData;
 using PackedInstanceData = render::shader::PackedInstanceData;
 using PackedViewData = render::shader::PackedViewData;
+using PackedLightData = render::shader::PackedLightData;
 using ShadowViewData = render::shader::ShadowViewData;
-using DirectionalLight = render::shader::DirectionalLight;
 using SkyData = render::shader::SkyData;
 using DensityLayer = render::shader::DensityLayer;
 
@@ -571,6 +571,7 @@ static EngineInterop setupEngineInterop(Device &dev,
                                         uint32_t num_worlds,
                                         uint32_t max_views_per_world,
                                         uint32_t max_instances_per_world,
+                                        uint32_t max_lights_per_world,
                                         uint32_t render_width,
                                         uint32_t render_height,
                                         VoxelConfig voxel_config)
@@ -583,6 +584,8 @@ static EngineInterop setupEngineInterop(Device &dev,
     auto instances_cpu = Optional<render::vk::HostBuffer>::none();
     auto instance_offsets_cpu = Optional<render::vk::HostBuffer>::none();
     auto aabb_cpu = Optional<render::vk::HostBuffer>::none();
+    auto lights_cpu = Optional<render::vk::HostBuffer>::none();
+    auto light_offsets_cpu = Optional<render::vk::HostBuffer>::none();
 
 #ifdef MADRONA_VK_CUDA_SUPPORT
     auto views_gpu = Optional<render::vk::DedicatedBuffer>::none();
@@ -597,6 +600,12 @@ static EngineInterop setupEngineInterop(Device &dev,
     auto instance_offsets_gpu = Optional<render::vk::DedicatedBuffer>::none();
     auto instance_offsets_cuda = Optional<render::vk::CudaImportedBuffer>::none();
 
+    auto lights_gpu = Optional<render::vk::DedicatedBuffer>::none();
+    auto lights_cuda = Optional<render::vk::CudaImportedBuffer>::none();
+
+    auto light_offsets_gpu = Optional<render::vk::DedicatedBuffer>::none();
+    auto light_offsets_cuda = Optional<render::vk::CudaImportedBuffer>::none();
+
     auto aabb_gpu = Optional<render::vk::DedicatedBuffer>::none();
     auto aabb_cuda = Optional<render::vk::CudaImportedBuffer>::none();
 #endif
@@ -606,18 +615,21 @@ static EngineInterop setupEngineInterop(Device &dev,
     VkBuffer instances_hdl = VK_NULL_HANDLE;
     VkBuffer instance_offsets_hdl = VK_NULL_HANDLE;
     VkBuffer aabb_hdl = VK_NULL_HANDLE;
+    VkBuffer lights_hdl = VK_NULL_HANDLE;
+    VkBuffer light_offsets_hdl = VK_NULL_HANDLE;
 
     void *views_base = nullptr;
     void *view_offsets_base = nullptr;
-
     void *instances_base = nullptr;
     void *instance_offsets_base = nullptr;
+    void *lights_base = nullptr;
+    void *light_offsets_base = nullptr;
 
     void *aabb_base = nullptr;
 
     void *world_ids_instances_base = nullptr;
     void *world_ids_views_base = nullptr;
-
+    void *world_ids_lights_base = nullptr;
 
     { // Create the views buffer
         uint64_t num_views_bytes = num_worlds * max_views_per_world *
@@ -667,6 +679,30 @@ static EngineInterop setupEngineInterop(Device &dev,
 #endif
         }
     }
+    
+    { // Create the lights buffer
+        uint64_t num_lights_bytes = num_worlds * max_lights_per_world *
+            (int64_t)sizeof(render::shader::PackedLightData);
+        // In case number of lights is 0, allocate a dummy buffer to avoid errors
+        num_lights_bytes = std::max(num_lights_bytes, (uint64_t)1024);
+        if (!gpu_input) {
+            lights_cpu = alloc.makeStagingBuffer(num_lights_bytes);
+            lights_hdl = lights_cpu->buffer;
+            lights_base = malloc(sizeof(render::shader::PackedLightData) * num_worlds * max_lights_per_world);
+        }
+        else
+        {
+#ifdef MADRONA_VK_CUDA_SUPPORT
+            lights_gpu = alloc.makeDedicatedBuffer(
+                num_lights_bytes, false, true);
+            lights_cuda.emplace(dev, lights_gpu->mem,
+                num_lights_bytes);
+
+            lights_hdl = lights_gpu->buf.buffer;
+            lights_base = (char *)lights_cuda->getDevicePointer();
+#endif
+        }
+    }
 
     { // Create the aabb buffer
         uint64_t num_aabb_bytes = num_worlds * max_instances_per_world *
@@ -711,7 +747,7 @@ static EngineInterop setupEngineInterop(Device &dev,
         }
     }
 
-    { // Create the instance offsets buffer
+    { // Create the view offsets buffer
         uint64_t num_offsets_bytes = (num_worlds+1) * sizeof(int32_t);
 
         if (!gpu_input) {
@@ -728,6 +764,27 @@ static EngineInterop setupEngineInterop(Device &dev,
 
             view_offsets_hdl = view_offsets_gpu->buf.buffer;
             view_offsets_base = (char *)view_offsets_cuda->getDevicePointer();
+#endif
+        }
+    }
+
+    { // Create the light offsets buffer
+        uint64_t num_offsets_bytes = (num_worlds+1) * sizeof(int32_t);
+
+        if (!gpu_input) {
+            light_offsets_cpu = alloc.makeStagingBuffer(num_offsets_bytes);
+            light_offsets_hdl = light_offsets_cpu->buffer;
+            light_offsets_base = light_offsets_cpu->ptr;
+        } else {
+#ifdef MADRONA_VK_CUDA_SUPPORT
+            light_offsets_gpu = alloc.makeDedicatedBuffer(
+                num_offsets_bytes, false, true);
+
+            light_offsets_cuda.emplace(dev, light_offsets_gpu->mem,
+                num_offsets_bytes);
+
+            light_offsets_hdl = light_offsets_gpu->buf.buffer;
+            light_offsets_base = (char *)light_offsets_cuda->getDevicePointer();
 #endif
         }
     }
@@ -765,25 +822,31 @@ static EngineInterop setupEngineInterop(Device &dev,
 
     uint32_t *total_num_views_readback = nullptr;
     uint32_t *total_num_instances_readback = nullptr;
+    uint32_t *total_num_lights_readback = nullptr;
 
     AtomicU32 *total_num_views_cpu_inc = nullptr;
     AtomicU32 *total_num_instances_cpu_inc = nullptr;
+    AtomicU32 *total_num_lights_cpu_inc = nullptr;
 
     if (!gpu_input) {
         total_num_views_readback = (uint32_t *)malloc(
-            2*sizeof(uint32_t));
+            3*sizeof(uint32_t));
         total_num_instances_readback = total_num_views_readback + 1;
+        total_num_lights_readback = total_num_instances_readback + 1;
 
-        total_num_views_cpu_inc = (AtomicU32 *)malloc(2 * sizeof(AtomicU32));
+        total_num_views_cpu_inc = (AtomicU32 *)malloc(3 * sizeof(AtomicU32));
         total_num_instances_cpu_inc = total_num_views_cpu_inc + 1;
+        total_num_lights_cpu_inc = total_num_instances_cpu_inc + 1;
 
         total_num_views_cpu_inc->store_release(0);
         total_num_instances_cpu_inc->store_release(0);
+        total_num_lights_cpu_inc->store_release(0);
     } else {
 #ifdef MADRONA_VK_CUDA_SUPPORT
         total_num_views_readback = (uint32_t *)cu::allocReadback(
-            2*sizeof(uint32_t));
+            3*sizeof(uint32_t));
         total_num_instances_readback = total_num_views_readback + 1;
+        total_num_lights_readback = total_num_instances_readback + 1;
 #endif
     }
 
@@ -791,19 +854,25 @@ static EngineInterop setupEngineInterop(Device &dev,
         .views = (PerspectiveCameraData *)views_base,
         .instances = (InstanceData *)instances_base,
         .aabbs = (TLBVHNode *)aabb_base,
+        .lights = (LightDesc *)lights_base,
         .instanceOffsets = (int32_t *)instance_offsets_base,
         .viewOffsets = (int32_t *)view_offsets_base,
+        .lightOffsets = (int32_t *)light_offsets_base,
         .totalNumViews = total_num_views_readback,
         .totalNumInstances = total_num_instances_readback,
+        .totalNumLights = total_num_lights_readback,
         .totalNumViewsCPUInc = total_num_views_cpu_inc,
         .totalNumInstancesCPUInc = total_num_instances_cpu_inc,
+        .totalNumLightsCPUInc = total_num_lights_cpu_inc,
         .instancesWorldIDs = (uint64_t *)world_ids_instances_base,
         .viewsWorldIDs = (uint64_t *)world_ids_views_base,
+        .lightWorldIDs = (uint64_t *)world_ids_lights_base,
         .renderWidth = (int32_t)render_width,
         .renderHeight = (int32_t)render_height,
         .voxels = voxel_buffer_ptr,
         .maxViewsPerworld = max_views_per_world,
         .maxInstancesPerWorld = max_instances_per_world,
+        .maxLightsPerWorld = max_lights_per_world,
         .isGPUBackend = gpu_input
     };
 
@@ -821,14 +890,18 @@ static EngineInterop setupEngineInterop(Device &dev,
 
     uint32_t *iota_array_instances = nullptr;
     uint32_t *iota_array_views = nullptr;
+    uint32_t *iota_array_lights = nullptr;
     uint64_t *sorted_instance_world_ids = nullptr;
     uint64_t *sorted_view_world_ids = nullptr;
+    uint64_t *sorted_light_world_ids = nullptr;
 
     if (!gpu_input) {
         iota_array_instances = (uint32_t *)malloc(sizeof(uint32_t) * num_worlds * max_instances_per_world);
         iota_array_views = (uint32_t *)malloc(sizeof(uint32_t) * num_worlds * max_views_per_world);
+        iota_array_lights = (uint32_t *)malloc(sizeof(uint32_t) * num_worlds * max_lights_per_world);
         sorted_instance_world_ids = (uint64_t *)malloc(sizeof(uint64_t) * num_worlds * max_instances_per_world);
         sorted_view_world_ids = (uint64_t *)malloc(sizeof(uint64_t) * num_worlds * max_views_per_world);
+        sorted_light_world_ids = (uint64_t *)malloc(sizeof(uint64_t) * num_worlds * max_lights_per_world);
     }
 
     return EngineInterop {
@@ -836,6 +909,8 @@ static EngineInterop setupEngineInterop(Device &dev,
         std::move(view_offsets_cpu),
         std::move(instances_cpu),
         std::move(instance_offsets_cpu),
+        std::move(lights_cpu),
+        std::move(light_offsets_cpu),
         std::move(aabb_cpu),
 #ifdef MADRONA_VK_CUDA_SUPPORT
         std::move(views_gpu),
@@ -844,11 +919,17 @@ static EngineInterop setupEngineInterop(Device &dev,
         std::move(instances_gpu),
         std::move(instance_offsets_gpu),
 
+        std::move(lights_gpu),
+        std::move(light_offsets_gpu),
+        
         std::move(views_cuda),
         std::move(view_offsets_cuda),
 
         std::move(instances_cuda),
         std::move(instance_offsets_cuda),
+
+        std::move(lights_cuda),
+        std::move(light_offsets_cuda),
 
         std::move(aabb_gpu),
         std::move(aabb_cuda),
@@ -857,11 +938,14 @@ static EngineInterop setupEngineInterop(Device &dev,
         view_offsets_hdl,
         instances_hdl,
         instance_offsets_hdl,
+        lights_hdl,
+        light_offsets_hdl,
         aabb_hdl,
         bridge,
         gpu_bridge,
         max_views_per_world,
         max_instances_per_world,
+        max_lights_per_world,
         std::move(voxel_cpu),
 #ifdef MADRONA_VK_CUDA_SUPPORT
         std::move(voxel_gpu),
@@ -870,8 +954,10 @@ static EngineInterop setupEngineInterop(Device &dev,
         voxel_buffer_hdl,
         iota_array_instances,
         iota_array_views,
+        iota_array_lights,
         sorted_instance_world_ids,
-        sorted_view_world_ids
+        sorted_view_world_ids,
+        sorted_light_world_ids
     };
 }
 
@@ -1245,6 +1331,7 @@ RenderContext::RenderContext(
       engine_interop_(setupEngineInterop(
           dev, alloc, cfg.execMode == ExecMode::CUDA, cfg.numWorlds,
           cfg.maxViewsPerWorld, cfg.maxInstancesPerWorld,
+          cfg.maxLightsPerWorld,
           br_width_, br_height_, cfg.voxelCfg)),
       lights_(InternalConfig::maxLights),
       loaded_assets_(0),
@@ -1333,12 +1420,19 @@ RenderContext::RenderContext(
                 .descriptorCount = 1,
                 .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                 .pImmutableSamplers = nullptr,
+            },
+            {
+                .binding = 3,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                .pImmutableSamplers = nullptr,
             }
         };
 
         VkDescriptorSetLayoutCreateInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        info.bindingCount = 3;
+        info.bindingCount = 4;
         info.pBindings = bindings;
 
         dev.dt.createDescriptorSetLayout(dev.hdl, &info, nullptr, &asset_batch_draw_layout_);
@@ -1447,6 +1541,7 @@ RenderContext::RenderContext(
          cfg.numWorlds,
          cfg.maxViewsPerWorld,
          cfg.maxInstancesPerWorld,
+         cfg.maxLightsPerWorld,
          1
     };
 
@@ -1485,6 +1580,7 @@ RenderContext::~RenderContext()
 
     dev.dt.destroyDescriptorSetLayout(dev.hdl, asset_layout_, nullptr);
     dev.dt.destroyDescriptorSetLayout(dev.hdl, asset_tex_layout_, nullptr);
+    dev.dt.destroyDescriptorSetLayout(dev.hdl, asset_batch_draw_layout_, nullptr);
     dev.dt.destroyDescriptorSetLayout(dev.hdl, asset_batch_lighting_layout_, nullptr);
     // dev.dt.destroyDescriptorSetLayout(dev.hdl, sky_data_layout_, nullptr);
 
@@ -1503,6 +1599,134 @@ RenderContext::~RenderContext()
     dev.dt.destroySampler(dev.hdl, repeatSampler, nullptr);
 
     dev.dt.destroyPipelineCache(dev.hdl, pipelineCache, nullptr);
+}
+
+static void copyBufferToImage(const vk::Device &dev,
+        VkCommandBuffer& cmdbuf,
+        const HostBuffer &texture_hb_staging,
+        VkImage& texture_image,
+        uint32_t width,
+        uint32_t height)
+{
+    VkBufferImageCopy copy = {};
+    copy.bufferOffset = 0;
+    copy.bufferRowLength = 0;
+    copy.bufferImageHeight = 0;
+    copy.imageExtent.width = width;
+    copy.imageExtent.height = height;
+    copy.imageExtent.depth = 1;
+    copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy.imageSubresource.mipLevel = 0;
+    copy.imageSubresource.baseArrayLayer = 0;
+    copy.imageSubresource.layerCount = 1;
+
+    dev.dt.cmdCopyBufferToImage(cmdbuf, texture_hb_staging.buffer,
+            texture_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+
+    VkImageMemoryBarrier finish_prepare {
+        VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            nullptr,
+            VK_ACCESS_MEMORY_WRITE_BIT,
+            VK_ACCESS_SHADER_READ_BIT,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_QUEUE_FAMILY_IGNORED,
+            VK_QUEUE_FAMILY_IGNORED,
+            texture_image,
+            {
+                VK_IMAGE_ASPECT_COLOR_BIT,
+                0, 1, 0, 1
+            },
+    };
+
+    dev.dt.cmdPipelineBarrier(cmdbuf,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0,
+            0, nullptr, 0, nullptr,
+            1, &finish_prepare);
+}
+
+static void generateMipmaps(const vk::Device &dev,
+                     VkCommandBuffer& cmdBuffer,
+                     VkImage& image,
+                     int32_t texWidth,
+                     int32_t texHeight,
+                     uint32_t mipLevels) {
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.image = image;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.subresourceRange.levelCount = 1;
+
+    int32_t mipWidth = texWidth;
+    int32_t mipHeight = texHeight;
+
+    for (uint32_t i = 1; i < mipLevels; i++) {
+        // Transition level i-1 to transfer src
+        barrier.subresourceRange.baseMipLevel = i - 1;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+        dev.dt.cmdPipelineBarrier(cmdBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+            0, nullptr, 0, nullptr, 1, &barrier);
+
+        // Blit from level i-1 to level i
+        VkImageBlit blit{};
+        blit.srcOffsets[0] = {0, 0, 0};
+        blit.srcOffsets[1] = {mipWidth, mipHeight, 1};
+        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.srcSubresource.mipLevel = i - 1;
+        blit.srcSubresource.baseArrayLayer = 0;
+        blit.srcSubresource.layerCount = 1;
+
+        blit.dstOffsets[0] = {0, 0, 0};
+        blit.dstOffsets[1] = {
+            mipWidth > 1 ? mipWidth / 2 : 1,
+            mipHeight > 1 ? mipHeight / 2 : 1,
+            1
+        };
+        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.dstSubresource.mipLevel = i;
+        blit.dstSubresource.baseArrayLayer = 0;
+        blit.dstSubresource.layerCount = 1;
+
+        dev.dt.cmdBlitImage(cmdBuffer,
+            image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &blit, VK_FILTER_LINEAR);
+
+        // Transition level i-1 to shader read
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        dev.dt.cmdPipelineBarrier(cmdBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+            0, nullptr, 0, nullptr, 1, &barrier);
+
+        mipWidth = std::max(1, mipWidth / 2);
+        mipHeight = std::max(1, mipHeight / 2);
+    }
+
+    // Final mip level to shader read
+    barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    dev.dt.cmdPipelineBarrier(cmdBuffer,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+        0, nullptr, 0, nullptr, 1, &barrier);
 }
 
 static DynArray<MaterialTexture> loadTextures(
@@ -1631,8 +1855,10 @@ static DynArray<MaterialTexture> loadTextures(
             uint32_t width = tx.width;
             uint32_t height = tx.height;
 
+            uint32_t mip_levels = std::max(1, (int32_t)std::floor(std::log2(std::max(width, height))));
+
             auto [texture, texture_reqs] = alloc.makeTexture2D(
-                    width, height, 1, VK_FORMAT_R8G8B8A8_SRGB);
+                    width, height, mip_levels, VK_FORMAT_R8G8B8A8_SRGB);
 
             HostBuffer texture_hb_staging = alloc.makeStagingBuffer(texture_reqs.size);
             memcpy(texture_hb_staging.ptr, pixels, width * height * 4 * sizeof(char));
@@ -1667,44 +1893,10 @@ static DynArray<MaterialTexture> loadTextures(
                     0, nullptr, 0, nullptr,
                     1, &copy_prepare);
 
-            VkBufferImageCopy copy = {};
-            copy.bufferOffset = 0;
-            copy.bufferRowLength = 0;
-            copy.bufferImageHeight = 0;
-            copy.imageExtent.width = width;
-            copy.imageExtent.height = height;
-            copy.imageExtent.depth = 1;
-            copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copy.imageSubresource.mipLevel = 0;
-            copy.imageSubresource.baseArrayLayer = 0;
-            copy.imageSubresource.layerCount = 1;
+            copyBufferToImage(dev, cmdbuf, texture_hb_staging, texture.image, width, height);
+            host_buffers.push_back(std::move(texture_hb_staging));
 
-            dev.dt.cmdCopyBufferToImage(cmdbuf, texture_hb_staging.buffer,
-                    texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
-
-            VkImageMemoryBarrier finish_prepare {
-                VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                    nullptr,
-                    VK_ACCESS_MEMORY_WRITE_BIT,
-                    VK_ACCESS_SHADER_READ_BIT,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_QUEUE_FAMILY_IGNORED,
-                    VK_QUEUE_FAMILY_IGNORED,
-                    texture.image,
-                    {
-                        VK_IMAGE_ASPECT_COLOR_BIT,
-                        0, 1, 0, 1
-                    },
-            };
-
-
-            dev.dt.cmdPipelineBarrier(cmdbuf,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    0,
-                    0, nullptr, 0, nullptr,
-                    1, &finish_prepare);
+            generateMipmaps(dev, cmdbuf, texture.image, width, height, mip_levels);
 
             VkImageViewCreateInfo view_info {};
             view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1712,7 +1904,7 @@ static DynArray<MaterialTexture> loadTextures(
             VkImageSubresourceRange &view_info_sr = view_info.subresourceRange;
             view_info_sr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             view_info_sr.baseMipLevel = 0;
-            view_info_sr.levelCount = 1;
+            view_info_sr.levelCount = mip_levels;  // Include all mip levels
             view_info_sr.baseArrayLayer = 0;
             view_info_sr.layerCount = 1;
 
@@ -1721,7 +1913,6 @@ static DynArray<MaterialTexture> loadTextures(
             view_info.format = VK_FORMAT_R8G8B8A8_SRGB;
             REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &view));
 
-            host_buffers.push_back(std::move(texture_hb_staging));
 
             dst_textures.emplace_back(std::move(texture), view, texture_backing.value());
         }
@@ -1853,70 +2044,63 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
             mesh_ptr[mesh_offset++] = mesh_data;
 
             // Compute new normals
-            auto new_normals = Optional<HeapArray<Vector3>>::none();
-            if (!mesh.normals) {
-                new_normals.emplace(num_mesh_verts);
+            HeapArray<Vector3> new_normals(num_mesh_verts);
+            memset(new_normals.data(), 0, num_mesh_verts * sizeof(Vector3));
 
-                for (int64_t vert_idx = 0; vert_idx < num_mesh_verts;
-                     vert_idx++) {
-                    (*new_normals)[vert_idx] = Vector3::zero();
+            for (CountT face_idx = 0; face_idx < (CountT)mesh.numFaces;
+                    face_idx++) {
+                CountT base_idx = face_idx * 3;
+                uint32_t i0 = mesh.indices[base_idx];
+                uint32_t i1 = mesh.indices[base_idx + 1];
+                uint32_t i2 = mesh.indices[base_idx + 2];
+
+                Vector3 v0 = mesh.positions[i0];
+                Vector3 v1 = mesh.positions[i1];
+                Vector3 v2 = mesh.positions[i2];
+
+                Vector3 e0 = v1 - v0;
+                Vector3 e1 = v2 - v0;
+
+                Vector3 face_normal = cross(e0, e1);
+                float face_len = face_normal.length();
+
+                if (face_len == 0.f) {
+                    // Degenerate triangle
+                    face_normal = math::up;
+                } else {
+                    face_normal /= face_len;
                 }
 
-                for (CountT face_idx = 0; face_idx < (CountT)mesh.numFaces;
-                     face_idx++) {
-                    CountT base_idx = face_idx * 3;
-                    uint32_t i0 = mesh.indices[base_idx];
-                    uint32_t i1 = mesh.indices[base_idx + 1];
-                    uint32_t i2 = mesh.indices[base_idx + 2];
+                new_normals[i0] += face_normal;
+                new_normals[i1] += face_normal;
+                new_normals[i2] += face_normal;
+            }
 
-                    Vector3 v0 = mesh.positions[i0];
-                    Vector3 v1 = mesh.positions[i1];
-                    Vector3 v2 = mesh.positions[i2];
-
-                    Vector3 e0 = v1 - v0;
-                    Vector3 e1 = v2 - v0;
-
-                    Vector3 face_normal = cross(e0, e1);
-                    float face_len = face_normal.length();
-
-                    if (face_len == 0.f) {
-                        // Degenerate triangle
-                        face_normal = math::up;
-                    } else {
-                        face_normal /= face_len;
-                    }
-
-                    (*new_normals)[i0] += face_normal;
-                    (*new_normals)[i1] += face_normal;
-                    (*new_normals)[i2] += face_normal;
-                }
-
-                for (int64_t vert_idx = 0; vert_idx < num_mesh_verts;
-                     vert_idx++) {
-                    (*new_normals)[vert_idx] =
-                        normalize((*new_normals)[vert_idx]);
-                }
+            for (int64_t vert_idx = 0; vert_idx < num_mesh_verts;
+                    vert_idx++) {
+                new_normals[vert_idx] =
+                    normalize(new_normals[vert_idx]);
             }
 
             for (int32_t i = 0; i < num_mesh_verts; i++) {
                 // printf("%u ", vert_mat_index);
 
                 Vector3 pos = mesh.positions[i];
-                Vector3 normal = mesh.normals ?
-                    mesh.normals[i] : (*new_normals)[i];
-                Vector4 tangent_sign;
-                // FIXME: use mikktspace at import time
-                if (mesh.tangentAndSigns != nullptr) {
-                    tangent_sign = mesh.tangentAndSigns[i];
-                } else {
-                    Vector3 a, b;
-                    normal.frame(&a, &b);
-                    tangent_sign = {
-                        a.x,
-                        a.y,
-                        a.z,
-                        1.f,
-                    };
+                Vector3 normal = new_normals[i];
+                if(mesh.normals) {
+                    mesh.normals[i] = normal;
+                }
+
+                Vector3 a, b;
+                normal.frame(&a, &b);
+                Vector4 tangent_sign = {
+                    a.x,
+                    a.y,
+                    a.z,
+                    1.f,
+                };
+                if(mesh.tangentAndSigns) {
+                    mesh.tangentAndSigns[i] = tangent_sign;
                 }
 
                 Vector2 uv = mesh.uvs ? mesh.uvs[i] : Vector2 { 0, 0 };
@@ -2128,12 +2312,17 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
     return 0;
 }
 
-void RenderContext::configureLighting(Span<const LightConfig> lights)
+void RenderContext::configureLighting(Span<const LightDesc> lights)
 {
     for (int i = 0; i < lights.size(); ++i) {
-        lights_.insert(i, DirectionalLight{ 
-            math::Vector4{lights[i].dir.x, lights[i].dir.y, lights[i].dir.z, 1.0f }, 
-            math::Vector4{lights[i].color.x, lights[i].color.y, lights[i].color.z, 1.0f}
+        lights_.insert(i, LightDesc {
+            .position = {lights[i].position.x, lights[i].position.y, lights[i].position.z},
+            .direction = {lights[i].direction.x, lights[i].direction.y, lights[i].direction.z},
+            .cutoffAngle = lights[i].cutoffAngle,
+            .intensity = lights[i].intensity,
+            .type = lights[i].type,
+            .castShadow = lights[i].castShadow,
+            .active = lights[i].active
         });
     }
 }

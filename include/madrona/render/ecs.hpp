@@ -12,6 +12,7 @@ struct RenderCamera {
     // 1.0 / tanf(fovy * 0.5)
     float fovScale;
     float zNear;
+    float zFar;
 
     math::Vector3 cameraOffset;
 };
@@ -38,8 +39,8 @@ struct alignas(16) PerspectiveCameraData {
     float xScale;
     float yScale;
     float zNear;
+    float zFar;
     int32_t worldIDX;
-    uint32_t pad;
 };
 
 // For private usage - not to be used by user.
@@ -209,6 +210,7 @@ namespace RenderingSystem {
                             Entity e,
                             float vfov_degrees,
                             float z_near,
+                            float z_far,
                             const math::Vector3 &camera_offset);
 
     // Need to call these before destroying entities

@@ -13,6 +13,7 @@
 
 #include <span>
 #include <array>
+#include <algorithm>
 
 using bytes = std::span<const std::byte>;
 
@@ -253,17 +254,88 @@ MeshBVHData makeBVHData(Span<const imp::SourceObject> src_objs)
     return gpu_data;
 }
 
+// Generate mipmaps for an uncompressed texture
+void generateMipmaps(const void* src_data, uint32_t width, uint32_t height, 
+                    void** mip_data, uint32_t* mip_widths, uint32_t* mip_heights, 
+                    uint32_t& num_mips) {
+    // Calculate number of mip levels
+    num_mips = 1;
+    uint32_t w = width;
+    uint32_t h = height;
+    while (w > 1 || h > 1) {
+        w = std::max(1u, w / 2);
+        h = std::max(1u, h / 2);
+        num_mips++;
+    }
+
+    // Use source data directly for mip level 0
+    mip_data[0] = const_cast<void*>(src_data);
+    mip_widths[0] = width;
+    mip_heights[0] = height;
+
+    // Generate mipmaps
+    w = width;
+    h = height;
+    for (uint32_t i = 1; i < num_mips; i++) {
+        uint32_t prev_w = mip_widths[i-1];
+        uint32_t prev_h = mip_heights[i-1];
+        w = std::max(1u, prev_w / 2);
+        h = std::max(1u, prev_h / 2);
+        
+        mip_widths[i] = w;
+        mip_heights[i] = h;
+        mip_data[i] = malloc(w * h * 4);
+
+        // Simple box filter for mipmap generation
+        uint8_t* prev_data = static_cast<uint8_t*>(mip_data[i-1]);
+        uint8_t* curr_data = static_cast<uint8_t*>(mip_data[i]);
+        
+        for (uint32_t y = 0; y < h; y++) {
+            for (uint32_t x = 0; x < w; x++) {
+                for (uint32_t c = 0; c < 4; c++) {
+                    uint32_t sum = 0;
+                    uint32_t count = 0;
+                    
+                    // Sample 2x2 block from previous mip level
+                    for (uint32_t dy = 0; dy < 2 && 2*y+dy < prev_h; dy++) {
+                        for (uint32_t dx = 0; dx < 2 && 2*x+dx < prev_w; dx++) {
+                            sum += prev_data[((2*y+dy)*prev_w + (2*x+dx))*4 + c];
+                            count++;
+                        }
+                    }
+                    
+                    curr_data[(y*w + x)*4 + c] = sum / count;
+                }
+            }
+        }
+    }
+}
+
 MaterialData initMaterialData(
     const imp::SourceMaterial *materials,
     uint32_t num_materials,
     const imp::SourceTexture *textures,
     uint32_t num_textures)
 {
+    // TODO: Only generate mipmaps for RGBA textures
+    // Count number of BC7 textures and number of non-BC7 textures
+    uint32_t num_non_mipmap_textures = 0;
+    uint32_t num_mipmap_textures = 0;
+    for (uint32_t i = 0; i < num_textures; ++i) {
+        if (textures[i].format == imp::SourceTextureFormat::BC7) {
+            num_mipmap_textures++;
+        } else {
+            num_non_mipmap_textures++;
+        }
+    }
+
     MaterialData cpu_mat_data = {
         .textures = (cudaTextureObject_t *)
             malloc(sizeof(cudaTextureObject_t) * num_textures),
         .textureBuffers = (cudaArray_t *)
-            malloc(sizeof(cudaArray_t) * num_textures),
+            malloc(sizeof(cudaArray_t) * num_non_mipmap_textures),
+        .mipmapTextureBuffers = (cudaMipmappedArray_t *)
+            malloc(sizeof(cudaMipmappedArray_t) * num_mipmap_textures),
         .materials = (Material *)
             malloc(sizeof(Material) * num_materials)
     };
@@ -300,6 +372,7 @@ MaterialData initMaterialData(
             tex_desc.filterMode = cudaFilterModeLinear;
             tex_desc.readMode = cudaReadModeNormalizedFloat;
             tex_desc.normalizedCoords = 1;
+            tex_desc.sRGB = 1;
 
             cudaTextureObject_t tex_obj = 0;
             REQ_CUDA(cudaCreateTextureObject(&tex_obj,
@@ -312,24 +385,44 @@ MaterialData initMaterialData(
             width = tex.width;
             height = tex.height; 
 
-            // For now, only allow this format
-            cudaChannelFormatDesc channel_desc =
-                cudaCreateChannelDesc<uchar4>();
+            // TODO: Only generate mipmaps for RGBA textures
+            // Generate mipmaps
+            const uint32_t MAX_MIPS = 16; // Should be enough for any reasonable texture size
+            void* mip_data[MAX_MIPS];
+            memset(mip_data, 0, sizeof(mip_data));
+            uint32_t mip_widths[MAX_MIPS];
+            uint32_t mip_heights[MAX_MIPS];
+            uint32_t num_mips;
+            
+            generateMipmaps(pixels, width, height, mip_data, mip_widths, mip_heights, num_mips);
 
+            // Create CUDA array with mipmaps
+            cudaMipmappedArray_t mipArray;
+            cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<uchar4>();
+            cudaExtent extent = make_cudaExtent(width, height, 0);
+            REQ_CUDA(cudaMallocMipmappedArray(&mipArray, &channelDesc, extent, num_mips));
 
-            cudaArray_t cuda_array;
-            REQ_CUDA(cudaMallocArray(&cuda_array, &channel_desc,
-                                     width, height, cudaArrayDefault));
+            // Copy each mip level
+            for (uint32_t mip = 0; mip < num_mips; mip++) {
+                cudaArray_t cuda_array;
+                REQ_CUDA(cudaGetMipmappedArrayLevel(&cuda_array, mipArray, mip));
+                REQ_CUDA(cudaMemcpy2DToArray(cuda_array, 0, 0, mip_data[mip],
+                                           mip_widths[mip] * 4,
+                                           mip_widths[mip] * 4,
+                                           mip_heights[mip],
+                                           cudaMemcpyHostToDevice));
+            }
 
-            REQ_CUDA(cudaMemcpy2DToArray(cuda_array, 0, 0, pixels,
-                                       sizeof(uint32_t) * width,
-                                       sizeof(uint32_t) * width,
-                                       height,
-                                       cudaMemcpyHostToDevice));
+            // Free mipmap data (skip mip level 0 since it points to source data)
+            for (uint32_t mip = 1; mip < num_mips; mip++) {
+                if (mip_data[mip]) {
+                    free(mip_data[mip]);
+                }
+            }
 
             cudaResourceDesc res_desc = {};
-            res_desc.resType = cudaResourceTypeArray;
-            res_desc.res.array.array = cuda_array;
+            res_desc.resType = cudaResourceTypeMipmappedArray;
+            res_desc.res.mipmap.mipmap = mipArray;
 
             cudaTextureDesc tex_desc = {};
             tex_desc.addressMode[0] = cudaAddressModeWrap;
@@ -337,17 +430,21 @@ MaterialData initMaterialData(
             tex_desc.filterMode = cudaFilterModeLinear;
             tex_desc.readMode = cudaReadModeNormalizedFloat;
             tex_desc.normalizedCoords = 1;
+            tex_desc.sRGB = 1;
+            tex_desc.mipmapFilterMode = cudaFilterModeLinear;
+            tex_desc.maxMipmapLevelClamp = num_mips - 1;
 
             cudaTextureObject_t tex_obj = 0;
             REQ_CUDA(cudaCreateTextureObject(&tex_obj,
                         &res_desc, &tex_desc, nullptr));
 
             cpu_mat_data.textures[i] = tex_obj;
-            cpu_mat_data.textureBuffers[i] = cuda_array;
+            cpu_mat_data.mipmapTextureBuffers[i] = mipArray;
         }
     }
 
-    cpu_mat_data.numTextureBuffers = num_textures;
+    cpu_mat_data.numTextureBuffers = num_non_mipmap_textures;
+    cpu_mat_data.numMipmapTextureBuffers = num_mipmap_textures;
 
     for (uint32_t i = 0; i < num_materials; ++i) {
         Material mat = {
@@ -376,6 +473,8 @@ MaterialData initMaterialData(
 
     free(cpu_mat_data.textures);
     free(cpu_mat_data.materials);
+    free(cpu_mat_data.textureBuffers);
+    free(cpu_mat_data.mipmapTextureBuffers);
 
     auto gpu_mat_data = cpu_mat_data;
     gpu_mat_data.textures = gpu_tex_buffer;
@@ -423,7 +522,7 @@ math::AABB *makeAABBs(
 
     return aabbs;
 }
-    
+
 }
 
 }

@@ -18,7 +18,7 @@ CountT RenderManager::loadObjects(Span<const imp::SourceObject> objs,
     return rctx_->loadObjects(objs, mats, textures, override_materials);
 }
 
-void RenderManager::configureLighting(Span<const LightConfig> lights)
+void RenderManager::configureLighting(Span<const LightDesc> lights)
 {
     rctx_->configureLighting(lights);
 }
@@ -38,11 +38,13 @@ void RenderManager::readECS()
 {
     uint32_t cur_num_views = *rctx_->engine_interop_.bridge.totalNumViews;
     uint32_t cur_num_instances = *rctx_->engine_interop_.bridge.totalNumInstances;
-
+    uint32_t cur_num_lights = *rctx_->engine_interop_.bridge.totalNumLights;
+    
     BatchRenderInfo info = {
         .numViews = cur_num_views,
         .numInstances = cur_num_instances,
         .numWorlds = rctx_->num_worlds_,
+        .numLights = cur_num_lights,
     };
 
     rctx_->batchRenderer->prepareForRendering(info, &rctx_->engine_interop_);
@@ -52,11 +54,13 @@ void RenderManager::batchRender()
 {
     uint32_t cur_num_views = *rctx_->engine_interop_.bridge.totalNumViews;
     uint32_t cur_num_instances = *rctx_->engine_interop_.bridge.totalNumInstances;
+    uint32_t cur_num_lights = *rctx_->engine_interop_.bridge.totalNumLights;
 
     BatchRenderInfo info = {
         .numViews = cur_num_views,
         .numInstances = cur_num_instances,
         .numWorlds = rctx_->num_worlds_,
+        .numLights = cur_num_lights,
     };
 
     rctx_->batchRenderer->renderViews(

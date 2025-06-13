@@ -108,8 +108,10 @@ struct EngineInterop {
     Optional<render::vk::HostBuffer> instancesCPU;
     Optional<render::vk::HostBuffer> instanceOffsetsCPU;
 
-    Optional<render::vk::HostBuffer> aabbCPU;
+    Optional<render::vk::HostBuffer> lightsCPU;
+    Optional<render::vk::HostBuffer> lightOffsetsCPU;
 
+    Optional<render::vk::HostBuffer> aabbCPU;
 #ifdef MADRONA_VK_CUDA_SUPPORT
     Optional<render::vk::DedicatedBuffer> viewsGPU;
     Optional<render::vk::DedicatedBuffer> viewOffsetsGPU;
@@ -117,11 +119,17 @@ struct EngineInterop {
     Optional<render::vk::DedicatedBuffer> instancesGPU;
     Optional<render::vk::DedicatedBuffer> instanceOffsetsGPU;
 
+    Optional<render::vk::DedicatedBuffer> lightsGPU;
+    Optional<render::vk::DedicatedBuffer> lightOffsetsGPU;
+
     Optional<render::vk::CudaImportedBuffer> viewsCUDA;
     Optional<render::vk::CudaImportedBuffer> viewOffsetsCUDA;
 
     Optional<render::vk::CudaImportedBuffer> instancesCUDA;
     Optional<render::vk::CudaImportedBuffer> instanceOffsetsCUDA;
+
+    Optional<render::vk::CudaImportedBuffer> lightsCUDA;
+    Optional<render::vk::CudaImportedBuffer> lightOffsetsCUDA;
 
     Optional<render::vk::DedicatedBuffer> aabbGPU;
     Optional<render::vk::CudaImportedBuffer> aabbCUDA;
@@ -133,6 +141,9 @@ struct EngineInterop {
     VkBuffer instancesHdl;
     VkBuffer instanceOffsetsHdl;
 
+    VkBuffer lightsHdl;
+    VkBuffer lightOffsetsHdl;
+
     VkBuffer aabbHdl;
 
     RenderECSBridge bridge;
@@ -140,6 +151,7 @@ struct EngineInterop {
 
     uint32_t maxViewsPerWorld;
     uint32_t maxInstancesPerWorld;
+    uint32_t maxLightsPerWorld;
 
     Optional<render::vk::HostBuffer> voxelInputCPU;
 #ifdef MADRONA_VK_CUDA_SUPPORT
@@ -151,10 +163,12 @@ struct EngineInterop {
 
     uint32_t *iotaArrayInstancesCPU;
     uint32_t *iotaArrayViewsCPU;
+    uint32_t *iotaArrayLightOffsetsCPU;
 
     // We need the sorted instance world IDs in order to compute the instance offsets
     uint64_t *sortedInstanceWorldIDs;
     uint64_t *sortedViewWorldIDs;
+    uint64_t *sortedLightOffsets;
 };
 
 struct ShadowOffsets {

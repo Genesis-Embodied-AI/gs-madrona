@@ -25,22 +25,25 @@ using namespace math;
 struct RenderingSystemState {
     uint32_t *totalNumViews;
     uint32_t *totalNumInstances;
-
+    uint32_t *totalNumLights;
     uint32_t *voxels;
     float aspectRatio;
 
     // This is used if on the CPU backend
     AtomicU32 *totalNumViewsCPU;
     AtomicU32 *totalNumInstancesCPU;
+    AtomicU32 *totalNumLightsCPU;
 
     // This is used if on the CPU backend
     InstanceData *instancesCPU;
     PerspectiveCameraData *viewsCPU;
+    LightDesc *lightsCPU;
 
     // World IDs (keys used in the key-value sorting)
     // Also only used when on the CPU backend
     uint64_t *instanceWorldIDsCPU;
     uint64_t *viewWorldIDsCPU;
+    uint64_t *lightWorldIDsCPU;
 
     MeshBVH *bvhs;
     uint32_t numBVHs;
@@ -143,7 +146,8 @@ inline void instanceTransformUpdate(Context &ctx,
 
 #ifdef MADRONA_GPU_MODE
     bool raycast_enabled = 
-        mwGPU::GPUImplConsts::get().raycastOutputResolution != 0;
+        mwGPU::GPUImplConsts::get().raycastOutputWidth != 0 &&
+        mwGPU::GPUImplConsts::get().raycastOutputHeight != 0;
 
     if (raycast_enabled) {
         MeshBVH *bvh = (MeshBVH *)
@@ -197,13 +201,20 @@ inline void lightUpdate(Context &ctx,
 
     (void)e;
 
+#if defined(MADRONA_GPU_MODE)
     LightDesc &desc = ctx.get<LightDesc>(carrier.light);
+#else
+    auto &system_state = ctx.singleton<RenderingSystemState>();
+    uint32_t light_id = system_state.totalNumLightsCPU->fetch_add<sync::acq_rel>(1);
+
+    LightDesc &desc = system_state.lightsCPU[light_id];
+#endif
 
     desc.type = type.type;
     desc.castShadow = shadow.castShadow;
     desc.position = pos;
     desc.direction = dir;
-    desc.cutoff = angle.cutoff;
+    desc.cutoffAngle = angle.cutoffAngle;
     desc.intensity = intensity.intensity;
     desc.active = active.active;
 }
@@ -257,7 +268,8 @@ inline void instanceTransformUpdateWithMat(Context &ctx,
 
 #ifdef MADRONA_GPU_MODE
     bool raycast_enabled = 
-        mwGPU::GPUImplConsts::get().raycastOutputResolution != 0;
+        mwGPU::GPUImplConsts::get().raycastOutputWidth != 0 &&
+        mwGPU::GPUImplConsts::get().raycastOutputHeight != 0;
 
     if (raycast_enabled) {
         MeshBVH *bvh = (MeshBVH *)
@@ -278,7 +290,8 @@ inline void viewTransformUpdate(Context &ctx,
                                 const Rotation &rot,
                                 const RenderCamera &cam)
 {
-    Vector3 camera_pos = pos + cam.cameraOffset;
+    auto &system_state = ctx.singleton<RenderingSystemState>();
+    float aspect_ratio = system_state.aspectRatio;
 
 #if defined(MADRONA_GPU_MODE)
     (void)e;
@@ -289,8 +302,17 @@ inline void viewTransformUpdate(Context &ctx,
     ctx.get<RenderOutputIndex>(cam.cameraEntity).index = 
         ctx.loc(e).row;
 
+    auto raycast_output_width = mwGPU::GPUImplConsts::get().raycastOutputWidth;
+    auto raycast_output_height = mwGPU::GPUImplConsts::get().raycastOutputHeight;
+    bool raycast_enabled = 
+        raycast_output_width != 0 && 
+        raycast_output_height != 0;
+
+    if (raycast_enabled) {  
+        aspect_ratio = (float)raycast_output_width / 
+            (float)raycast_output_height;
+    }
 #else
-    auto &system_state = ctx.singleton<RenderingSystemState>();
     uint32_t view_id = system_state.totalNumViewsCPU->fetch_add<sync::acq_rel>(1);
 
     // Required for stable sorting on CPU
@@ -299,18 +321,19 @@ inline void viewTransformUpdate(Context &ctx,
 
     PerspectiveCameraData &cam_data = system_state.viewsCPU[view_id];
 #endif
-    cam_data.position = camera_pos;
-    cam_data.rotation = rot.inv();
-    cam_data.worldIDX = ctx.worldID().idx;
 
-#if !defined(MADRONA_GPU_MODE)
-    float x_scale = cam.fovScale / system_state.aspectRatio;
+    float x_scale = cam.fovScale / aspect_ratio;
     float y_scale = -cam.fovScale;
 
     cam_data.xScale = x_scale;
     cam_data.yScale = y_scale;
     cam_data.zNear = cam.zNear;
-#endif
+    cam_data.zFar = cam.zFar;
+
+    Vector3 camera_pos = pos + cam.cameraOffset;
+    cam_data.position = camera_pos;
+    cam_data.rotation = rot.inv();
+    cam_data.worldIDX = ctx.worldID().idx;
 }
 
 #ifdef MADRONA_GPU_MODE
@@ -330,8 +353,11 @@ inline void exportCountsGPU(Context &ctx,
         *sys_state.totalNumInstances = state_mgr->getArchetypeNumRows<
             RenderableArchetype>();
     }
+    if (sys_state.totalNumLights) {
+        *sys_state.totalNumLights = state_mgr->getArchetypeNumRows<
+            LightArchetype>();
+    }
 
-#if MADRONA_GPU_MODE
     auto &gpu_consts = mwGPU::GPUImplConsts::get();
 
     BVHInternalData *bvh_internals =
@@ -342,10 +368,6 @@ inline void exportCountsGPU(Context &ctx,
             state_mgr->getArchetypeNumRows<RenderCameraArchetype>();
         bvh_internals->numViews = num_views;
     }
-#endif
-
-
-
 
 #if 0
     uint32_t *morton_codes = state_mgr->getArchetypeComponent<
@@ -382,11 +404,13 @@ void registerTypes(ECSRegistry &registry,
                    const RenderECSBridge *bridge)
 {
 #ifdef MADRONA_GPU_MODE
-    uint32_t render_output_res = 
-        mwGPU::GPUImplConsts::get().raycastOutputResolution;
+    uint32_t render_output_width = 
+        mwGPU::GPUImplConsts::get().raycastOutputWidth;
+    uint32_t render_output_height = 
+        mwGPU::GPUImplConsts::get().raycastOutputHeight;
 
-    uint32_t rgb_output_bytes = render_output_res * render_output_res * 4;
-    uint32_t depth_output_bytes = render_output_res * render_output_res * 4;
+    uint32_t rgb_output_bytes = render_output_width * render_output_height * 4;
+    uint32_t depth_output_bytes = render_output_width * render_output_height * 4;
 
     // Make sure to have something there even if raycasting was disabled.
     if (depth_output_bytes == 0) {
@@ -442,13 +466,19 @@ void registerTypes(ECSRegistry &registry,
             ComponentMetadataSelector<InstanceData,TLBVHNode>(ComponentFlags::ImportMemory,ComponentFlags::ImportMemory),
             ArchetypeFlags::ImportOffsets,
             bridge->maxInstancesPerWorld);
+        registry.registerArchetype<LightArchetype>(
+            ComponentMetadataSelector<LightDesc>(ComponentFlags::ImportMemory),
+            ArchetypeFlags::None,
+            bridge->maxLightsPerWorld);
 #else
         registry.registerArchetype<RenderCameraArchetype>();
         registry.registerArchetype<RenderableArchetype>();
+        registry.registerArchetype<LightArchetype>();
 #endif
     } else {
         registry.registerArchetype<RenderCameraArchetype>();
         registry.registerArchetype<RenderableArchetype>();
+        registry.registerArchetype<LightArchetype>();
     }
 
 
@@ -460,11 +490,15 @@ void registerTypes(ECSRegistry &registry,
             bridge->instanceOffsets);
         state_mgr->setArchetypeWorldOffsets<RenderCameraArchetype>(
             bridge->viewOffsets);
+        state_mgr->setArchetypeWorldOffsets<LightArchetype>(
+            bridge->lightOffsets);
 
         state_mgr->setArchetypeComponent<RenderableArchetype, InstanceData>(
             bridge->instances);
         state_mgr->setArchetypeComponent<RenderCameraArchetype, PerspectiveCameraData>(
             bridge->views);
+        state_mgr->setArchetypeComponent<LightArchetype, LightDesc>(
+            bridge->lights);
         state_mgr->setArchetypeComponent<RenderableArchetype, TLBVHNode>(
             bridge->aabbs);
     }
@@ -605,19 +639,21 @@ void init(Context &ctx,
         // This is where the renderer will read out the totals
         system_state.totalNumViews = bridge->totalNumViews;
         system_state.totalNumInstances = bridge->totalNumInstances;
-
+        system_state.totalNumLights = bridge->totalNumLights;
 #if !defined(MADRONA_GPU_MODE)
         // This is just an atomic counter (final value will be moved to
         // the totalNumViews/Instances variables).
         system_state.totalNumViewsCPU = bridge->totalNumViewsCPUInc;
         system_state.totalNumInstancesCPU = bridge->totalNumInstancesCPUInc;
+        system_state.totalNumLightsCPU = bridge->totalNumLightsCPUInc;
 
         // This is only relevant for the CPU backend
         system_state.instancesCPU = bridge->instances;
         system_state.viewsCPU = bridge->views;
-
+        system_state.lightsCPU = bridge->lights;
         system_state.instanceWorldIDsCPU = bridge->instancesWorldIDs;
         system_state.viewWorldIDsCPU = bridge->viewsWorldIDs;
+        system_state.lightWorldIDsCPU = bridge->lightWorldIDs;
 #endif
 
         system_state.aspectRatio = 
@@ -655,13 +691,14 @@ void attachEntityToView(Context &ctx,
                         Entity e,
                         float vfov_degrees,
                         float z_near,
+                        float z_far,
                         const math::Vector3 &camera_offset)
 {
     float fov_scale = 1.0f / tanf(toRadians(vfov_degrees * 0.5f));
 
     Entity camera_entity = ctx.makeEntity<RenderCameraArchetype>();
     ctx.get<RenderCamera>(e) = { 
-        camera_entity, fov_scale, z_near, camera_offset 
+        camera_entity, fov_scale, z_near, z_far, camera_offset 
     };
 
     PerspectiveCameraData &cam_data = 
@@ -669,7 +706,23 @@ void attachEntityToView(Context &ctx,
 
     auto &state = ctx.singleton<RenderingSystemState>();
 
-    float x_scale = fov_scale / state.aspectRatio;
+    float aspect_ratio = state.aspectRatio;
+#ifdef MADRONA_GPU_MODE
+    auto raycast_output_width = mwGPU::GPUImplConsts::get().raycastOutputWidth;
+    auto raycast_output_height = mwGPU::GPUImplConsts::get().raycastOutputHeight;
+
+    bool raycast_enabled = 
+        raycast_output_width != 0 && 
+        raycast_output_height != 0;
+    if (raycast_enabled) {  
+        aspect_ratio = (float)raycast_output_width / 
+            (float)raycast_output_height;
+    }
+#else
+    bool raycast_enabled = false;
+#endif
+
+    float x_scale = fov_scale / aspect_ratio;
     float y_scale = -fov_scale;
 
     cam_data = PerspectiveCameraData {
@@ -677,16 +730,9 @@ void attachEntityToView(Context &ctx,
         { /* Rotation */ }, 
         x_scale, y_scale, 
         z_near, 
-        ctx.worldID().idx,
-        0 // Padding
+        z_far,
+        ctx.worldID().idx
     };
-
-#ifdef MADRONA_GPU_MODE
-    bool raycast_enabled = 
-        mwGPU::GPUImplConsts::get().raycastOutputResolution != 0;
-#else
-    bool raycast_enabled = false;
-#endif
 
     if (raycast_enabled) {
         Entity render_output_entity = ctx.makeEntity<RaycastOutputArchetype>();
@@ -716,12 +762,12 @@ void makeEntityLightCarrier(Context &ctx, Entity e)
     ctx.get<LightCarrier>(e).light = light_e;
 
     ctx.get<LightDesc>(light_e) = LightDesc {
-        .type = ctx.get<LightDescType>(e).type,
-        .castShadow = ctx.get<LightDescShadow>(e).castShadow,
         .position = ctx.get<Position>(e),
         .direction = ctx.get<LightDescDirection>(e),
-        .cutoff = ctx.get<LightDescCutoffAngle>(e).cutoff,
+        .cutoffAngle = ctx.get<LightDescCutoffAngle>(e).cutoffAngle,
         .intensity = ctx.get<LightDescIntensity>(e).intensity,
+        .type = ctx.get<LightDescType>(e).type,
+        .castShadow = ctx.get<LightDescShadow>(e).castShadow,
         .active = ctx.get<LightDescActive>(e).active,
     };
 }
