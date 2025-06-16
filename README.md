@@ -22,8 +22,8 @@ conda activate madgs312
 ```
 mkdir gs_render
 cd gs_render
-git clone --recurse-submodules -b release git@github.com:genesis-company/gs-madrona.git
-git clone -b release git@github.com:genesis-company/Genesis.git
+git clone --recurse-submodules git@github.com:genesis-company/gs-madrona.git
+git clone git@github.com:genesis-company/Genesis.git
 ```
 
 ### Install Madrona
