@@ -53,6 +53,9 @@ struct V2F {
     [[vk::location(6)]] uint worldIdx : TEXCOORD5;
 };
 
+// TODO: Ambient intensity is hardcoded for now.  Will implement in the future.
+static const float ambient = 0.2;
+
 [shader("vertex")]
 void vert(in uint vid : SV_VertexID,
             in uint draw_id : SV_InstanceID,
@@ -182,9 +185,6 @@ PixelOutput frag(in V2F v2f,
         }
 
         float3 lighting = totalLighting * color.rgb;
-
-        // Add ambient term
-        float ambient = 0.2;
         lighting += color.rgb * ambient;
         
         color.rgb = lighting;
