@@ -62,16 +62,7 @@ struct alignas(16) InstanceData {
 
 // This is all the data required to configure a light. The actual
 // data is read in / written to through SOA.
-struct LightDesc {
-    enum Type : bool {
-        Directional = true,
-        Spotlight = false
-    };
-
-    Type type;
-
-    bool castShadow;
-
+struct alignas(16) LightDesc {
     // Only affects the spotlight (defaults to 0 0 0).
     math::Vector3 position;
 
@@ -79,13 +70,27 @@ struct LightDesc {
     math::Vector3 direction;
 
     // Angle for the spotlight (default to pi/4).
-    float cutoff;
+    float cutoffAngle;
 
     // Intensity of the light. (1.f is default)
     float intensity;
 
+    enum Type : bool {
+        Spotlight = 0,
+        Directional = 1
+    };
+
+    // Type of the light.
+    Type type;
+
+    // Whether the light casts a shadow.
+    bool castShadow;
+
     // Gives ability to turn light on or off.
     bool active;
+
+    bool padding1 = false;
+    float padding2[3] = {0, 0, 0};
 };
 
 struct LightDescDirection : math::Vector3 {
@@ -103,7 +108,7 @@ struct LightDescShadow {
 };
 
 struct LightDescCutoffAngle {
-    float cutoff;
+    float cutoffAngle;
 };
 
 struct LightDescIntensity {
