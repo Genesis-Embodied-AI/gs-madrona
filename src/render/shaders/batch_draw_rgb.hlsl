@@ -123,6 +123,21 @@ void vert(in uint vid : SV_VertexID,
     }
 }
 
+float3 calculateRayDirection(ShaderLightData light, float3 worldPos) {
+    if (light.isDirectional) { // Directional light
+        return normalize(light.direction.xyz);
+    } else { // Spot light
+        float3 ray_dir = normalize(worldPos.xyz - light.position.xyz);
+        if(light.cutoffAngle >= 0) {
+            float angle = acos(dot(normalize(ray_dir), normalize(light.direction.xyz)));
+            if (abs(angle) > light.cutoffAngle) {
+                return float3(0, 0, 0); // Return zero vector to indicate light should be skipped
+            }
+        }
+        return ray_dir;
+    }
+}
+
 struct PixelOutput {
     float4 rgbOut : SV_Target0;
 };
@@ -157,17 +172,9 @@ PixelOutput frag(in V2F v2f,
                 continue;
             }
             
-            float3 ray_dir;            
-            if (light.isDirectional) { // Directional light
-                ray_dir = normalize(light.direction.xyz);
-            } else { // Spot light
-                ray_dir = normalize(v2f.worldPos.xyz - light.position.xyz);
-                if(light.cutoffAngle >= 0) {
-                    float angle = acos(dot(normalize(ray_dir), normalize(light.direction.xyz)));
-                    if (abs(angle) > light.cutoffAngle) {
-                        continue;
-                    }
-                }
+            float3 ray_dir = calculateRayDirection(light, v2f.worldPos);
+            if (all(ray_dir == float3(0, 0, 0))) {
+                continue;
             }
 
             float n_dot_l = max(0.0, dot(normal, -ray_dir));

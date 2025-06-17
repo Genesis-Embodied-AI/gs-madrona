@@ -393,6 +393,17 @@ float3 getOutgoingRay(float2 target_pixel, float2 target_dim, in PerspectiveCame
     return normalize(dir);
 }
 
+float calculateLinearDepth(float depth_in)
+{
+    // Calculate linear depth with reverse-z buffer
+    PerspectiveCameraData cam_data = unpackViewData(viewDataBuffer[0]);
+    float z_near = cam_data.zNear;
+    float z_far = cam_data.zFar;
+    float linear_depth = z_far * z_near / (z_near - depth_in * (z_near - z_far));
+
+    return linear_depth;
+}
+
 float linearToSRGB(float v)
 {
     if (v <= 0.00031308f) {
@@ -454,11 +465,7 @@ void lighting(uint3 idx : SV_DispatchThreadID)
     float depth_in = depthInBuffer[target_idx].SampleLevel(
                          linearSampler, depth_uv, 0).x;
 
-    // Calculate linear depth with reverse-z buffer
-    PerspectiveCameraData cam_data = unpackViewData(viewDataBuffer[0]);
-    float z_near = cam_data.zNear;
-    float z_far = cam_data.zFar;
-    float linear_depth = z_far * z_near / (z_near - depth_in * (z_near - z_far));
+    float linear_depth = calculateLinearDepth(depth_in);
 
     float4 color = vizBuffer[target_idx][vbuffer_pixel + 
                      uint3(x_pixel_offset, y_pixel_offset, 0)];
