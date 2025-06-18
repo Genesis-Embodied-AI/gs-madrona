@@ -51,6 +51,9 @@ Texture3D<float4> scatteringLUT;
 [[vk::binding(4, 3)]]
 StructuredBuffer<SkyData> skyBuffer;
 
+[[vk::binding(5, 3)]]
+StructuredBuffer<RenderOptions> renderOptionsBuffer;
+
 
 #include "lighting.h"
 
@@ -404,6 +407,11 @@ float calculateLinearDepth(float depth_in)
     return linear_depth;
 }
 
+uint32_t float3ToUint32(float3 v)
+{
+    return (uint32_t)(v.x * 255.0f) | ((uint32_t)(v.y * 255.0f) << 8) | ((uint32_t)(v.z * 255.0f) << 16) | (255 << 24);
+}
+
 float linearToSRGB(float v)
 {
     if (v <= 0.00031308f) {
@@ -420,9 +428,7 @@ uint32_t linearToSRGB8(float3 rgb)
         linearToSRGB(rgb.y), 
         linearToSRGB(rgb.z));
 
-    uint3 quant = (uint3)(255 * clamp(srgb, 0.f, 1.f));
-
-    return quant.r | (quant.g << 8) | (quant.b << 16) | ((uint32_t)255 << 24);
+    return float3ToUint32(srgb);
 }
 
 // idx.x is the x coordinate of the image
@@ -456,27 +462,33 @@ void lighting(uint3 idx : SV_DispatchThreadID)
     }
 
     uint3 vbuffer_pixel = uint3(idx.x, idx.y, 0);
-    uint2 depth_dim;
-    depthInBuffer[target_idx].GetDimensions(depth_dim.x, depth_dim.y);
-    float2 depth_uv = float2(vbuffer_pixel.x + x_pixel_offset + 0.5, 
-                             vbuffer_pixel.y + y_pixel_offset + 0.5) / 
-                      float2(depth_dim.x, depth_dim.y);
-
-    float depth_in = depthInBuffer[target_idx].SampleLevel(
-                         linearSampler, depth_uv, 0).x;
-
-    float linear_depth = calculateLinearDepth(depth_in);
-
-    float4 color = vizBuffer[target_idx][vbuffer_pixel + 
-                     uint3(x_pixel_offset, y_pixel_offset, 0)];
-    float3 out_color = color.rgb;
-
-    out_color.x += zeroDummy();
-
     uint32_t out_pixel_idx =
         view_idx * pushConst.viewWidth * pushConst.viewHeight +
         idx.y * pushConst.viewWidth + idx.x;
 
-    rgbOutputBuffer[out_pixel_idx] = linearToSRGB8(out_color); 
-    depthOutputBuffer[out_pixel_idx] = linear_depth;
+    if (renderOptionsBuffer[0].outputRGB) {
+
+        float4 color = vizBuffer[target_idx][vbuffer_pixel + 
+                         uint3(x_pixel_offset, y_pixel_offset, 0)];
+        float3 out_color = color.rgb;
+
+        out_color.x += zeroDummy();
+        rgbOutputBuffer[out_pixel_idx] = linearToSRGB8(out_color); 
+    }
+
+    if (renderOptionsBuffer[0].outputDepth) 
+    {
+        uint2 depth_dim;
+        depthInBuffer[target_idx].GetDimensions(depth_dim.x, depth_dim.y);
+        float2 depth_uv = float2(vbuffer_pixel.x + x_pixel_offset + 0.5, 
+                                vbuffer_pixel.y + y_pixel_offset + 0.5) / 
+                        float2(depth_dim.x, depth_dim.y);
+
+        float depth_in = depthInBuffer[target_idx].SampleLevel(
+                         linearSampler, depth_uv, 0).x;
+
+        float linear_depth = calculateLinearDepth(depth_in);
+
+        depthOutputBuffer[out_pixel_idx] = linear_depth;
+    }
 }

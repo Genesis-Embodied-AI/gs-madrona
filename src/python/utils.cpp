@@ -323,9 +323,17 @@ Tensor::Tensor(const Tensor &o)
     : dev_ptr_(o.dev_ptr_),
       type_(o.type_),
       gpu_id_(o.gpu_id_),
+      is_none_(o.is_none_),
       num_dimensions_(o.num_dimensions_),
       dimensions_(o.dimensions_)
 {}
+
+Tensor Tensor::none()
+{
+    auto res = Tensor(nullptr, TensorElementType::Float32, {}, -1);
+    res.is_none_ = true;
+    return res;
+}
 
 Tensor & Tensor::operator=(const Tensor &o)
 {

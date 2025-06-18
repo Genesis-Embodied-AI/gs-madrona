@@ -137,11 +137,10 @@ struct Manager::Impl {
 
     inline ~Impl() {}
 
-    inline void renderImpl()
+    inline void renderImpl(const render::RenderOptions &render_options)
     {
         if (renderMgr.has_value()) {
-            renderMgr->readECS();
-            renderMgr->batchRender();
+            renderMgr->batchRender(render_options);
         }
 
         if (cfg.useRT) {
@@ -277,13 +276,24 @@ struct Manager::Impl {
             const_cast<float *>(light_intensity), 0);
 
         gpuExec.run(render_init_graph);
-        renderImpl();
+    }
+
+    inline render::RenderOptions makeRenderOptions(const uint32_t *render_options)
+    {
+        return render::RenderOptions{
+            .outputRGB = static_cast<bool>(render_options[0]),
+            .outputDepth = static_cast<bool>(render_options[1]),
+            .outputNormal = static_cast<bool>(render_options[2]),
+            .outputSegmentation = static_cast<bool>(render_options[3]),
+            .enableAntialiasing = static_cast<bool>(render_options[4]),
+        };
     }
 
     inline void render(const Vector3 *geom_pos,
                              const Quat *geom_rot,
                              const Vector3 *cam_pos,
-                             const Quat *cam_rot)
+                             const Quat *cam_rot,
+                             const uint32_t *render_options)
     {
         copyInTransforms(
             (Vector3 *)geom_pos,
@@ -297,7 +307,7 @@ struct Manager::Impl {
         // TODO: Can we remove this? where is the total number read after this?
         REQ_CUDA(cudaStreamSynchronize(0));
 
-        renderImpl();
+        renderImpl(makeRenderOptions(render_options));
     }
 
     inline const float * getDepthOut() const
@@ -715,9 +725,10 @@ void Manager::init(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
 }
 
 void Manager::render(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
-                     const math::Vector3 *cam_pos, const math::Quat *cam_rot)
+                     const math::Vector3 *cam_pos, const math::Quat *cam_rot,
+                     const uint32_t *render_options)
 {
-    impl_->render(geom_pos, geom_rot, cam_pos, cam_rot);
+    impl_->render(geom_pos, geom_rot, cam_pos, cam_rot, render_options);
 }
 
 Tensor Manager::instancePositionsTensor() const
@@ -767,30 +778,25 @@ Tensor Manager::cameraRotationsTensor() const
 Tensor Manager::rgbTensor() const
 {
     const uint8_t *rgb_ptr = impl_->getRGBOut();
-    cudaError_t err = cudaDeviceSynchronize();
-    if (err != cudaSuccess) {
-        printf("1 CUDA error during async copy execution: %s\n", cudaGetErrorString(err));
+    if(rgb_ptr == nullptr) {
+        return Tensor::none();
     }
-    auto res = Tensor((void*)rgb_ptr, TensorElementType::UInt8, {
+    
+    return Tensor((void*)rgb_ptr, TensorElementType::UInt8, {
         impl_->cfg.numWorlds,
         impl_->numCams,
         impl_->cfg.batchRenderViewHeight,
         impl_->cfg.batchRenderViewWidth,
         4,
     }, impl_->cfg.gpuID);
-
-
-    err = cudaDeviceSynchronize();
-    if (err != cudaSuccess) {
-        printf("1 CUDA error during async copy execution: %s\n", cudaGetErrorString(err));
-    }
-
-    return res;
 }
 
 Tensor Manager::depthTensor() const
 {
     const float *depth_ptr = impl_->getDepthOut();
+    if(depth_ptr == nullptr) {
+        return Tensor::none();
+    }
 
     return Tensor((void *)depth_ptr, TensorElementType::Float32, {
         impl_->cfg.numWorlds,

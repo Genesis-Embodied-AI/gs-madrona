@@ -17,6 +17,9 @@ StructuredBuffer<uint32_t> instanceOffsets;
 [[vk::binding(3, 0)]]
 StructuredBuffer<PackedLightData> lightDataBuffer;
 
+[[vk::binding(4, 0)]]
+StructuredBuffer<RenderOptions> renderOptionsBuffer;
+
 // Draw information
 [[vk::binding(0, 1)]]
 RWStructuredBuffer<uint32_t> drawCount;
@@ -151,45 +154,52 @@ PixelOutput frag(in V2F v2f,
 {
     PixelOutput output;
 
-    if (v2f.materialIdx == -2) {
-        output.rgbOut = hexToRgb(v2f.color);
+    RenderOptions renderOptions = renderOptionsBuffer[0];
 
-        return output;
-    } else {
-        MaterialData mat_data = materialBuffer[v2f.materialIdx];
-        float4 color = mat_data.color;
-        
-        if (mat_data.textureIdx != -1) {
-            color *= materialTexturesArray[mat_data.textureIdx].Sample(
-                    linearSampler, v2f.uv);
-        }
+    float3 normal = normalize(v2f.worldNormal);
 
-        float3 normal = normalize(v2f.worldNormal);
-        float3 totalLighting = 0;
-        uint numLights = pushConst.numLights;
-
-        [unroll(1)]
-        for (uint i = 0; i < numLights; i++) {
-            ShaderLightData light = unpackLightData(lightDataBuffer[v2f.worldIdx * numLights + i]);
-            if(!light.active) {
-                continue;
-            }
-            
-            float3 ray_dir = calculateRayDirection(light, v2f.worldPos);
-            if (all(ray_dir == float3(0, 0, 0))) {
-                continue;
-            }
-
-            float n_dot_l = max(0.0, dot(normal, -ray_dir));
-            totalLighting += n_dot_l * light.intensity;
-        }
-
-        float3 lighting = totalLighting * color.rgb;
-        lighting += color.rgb * ambient;
-        
-        color.rgb = lighting;
-        output.rgbOut = color;
-
-        return output;
+    if (!renderOptions.outputRGB) {
+        output.rgbOut = float4(0.0, 0.0, 0.0, 1.0);
     }
+    else {
+
+        if (v2f.materialIdx == -2) {
+            output.rgbOut = hexToRgb(v2f.color);
+        } else {
+            MaterialData mat_data = materialBuffer[v2f.materialIdx];
+            float4 color = mat_data.color;
+            
+            if (mat_data.textureIdx != -1) {
+                color *= materialTexturesArray[mat_data.textureIdx].Sample(
+                        linearSampler, v2f.uv);
+            }
+
+            float3 totalLighting = 0;
+            uint numLights = pushConst.numLights;
+
+            [unroll(1)]
+            for (uint i = 0; i < numLights; i++) {
+                ShaderLightData light = unpackLightData(lightDataBuffer[v2f.worldIdx * numLights + i]);
+                if(!light.active) {
+                    continue;
+                }
+                
+                float3 ray_dir = calculateRayDirection(light, v2f.worldPos);
+                if (all(ray_dir == float3(0, 0, 0))) {
+                    continue;
+                }
+
+                float n_dot_l = max(0.0, dot(normal, -ray_dir));
+                totalLighting += n_dot_l * light.intensity;
+            }
+
+            float3 lighting = totalLighting * color.rgb;
+            lighting += color.rgb * ambient;
+            
+            color.rgb = lighting;
+            output.rgbOut = color;
+        }
+    }
+
+    return output;
 }

@@ -124,6 +124,14 @@ struct LightArchetype : public Archetype<
     LightDesc
 > {};
 
+struct RenderOptions {
+    bool outputRGB;
+    bool outputDepth;
+    bool outputNormal;
+    bool outputSegmentation;
+    bool enableAntialiasing;
+};
+
 struct MaterialOverride {
     // These are values that matID can take on if not some override material ID.
     enum {

@@ -115,7 +115,8 @@ public:
 
     Tensor(const Tensor &o);
     Tensor & operator=(const Tensor &o);
-    
+    static Tensor none();
+    inline bool isNone() const { return is_none_; }
     inline void * devicePtr() const { return dev_ptr_; }
     inline TensorElementType type() const { return type_; }
     inline bool isOnGPU() const { return gpu_id_ != -1; }
@@ -135,6 +136,7 @@ private:
     void *dev_ptr_;
     TensorElementType type_;
     int gpu_id_;
+    bool is_none_ = false;
 
     int64_t num_dimensions_;
     std::array<int64_t, maxDimensions> dimensions_;

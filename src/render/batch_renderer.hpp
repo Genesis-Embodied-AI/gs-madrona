@@ -62,6 +62,7 @@ struct BatchRenderer {
     std::unique_ptr<Impl> impl;
 
     bool didRender;
+    RenderOptions renderOptions;
 
     struct Config {
         bool enableBatchRenderer;
@@ -81,6 +82,8 @@ struct BatchRenderer {
 
     ~BatchRenderer();
     void importCudaData(VkCommandBuffer);
+
+    void setRenderOptions(const render::RenderOptions &render_options);
 
     void prepareForRendering(BatchRenderInfo info,
                              EngineInterop *interop);

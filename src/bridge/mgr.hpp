@@ -99,7 +99,8 @@ public:
     MGR_EXPORT void render(const madrona::math::Vector3 *geom_pos,
                            const madrona::math::Quat *geom_rot,
                            const madrona::math::Vector3 *cam_pos,
-                           const madrona::math::Quat *cam_rot);
+                           const madrona::math::Quat *cam_rot,
+                           const uint32_t *render_options);
      
     // These functions export Tensor objects that link the ECS
     // simulation state to the python bindings / PyTorch tensors (src/bindings.cpp)

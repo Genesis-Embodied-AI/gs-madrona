@@ -57,11 +57,8 @@ public:
     const RenderECSBridge * bridge() const;
     inline RenderContext & renderContext() const;
 
-    // Processes the ECS's output in order to be ready for rendering.
-    void readECS();
-
     // Draw the batched output for all worlds
-    void batchRender();
+    void batchRender(const RenderOptions &render_options);
 
     const uint8_t * batchRendererRGBOut() const;
     const float * batchRendererDepthOut() const;

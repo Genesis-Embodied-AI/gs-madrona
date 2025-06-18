@@ -32,7 +32,6 @@ def main():
         ),
         renderer=gs.options.renderers.BatchRenderer(
             use_rasterizer=True,
-            batch_render_res=(512, 512),
         ),
     )
 
@@ -83,7 +82,7 @@ def main():
 
     # warmup
     scene.step()
-    rgb, depth, _, _ = scene.render_all_cams()
+    rgb, depth, _, _ = scene.render_all_cameras()
 
     # Create an image exporter
     output_dir = "img_output/test"
@@ -97,7 +96,7 @@ def main():
     for i in range(n_steps):
         scene.step()
         if do_batch_dump:
-            rgb, depth, _, _ = scene.render_all_cams()
+            rgb, depth, _, _ = scene.render_all_cameras()
             exporter.export_frame_all_cameras(i, rgb=rgb, depth=depth)
         else:
             rgb, depth, _, _ = cam_0.render()

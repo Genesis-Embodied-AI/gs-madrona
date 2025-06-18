@@ -49,11 +49,15 @@ nb::dlpack::dtype toDLPackType(TensorElementType type)
     }
 }
 
-auto tensor_to_pytorch(const Tensor &tensor)
+nb::object tensor_to_pytorch(const Tensor &tensor)
 {
+    if (tensor.isNone()) {
+        return nb::none();
+    }
+
     nb::dlpack::dtype type = toDLPackType(tensor.type());
 
-    return nb::ndarray<nb::pytorch, void> {
+    return nb::cast(nb::ndarray<nb::pytorch, void> {
         tensor.devicePtr(),
         (size_t)tensor.numDims(),
         (const size_t *)tensor.dims(),
@@ -64,7 +68,7 @@ auto tensor_to_pytorch(const Tensor &tensor)
             nb::device::cuda::value :
             nb::device::cpu::value,
         tensor.isOnGPU() ? tensor.gpuID() : 0,
-    };
+    });
 }
 
 auto tensor_to_jax(const Tensor &tensor)

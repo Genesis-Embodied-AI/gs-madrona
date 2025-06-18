@@ -156,6 +156,7 @@ class MadronaBatchRendererAdapter:
         rigid,
         cam_pos_tensor,
         cam_rot_tensor,
+        render_options,
     ):
         # Assume execution on GPU
         # TODO: Need to check if the device is GPU or CPU, or assert if not GPU
@@ -167,6 +168,7 @@ class MadronaBatchRendererAdapter:
             geom_rot,
             cam_pos,
             cam_rot,
+            render_options,
         )
         rgb_torch = self.madrona.rgb_tensor().to_torch()
         depth_torch = self.madrona.depth_tensor().to_torch()
