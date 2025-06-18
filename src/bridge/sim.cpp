@@ -65,6 +65,8 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
             render::DepthOutputBuffer>((uint32_t)ExportID::RaycastDepth);
         registry.exportColumn<render::RaycastOutputArchetype,
             render::RGBOutputBuffer>((uint32_t)ExportID::RaycastRGB);
+        registry.exportColumn<render::RaycastOutputArchetype,
+            render::NormalOutputBuffer>((uint32_t)ExportID::RaycastNormal);
     }
 }
 

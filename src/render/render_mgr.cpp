@@ -34,35 +34,22 @@ RenderManager::RenderManager(
 RenderManager::RenderManager(RenderManager &&) = default;
 RenderManager::~RenderManager() = default;
 
-void RenderManager::readECS()
+void RenderManager::batchRender(const Optional<OutputOptions> &output_options_opt)
 {
     uint32_t cur_num_views = *rctx_->engine_interop_.bridge.totalNumViews;
     uint32_t cur_num_instances = *rctx_->engine_interop_.bridge.totalNumInstances;
     uint32_t cur_num_lights = *rctx_->engine_interop_.bridge.totalNumLights;
-    
+    OutputOptions output_options = output_options_opt.has_value() ? *output_options_opt : OutputOptions {};
+
     BatchRenderInfo info = {
         .numViews = cur_num_views,
         .numInstances = cur_num_instances,
         .numWorlds = rctx_->num_worlds_,
         .numLights = cur_num_lights,
+        .outputOptions = output_options,
     };
 
     rctx_->batchRenderer->prepareForRendering(info, &rctx_->engine_interop_);
-}
-
-void RenderManager::batchRender()
-{
-    uint32_t cur_num_views = *rctx_->engine_interop_.bridge.totalNumViews;
-    uint32_t cur_num_instances = *rctx_->engine_interop_.bridge.totalNumInstances;
-    uint32_t cur_num_lights = *rctx_->engine_interop_.bridge.totalNumLights;
-
-    BatchRenderInfo info = {
-        .numViews = cur_num_views,
-        .numInstances = cur_num_instances,
-        .numWorlds = rctx_->num_worlds_,
-        .numLights = cur_num_lights,
-    };
-
     rctx_->batchRenderer->renderViews(
         info, rctx_->loaded_assets_, &rctx_->engine_interop_, *rctx_);
 }
@@ -71,6 +58,11 @@ void RenderManager::batchRender()
 const uint8_t * RenderManager::batchRendererRGBOut() const
 {
     return rctx_->batchRenderer->getRGBCUDAPtr();
+}
+
+const uint8_t * RenderManager::batchRendererNormalOut() const
+{
+    return rctx_->batchRenderer->getNormalCUDAPtr();
 }
 
 const float * RenderManager::batchRendererDepthOut() const

@@ -206,13 +206,15 @@ NB_MODULE(_madrona_gs_batch_renderer, m) {
             nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> geom_pos,
             nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 4>> geom_rot,
             nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> cam_pos,
-            nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 4>> cam_rot)
+            nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 4>> cam_rot,
+            nb::ndarray<nb::pytorch, const bool, nb::shape<-1>> output_options)
         {
             mgr.render(
                 reinterpret_cast<const math::Vector3 *>(geom_pos.data()),
                 reinterpret_cast<const math::Quat *>(geom_rot.data()),
                 reinterpret_cast<const math::Vector3 *>(cam_pos.data()),
-                reinterpret_cast<const math::Quat *>(cam_rot.data())
+                reinterpret_cast<const math::Quat *>(cam_rot.data()),
+                reinterpret_cast<const bool *>(output_options.data())
             );
         })
         .def("instance_positions_tensor", &Manager::instancePositionsTensor)
@@ -220,6 +222,7 @@ NB_MODULE(_madrona_gs_batch_renderer, m) {
         .def("camera_positions_tensor", &Manager::cameraPositionsTensor)
         .def("camera_rotations_tensor", &Manager::cameraRotationsTensor)
         .def("rgb_tensor", &Manager::rgbTensor)
+        .def("normal_tensor", &Manager::normalTensor)
         .def("depth_tensor", &Manager::depthTensor)
     ;
 }

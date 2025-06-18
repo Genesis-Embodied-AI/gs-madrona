@@ -4,13 +4,13 @@ build-backend = "madrona_py_build"
 backend-path = ["py"]
 
 [project]
-name = "madrona_gs"
+name = "gs_madrona"
 version = "0.0.1"
 
-[tool.madrona.packages.madrona_gs]
-path = "src/bridge/madrona_gs"
+[tool.madrona.packages.gs_madrona]
+path = "src/bridge/gs_madrona"
 ext-out-dir = "build"
-extensions = [ "_madrona_gs_batch_renderer", "_madrona_gs_visualizer" ]
+extensions = [ "_gs_madrona_batch_renderer", "_gs_madrona_visualizer" ]
 requires-python = ">=3.10"
 
 [tool.isort]

@@ -22,6 +22,7 @@ enum class ExportID : uint32_t {
     InstanceColorOverrides,
     RaycastDepth,
     RaycastRGB,
+    RaycastNormal,
     LightPositions,
     LightDirections,
     LightTypes,

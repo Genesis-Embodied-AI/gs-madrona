@@ -410,19 +410,23 @@ void registerTypes(ECSRegistry &registry,
         mwGPU::GPUImplConsts::get().raycastOutputHeight;
 
     uint32_t rgb_output_bytes = render_output_width * render_output_height * 4;
+    uint32_t normal_output_bytes = render_output_width * render_output_height * 4;
     uint32_t depth_output_bytes = render_output_width * render_output_height * 4;
 
     // Make sure to have something there even if raycasting was disabled.
     if (depth_output_bytes == 0) {
         rgb_output_bytes = 4;
+        normal_output_bytes = 4;
         depth_output_bytes = 4;
     } else if (mwGPU::GPUImplConsts::get().raycastRGBD == 0) {
         // Depth always renders whether we're in RGBD or Depth so we just 
         // disable RGB rendering.
         rgb_output_bytes = 4;
+        normal_output_bytes = 4;
     }
 #else
     uint32_t rgb_output_bytes = 4;
+    uint32_t normal_output_bytes = 4;
     uint32_t depth_output_bytes = 4;
 #endif
 
@@ -444,6 +448,7 @@ void registerTypes(ECSRegistry &registry,
     registry.registerComponent<LightCarrier>();
 
     registry.registerComponent<RGBOutputBuffer>(rgb_output_bytes);
+    registry.registerComponent<NormalOutputBuffer>(normal_output_bytes);
     registry.registerComponent<DepthOutputBuffer>(depth_output_bytes);
 
     registry.registerComponent<RenderOutputIndex>();

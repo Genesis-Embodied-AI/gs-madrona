@@ -50,7 +50,8 @@ int exportBinarySemaphore(const Device &dev, VkSemaphore semaphore)
 }
 
 VkSampler makeImmutableSampler(const Device &dev,
-                               VkSamplerAddressMode address_mode)
+                               VkSamplerAddressMode address_mode,
+                               VkFilter filter)
 {
     VkSampler sampler;
 
@@ -58,8 +59,8 @@ VkSampler makeImmutableSampler(const Device &dev,
     sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     sampler_info.pNext = nullptr;
     sampler_info.flags = 0;
-    sampler_info.magFilter = VK_FILTER_LINEAR;
-    sampler_info.minFilter = VK_FILTER_LINEAR;
+    sampler_info.magFilter = filter;
+    sampler_info.minFilter = filter;
     sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     sampler_info.addressModeU = address_mode;
     sampler_info.addressModeV = address_mode;

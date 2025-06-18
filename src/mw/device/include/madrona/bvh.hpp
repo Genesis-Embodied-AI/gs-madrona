@@ -135,6 +135,7 @@ struct BVHParams {
     ::madrona::MeshBVH *bvhs;
 
     void *rgbOutput;
+    void *normalOutput;
     void *depthOutput;
     uint32_t renderOutputWidth;
     uint32_t renderOutputHeight;

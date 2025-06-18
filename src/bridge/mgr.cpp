@@ -137,11 +137,10 @@ struct Manager::Impl {
 
     inline ~Impl() {}
 
-    inline void renderImpl()
+    inline void renderImpl(Optional<render::OutputOptions> output_options = Optional<render::OutputOptions>::none())
     {
         if (renderMgr.has_value()) {
-            renderMgr->readECS();
-            renderMgr->batchRender();
+            renderMgr->batchRender(output_options);
         }
 
         if (cfg.useRT) {
@@ -283,7 +282,8 @@ struct Manager::Impl {
     inline void render(const Vector3 *geom_pos,
                              const Quat *geom_rot,
                              const Vector3 *cam_pos,
-                             const Quat *cam_rot)
+                             const Quat *cam_rot,
+                             const bool *output_options)
     {
         copyInTransforms(
             (Vector3 *)geom_pos,
@@ -297,7 +297,14 @@ struct Manager::Impl {
         // TODO: Can we remove this? where is the total number read after this?
         REQ_CUDA(cudaStreamSynchronize(0));
 
-        renderImpl();
+        renderImpl(Optional<render::OutputOptions>::make(
+            render::OutputOptions{
+                .outputRGB = output_options[0],
+                .outputNormal = output_options[1],
+                .outputDepth = output_options[2],
+                .outputSegmentation = output_options[3],
+            }
+        ));
     }
 
     inline const float * getDepthOut() const
@@ -306,6 +313,15 @@ struct Manager::Impl {
             return (float *)gpuExec.getExported((uint32_t)ExportID::RaycastDepth);
         } else {
             return renderMgr->batchRendererDepthOut();
+        }
+    }
+
+    inline const uint8_t * getNormalOut() const
+    {
+        if (cfg.useRT) {
+            return (uint8_t *)gpuExec.getExported((uint32_t)ExportID::RaycastNormal);
+        } else {
+            return renderMgr->batchRendererNormalOut();
         }
     }
 
@@ -715,9 +731,10 @@ void Manager::init(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
 }
 
 void Manager::render(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
-                     const math::Vector3 *cam_pos, const math::Quat *cam_rot)
+                     const math::Vector3 *cam_pos, const math::Quat *cam_rot,
+                     const bool *output_options)
 {
-    impl_->render(geom_pos, geom_rot, cam_pos, cam_rot);
+    impl_->render(geom_pos, geom_rot, cam_pos, cam_rot, output_options);
 }
 
 Tensor Manager::instancePositionsTensor() const
@@ -783,6 +800,29 @@ Tensor Manager::rgbTensor() const
     err = cudaDeviceSynchronize();
     if (err != cudaSuccess) {
         printf("1 CUDA error during async copy execution: %s\n", cudaGetErrorString(err));
+    }
+
+    return res;
+}
+
+Tensor Manager::normalTensor() const
+{
+    const uint8_t *normal_ptr = impl_->getNormalOut();
+    cudaError_t err = cudaDeviceSynchronize();
+    if (err != cudaSuccess) {
+        printf("1 CUDA error during async copy execution: %s\n", cudaGetErrorString(err));
+    }
+    auto res = Tensor((void *)normal_ptr, TensorElementType::UInt8, {
+        impl_->cfg.numWorlds,
+        impl_->numCams,
+        impl_->cfg.batchRenderViewHeight,
+        impl_->cfg.batchRenderViewWidth,
+        4,
+    }, impl_->cfg.gpuID);
+
+    err = cudaDeviceSynchronize();
+    if (err != cudaSuccess) {
+        printf("2 CUDA error during async copy execution: %s\n", cudaGetErrorString(err));
     }
 
     return res;

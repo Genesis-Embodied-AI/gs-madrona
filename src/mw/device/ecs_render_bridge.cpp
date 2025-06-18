@@ -67,6 +67,9 @@ extern "C" __global__ void initBVHParams(madrona::BVHParams *params,
     params->rgbOutput = (void *)mgr->getArchetypeComponent<
         RaycastOutputArchetype, render::RGBOutputBuffer>();
 
+    params->normalOutput = (void *)mgr->getArchetypeComponent<
+        RaycastOutputArchetype, render::NormalOutputBuffer>();
+
     params->depthOutput = (void *)mgr->getArchetypeComponent<
         RaycastOutputArchetype, render::DepthOutputBuffer>();
 

@@ -20,7 +20,6 @@ def main():
         rigid_options=gs.options.RigidOptions(enable_collision=False, gravity=(0, 0, 0)),
         renderer = gs.options.renderers.BatchRenderer(
             use_rasterizer=False,
-            batch_render_res=(1920, 1080),
         ),
     )
 
@@ -137,6 +136,7 @@ def main():
     )
     ########################## cameras ##########################
     cam_0 = scene.add_camera(
+        res=(1600, 900),
         pos=(8.5, 0.0, 1.5),
         lookat=(3.0, 0.0, 0.7),
         fov=60,

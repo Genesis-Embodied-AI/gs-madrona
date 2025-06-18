@@ -31,7 +31,6 @@ def main():
         ),
         renderer = gs.options.renderers.BatchRenderer(
             use_rasterizer=True,
-            batch_render_res=(512, 512),
         )
     )
 
@@ -46,6 +45,7 @@ def main():
 
     ########################## cameras ##########################
     cam_0 = scene.add_camera(
+        res=(512, 512),
         pos=(1.5, 0.5, 1.5),
         lookat=(0.0, 0.0, 0.5),
         fov=45,
@@ -53,6 +53,7 @@ def main():
     )
     cam_0.attach(franka.links[6], trans_to_T(np.array([0.0, 0.5, 0.0])))
     cam_1 = scene.add_camera(
+        res=(512, 512),
         pos=(3.5, 0.0, 2.5),
         lookat=(0, 0, 0.5),
         fov=30,
@@ -95,7 +96,7 @@ def main():
     for i in range(n_steps):
         scene.step()
         if do_batch_dump:
-            rgb, depth, _, _ = scene.render_all_cams()
+            rgb, depth, normal, _ = scene.render_all_cams()
             exporter.export_frame_all_cams(i, rgb=rgb, depth=depth)
         else:
             rgb, depth, _, _ = cam_0.render()

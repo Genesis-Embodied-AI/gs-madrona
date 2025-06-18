@@ -10,16 +10,25 @@ DeferredLightingPushConstBR pushConst;
 RWTexture2DArray<float4> vizBuffer[];
 
 [[vk::binding(1, 0)]]
-RWStructuredBuffer<uint32_t> rgbOutputBuffer;
+Texture2D<float4> normalInBuffer[];
 
 [[vk::binding(2, 0)]]
-RWStructuredBuffer<float> depthOutputBuffer;
-
-[[vk::binding(3, 0)]]
 Texture2D<float> depthInBuffer[];
 
+[[vk::binding(3, 0)]]
+RWStructuredBuffer<uint32_t> rgbOutputBuffer;
+
 [[vk::binding(4, 0)]]
+RWStructuredBuffer<uint32_t> normalOutputBuffer;
+
+[[vk::binding(5, 0)]]
+RWStructuredBuffer<float> depthOutputBuffer;
+
+[[vk::binding(6, 0)]]
 SamplerState linearSampler;
+
+[[vk::binding(7, 0)]]
+SamplerState pointSampler;
 
 [[vk::binding(0, 1)]]
 StructuredBuffer<uint> indexBuffer;
@@ -50,6 +59,9 @@ Texture3D<float4> scatteringLUT;
 
 [[vk::binding(4, 3)]]
 StructuredBuffer<SkyData> skyBuffer;
+
+[[vk::binding(5, 3)]]
+StructuredBuffer<OutputOptions> outputOptionsBuffer;
 
 
 #include "lighting.h"
@@ -393,6 +405,11 @@ float3 getOutgoingRay(float2 target_pixel, float2 target_dim, in PerspectiveCame
     return normalize(dir);
 }
 
+uint32_t float3ToUint32(float3 v)
+{
+    return (uint32_t)(v.x * 255.0f) | ((uint32_t)(v.y * 255.0f) << 8) | ((uint32_t)(v.z * 255.0f) << 16) | (255 << 24);
+}
+
 float linearToSRGB(float v)
 {
     if (v <= 0.00031308f) {
@@ -409,9 +426,7 @@ uint32_t linearToSRGB8(float3 rgb)
         linearToSRGB(rgb.y), 
         linearToSRGB(rgb.z));
 
-    uint3 quant = (uint3)(255 * clamp(srgb, 0.f, 1.f));
-
-    return quant.r | (quant.g << 8) | (quant.b << 16) | ((uint32_t)255 << 24);
+    return float4ToUint32(float4(srgb, 1.0f));
 }
 
 // idx.x is the x coordinate of the image
@@ -445,31 +460,42 @@ void lighting(uint3 idx : SV_DispatchThreadID)
     }
 
     uint3 vbuffer_pixel = uint3(idx.x, idx.y, 0);
-    uint2 depth_dim;
-    depthInBuffer[target_idx].GetDimensions(depth_dim.x, depth_dim.y);
-    float2 depth_uv = float2(vbuffer_pixel.x + x_pixel_offset + 0.5, 
-                             vbuffer_pixel.y + y_pixel_offset + 0.5) / 
-                      float2(depth_dim.x, depth_dim.y);
-
-    float depth_in = depthInBuffer[target_idx].SampleLevel(
-                         linearSampler, depth_uv, 0).x;
-
-    // Calculate linear depth with reverse-z buffer
-    PerspectiveCameraData cam_data = unpackViewData(viewDataBuffer[0]);
-    float z_near = cam_data.zNear;
-    float z_far = cam_data.zFar;
-    float linear_depth = z_far * z_near / (z_near - depth_in * (z_near - z_far));
-
-    float4 color = vizBuffer[target_idx][vbuffer_pixel + 
-                     uint3(x_pixel_offset, y_pixel_offset, 0)];
-    float3 out_color = color.rgb;
-
-    out_color.x += zeroDummy();
-
     uint32_t out_pixel_idx =
         view_idx * pushConst.viewWidth * pushConst.viewHeight +
         idx.y * pushConst.viewWidth + idx.x;
 
-    rgbOutputBuffer[out_pixel_idx] = linearToSRGB8(out_color); 
-    depthOutputBuffer[out_pixel_idx] = linear_depth;
+    if (outputOptionsBuffer[0].outputRGB) {
+        float4 color = vizBuffer[target_idx][vbuffer_pixel + 
+                        uint3(x_pixel_offset, y_pixel_offset, 0)];
+        float3 out_color = color.rgb;
+
+        out_color.x += zeroDummy();
+        rgbOutputBuffer[out_pixel_idx] = linearToSRGB8(out_color);
+    }
+
+    if (outputOptionsBuffer[0].outputNormal) {
+        float3 out_normal = normalInBuffer[target_idx].Load(vbuffer_pixel + 
+                         uint3(x_pixel_offset, y_pixel_offset, 0)).rgb;
+
+        normalOutputBuffer[out_pixel_idx] = float3ToUint32(out_normal);
+    }
+
+    if (outputOptionsBuffer[0].outputDepth) {
+        uint2 depth_dim;
+        depthInBuffer[target_idx].GetDimensions(depth_dim.x, depth_dim.y);
+        float2 depth_uv = float2(vbuffer_pixel.x + x_pixel_offset + 0.5, 
+                                vbuffer_pixel.y + y_pixel_offset + 0.5) / 
+                        float2(depth_dim.x, depth_dim.y);
+
+        float depth_in = depthInBuffer[target_idx].SampleLevel(
+                            pointSampler, depth_uv, 0).x;
+
+        // Calculate linear depth with reverse-z buffer
+        PerspectiveCameraData cam_data = unpackViewData(viewDataBuffer[0]);
+        float z_near = cam_data.zNear;
+        float z_far = cam_data.zFar;
+        float linear_depth = z_far * z_near / (z_near - depth_in * (z_near - z_far));
+
+        depthOutputBuffer[out_pixel_idx] = linear_depth;
+    }
 }

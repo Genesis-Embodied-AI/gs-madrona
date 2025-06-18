@@ -272,10 +272,11 @@ static VkRenderPass makeShadowRenderPass(const Device &dev,
 
 
 static PipelineShaders makeDrawShaders(
-    const Device &dev, VkSampler repeat_sampler, VkSampler clamp_sampler)
+    const Device &dev, VkSampler repeat_sampler, VkSampler clamp_sampler, VkSampler point_sampler)
 {
     (void)repeat_sampler;
     (void)clamp_sampler;
+    (void)point_sampler;
 
     std::filesystem::path shader_dir =
         std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
@@ -347,10 +348,11 @@ static Pipeline<1> makeDrawPipeline(const Device &dev,
                                     VkRenderPass render_pass,
                                     VkSampler repeat_sampler,
                                     VkSampler clamp_sampler,
+                                    VkSampler point_sampler,
                                     uint32_t num_frames)
 {
     auto shaders =
-        makeDrawShaders(dev, repeat_sampler, clamp_sampler);
+        makeDrawShaders(dev, repeat_sampler, clamp_sampler, point_sampler);
 
     VkPipelineVertexInputStateCreateInfo vert_info {};
     VkPipelineInputAssemblyStateCreateInfo input_assembly_info {};
@@ -1306,9 +1308,11 @@ RenderContext::RenderContext(
       br_height_(cfg.agentViewHeight),
       pipelineCache(getPipelineCache(dev)),
       repeatSampler(
-          makeImmutableSampler(dev, VK_SAMPLER_ADDRESS_MODE_REPEAT)),
+          makeImmutableSampler(dev, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_FILTER_LINEAR)),
       clampSampler(
-          makeImmutableSampler(dev, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)),
+          makeImmutableSampler(dev, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_FILTER_LINEAR)),
+      pointSampler(
+          makeImmutableSampler(dev, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_FILTER_NEAREST)),
       renderPass(makeRenderPass(
           dev, VK_FORMAT_R8G8B8A8_UNORM, InternalConfig::gbufferFormat,
           InternalConfig::gbufferFormat, InternalConfig::depthFormat)),
@@ -1317,7 +1321,7 @@ RenderContext::RenderContext(
       instanceCull(makeCullPipeline(
           dev, pipelineCache, InternalConfig::numFrames)),
       objectDraw(makeDrawPipeline(dev, pipelineCache,
-          renderPass, repeatSampler, clampSampler,
+          renderPass, repeatSampler, clampSampler, pointSampler,
           InternalConfig::numFrames)),
       asset_desc_pool_cull_(dev, instanceCull.shaders, 1, 1),
       asset_desc_pool_draw_(dev, objectDraw.shaders, 1, 1),
@@ -1597,6 +1601,7 @@ RenderContext::~RenderContext()
 
     dev.dt.destroySampler(dev.hdl, clampSampler, nullptr);
     dev.dt.destroySampler(dev.hdl, repeatSampler, nullptr);
+    dev.dt.destroySampler(dev.hdl, pointSampler, nullptr);
 
     dev.dt.destroyPipelineCache(dev.hdl, pipelineCache, nullptr);
 }

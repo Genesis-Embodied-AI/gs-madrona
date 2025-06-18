@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from madrona_gs._madrona_gs_batch_renderer import MadronaBatchRenderer
+from gs_madrona._gs_madrona_batch_renderer import MadronaBatchRenderer
 from trimesh.visual.texture import TextureVisuals
 from trimesh.visual.color import ColorVisuals
 from PIL import Image
@@ -132,6 +132,7 @@ class MadronaBatchRendererAdapter:
       rigid,
       cam_pos_tensor,
       cam_rot_tensor,
+      output_options_tensor,
   ):
     # Assume execution on GPU
     # TODO: Need to check if the device is GPU or CPU, or assert if not GPU
@@ -143,6 +144,7 @@ class MadronaBatchRendererAdapter:
         geom_rot,
         cam_pos,
         cam_rot,
+        output_options_tensor,
     )
     rgb_torch = self.madrona.rgb_tensor().to_torch()
     depth_torch = self.madrona.depth_tensor().to_torch()

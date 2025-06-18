@@ -34,6 +34,7 @@ struct RenderContext {
     VkPipelineCache pipelineCache;
     VkSampler repeatSampler;
     VkSampler clampSampler;
+    VkSampler pointSampler;
 
     VkRenderPass renderPass;
     VkRenderPass shadowPass;

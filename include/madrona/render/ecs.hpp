@@ -124,6 +124,17 @@ struct LightArchetype : public Archetype<
     LightDesc
 > {};
 
+struct alignas(16) OutputOptions {
+    bool outputRGB;
+    bool outputNormal;
+    bool outputDepth;
+    bool outputSegmentation;
+};
+
+struct OutputOptionsArchetype : public Archetype<
+    OutputOptions
+> {};
+
 struct MaterialOverride {
     // These are values that matID can take on if not some override material ID.
     enum {
@@ -144,6 +155,7 @@ struct RenderOutputBuffer {
 };
 
 struct RGBOutputBuffer : RenderOutputBuffer {};
+struct NormalOutputBuffer : RenderOutputBuffer {};
 struct DepthOutputBuffer : RenderOutputBuffer {};
 
 // Reference to an output
@@ -181,6 +193,7 @@ struct RenderCameraArchetype : public Archetype<
 // This is an unsorted archetype with a runtime-sized component
 struct RaycastOutputArchetype : public Archetype<
     RGBOutputBuffer,
+    NormalOutputBuffer,
     DepthOutputBuffer
 > {};
 
