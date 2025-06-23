@@ -65,7 +65,6 @@ Images will be generated in `image_output`
 ```
         renderer = gs.options.renderers.BatchRenderer(
             use_rasterizer=True,
-            batch_render_res=(512, 512),
         )
 ```
 
