@@ -98,10 +98,10 @@ def main():
         scene.step()
         if do_batch_dump:
             rgb, depth, _, _ = scene.render_all_cams()
-            exporter.export_frame_all_cams(i, rgb=rgb, depth=depth)
+            exporter.export_frame_all_cameras(i, rgb=rgb, depth=depth)
         else:
             rgb, depth, _, _ = cam_0.render()
-            exporter.export_frame_single_cam(i, cam_0.idx, rgb=rgb, depth=depth)
+            exporter.export_frame_single_camera(i, cam_0.idx, rgb=rgb, depth=depth)
 
     end_time = time()
     print(f"n_envs: {n_envs}")

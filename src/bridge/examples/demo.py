@@ -164,7 +164,7 @@ def main():
     for i in range(horizon):
         scene.step()
         rgb, depth, _, _ = scene.render_all_cams()
-        exporter.export_frame_all_cams(i, rgb=rgb, depth=depth)
+        exporter.export_frame_all_cameras(i, rgb=rgb, depth=depth)
 
 
 if __name__ == "__main__":
