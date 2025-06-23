@@ -175,7 +175,7 @@ struct Visualizer {
     }
 };
 
-NB_MODULE(_madrona_gs_visualizer, m) {
+NB_MODULE(_gs_madrona_visualizer, m) {
     nb::class_<VisualizerGPUState>(m, "VisualizerGPUState")
         .def("__init__", [](VisualizerGPUState *self,
                             int64_t window_width,

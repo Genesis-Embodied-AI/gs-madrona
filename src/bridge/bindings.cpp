@@ -12,7 +12,7 @@ namespace madMJX {
 
 // This file creates the python bindings used by the learning code.
 // Refer to the nanobind documentation for more details on these functions.
-NB_MODULE(_madrona_gs_batch_renderer, m) {
+NB_MODULE(_gs_madrona_batch_renderer, m) {
     // Each simulator has a madrona submodule that includes base types
     // like madrona::py::Tensor
     madrona::py::setupMadronaSubmodule(m);
