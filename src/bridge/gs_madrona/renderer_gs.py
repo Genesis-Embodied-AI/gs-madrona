@@ -298,12 +298,12 @@ class MadronaBatchRendererAdapter:
         lights_castshadow_tensor,
         lights_cutoff_tensor,
     ):
-        light_pos = lights_pos_tensor.to_torch().reshape(-1, 3).unsqueeze(0).repeat(self.num_worlds, 1, 1)
-        light_dir = lights_dir_tensor.to_torch().reshape(-1, 3).unsqueeze(0).repeat(self.num_worlds, 1, 1)
-        light_directional = lights_directional_tensor.to_torch().reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
-        light_castshadow = lights_castshadow_tensor.to_torch().reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
-        light_cutoff = lights_cutoff_tensor.to_torch().reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
-        light_intensity = lights_intensity_tensor.to_torch().reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
+        light_pos = lights_pos_tensor.reshape(-1, 3).unsqueeze(0).repeat(self.num_worlds, 1, 1)
+        light_dir = lights_dir_tensor.reshape(-1, 3).unsqueeze(0).repeat(self.num_worlds, 1, 1)
+        light_directional = lights_directional_tensor.reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
+        light_castshadow = lights_castshadow_tensor.reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
+        light_cutoff = lights_cutoff_tensor.reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
+        light_intensity = lights_intensity_tensor.reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
         return (
             light_pos,
             light_dir,
