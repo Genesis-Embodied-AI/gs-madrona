@@ -931,8 +931,6 @@ static __device__ FragmentResult computeFragment(
                 }
             }
 
-            /*
-            // TODO: Temporarily disable shadow casting.
             // Make sure the surface is actually pointing to the light
             // when casting shadow.
             if (light.castShadow) {
@@ -952,7 +950,6 @@ static __device__ FragmentResult computeFragment(
                     }
                 }
             }
-            */
 
             float n_dot_l = max(0.0, dot(first_hit.normal, -ray_dir));
             totalLighting += n_dot_l * light.intensity;
