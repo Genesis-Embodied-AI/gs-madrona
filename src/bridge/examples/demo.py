@@ -1,5 +1,3 @@
-import torch
-
 import genesis as gs
 from genesis.utils.image_exporter import FrameImageExporter
 
@@ -157,7 +155,7 @@ def main():
     horizon = 10
 
     # Create an image exporter
-    output_dir = "img_output/test"
+    output_dir = "img_output/demo"
     exporter = FrameImageExporter(output_dir)
 
     for i in range(horizon):

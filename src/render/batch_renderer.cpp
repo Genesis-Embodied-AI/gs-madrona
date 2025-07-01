@@ -217,7 +217,7 @@ static vk::PipelineShaders makeDrawShaders(const vk::Device &dev,
     }
 }
 
-static PipelineMP<1> makeDrawPipeline(const vk::Device &dev,
+static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
                                     VkPipelineCache pipeline_cache,
                                     VkRenderPass render_pass,
                                     uint32_t num_frames,
@@ -316,6 +316,7 @@ static PipelineMP<1> makeDrawPipeline(const vk::Device &dev,
     REQ_VK(dev.dt.createPipelineLayout(dev.hdl, &gfx_layout_info, nullptr,
                                        &draw_layout));
 
+    // RGB + depth pass
     std::array<VkPipelineShaderStageCreateInfo, 2> gfx_stages {{
         {
             VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -337,39 +338,81 @@ static PipelineMP<1> makeDrawPipeline(const vk::Device &dev,
         },
     }};
 
-    VkFormat color_format = depth_only ? consts::depthOnlyFormat : consts::colorOnlyFormat;
-    VkFormat depth_format = consts::depthFormat;
-
     VkPipelineRenderingCreateInfo rendering_info = {};
     rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     rendering_info.colorAttachmentCount = 1;
-    rendering_info.pColorAttachmentFormats = &color_format;
-    rendering_info.depthAttachmentFormat = depth_format;
+    rendering_info.pColorAttachmentFormats = &consts::colorOnlyFormat;
+    rendering_info.depthAttachmentFormat = consts::depthFormat;
 
-    VkGraphicsPipelineCreateInfo gfx_info;
-    gfx_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    gfx_info.pNext = &rendering_info;
-    gfx_info.flags = 0;
-    gfx_info.stageCount = gfx_stages.size();
-    gfx_info.pStages = gfx_stages.data();
-    gfx_info.pVertexInputState = &vert_info;
-    gfx_info.pInputAssemblyState = &input_assembly_info;
-    gfx_info.pTessellationState = nullptr;
-    gfx_info.pViewportState = &viewport_info;
-    gfx_info.pRasterizationState = &raster_info;
-    gfx_info.pMultisampleState = &multisample_info;
-    gfx_info.pDepthStencilState = &depth_info;
-    gfx_info.pColorBlendState = &blend_info;
-    gfx_info.pDynamicState = &dyn_info;
-    gfx_info.layout = draw_layout;
-    gfx_info.renderPass = render_pass;
-    gfx_info.subpass = 0;
-    gfx_info.basePipelineHandle = VK_NULL_HANDLE;
-    gfx_info.basePipelineIndex = -1;
+    // Depth pass
+    std::array<VkPipelineShaderStageCreateInfo, 1> depth_gfx_stages {{
+        {
+            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            nullptr,
+            0,
+            VK_SHADER_STAGE_VERTEX_BIT,
+            shaders.getShader(0),
+            "vert",
+            nullptr,
+        },
+    }};
 
-    VkPipeline draw_pipeline;
-    REQ_VK(dev.dt.createGraphicsPipelines(dev.hdl, pipeline_cache, 1,
-                                          &gfx_info, nullptr, &draw_pipeline));
+    VkPipelineRenderingCreateInfo depth_rendering_info = {};
+    depth_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    depth_rendering_info.colorAttachmentCount = 0;
+    depth_rendering_info.pColorAttachmentFormats = nullptr;
+    depth_rendering_info.depthAttachmentFormat = consts::depthFormat;
+
+    std::array<VkGraphicsPipelineCreateInfo, 2> gfx_infos {{
+        {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &rendering_info,
+            .flags = 0,
+            .stageCount = gfx_stages.size(),
+            .pStages = gfx_stages.data(),
+            .pVertexInputState = &vert_info,
+            .pInputAssemblyState = &input_assembly_info,
+            .pTessellationState = nullptr,
+            .pViewportState = &viewport_info,
+            .pRasterizationState = &raster_info,
+            .pMultisampleState = &multisample_info,
+            .pDepthStencilState = &depth_info,
+            .pColorBlendState = &blend_info,
+            .pDynamicState = &dyn_info,
+            .layout = draw_layout,
+            .renderPass = render_pass,
+            .subpass = 0,
+            .basePipelineHandle = VK_NULL_HANDLE,
+            .basePipelineIndex = -1,
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &depth_rendering_info,
+            .flags = 0,
+            .stageCount = depth_gfx_stages.size(),
+            .pStages = depth_gfx_stages.data(),
+            .pVertexInputState = &vert_info,
+            .pInputAssemblyState = &input_assembly_info,
+            .pTessellationState = nullptr,
+            .pViewportState = &viewport_info,
+            .pRasterizationState = &raster_info,
+            .pMultisampleState = &multisample_info,
+            .pDepthStencilState = &depth_info,
+            .pColorBlendState = &blend_info,
+            .pDynamicState = &dyn_info,
+            .layout = draw_layout,
+            .renderPass = render_pass,
+            .subpass = 0,
+            .basePipelineHandle = VK_NULL_HANDLE,
+            .basePipelineIndex = -1,
+        },
+    }};
+    
+
+    std::array<VkPipeline, 2> pipelines;
+    REQ_VK(dev.dt.createGraphicsPipelines(dev.hdl, pipeline_cache, 2,
+                                          gfx_infos.data(), nullptr,
+                                          pipelines.data()));
 
     // std::array<vk::FixedDescriptorPool, D> desc_pools;
     DynArray<vk::FixedDescriptorPool> desc_pools(num_pools);
@@ -380,7 +423,7 @@ static PipelineMP<1> makeDrawPipeline(const vk::Device &dev,
     return {
         std::move(shaders),
         draw_layout,
-        { draw_pipeline },
+        pipelines,
         std::move(desc_pools)
     };
 }
@@ -586,7 +629,7 @@ struct BatchFrame {
 static DrawCommandPackage makeDrawCommandPackage(vk::Device& dev,
                           render::vk::MemoryAllocator &alloc,
                           PipelineMP<1> &prepare_views,
-                          PipelineMP<1> &draw_views,
+                          PipelineMP<2> &draw_views,
                           uint32_t max_views_per_target)
 {
     VkDescriptorSet prepare_set = prepare_views.descPools[1].makeSet();
@@ -648,7 +691,7 @@ static void makeBatchFrame(vk::Device& dev,
                            render::vk::MemoryAllocator &alloc,
                            const BatchRenderer::Config &cfg,
                            PipelineMP<1> &prepare_views,
-                           Optional<PipelineMP<1>> &draw,
+                           Optional<PipelineMP<2>> &draw,
                            VkDescriptorSet lighting_set,
                            VkDescriptorSet pbr_set,
                            bool enable_batch_renderer,
@@ -1084,7 +1127,7 @@ static void issueComputeLayoutTransitions(vk::Device &dev,
 }
 
 static void issueRasterization(vk::Device &dev, 
-                               PipelineMP<1> &draw_pipeline, 
+                               PipelineMP<2> &draw_pipeline, 
                                LayeredTarget &target,
                                VkCommandBuffer &draw_cmd,
                                DrawCommandPackage &view_batch,
@@ -1121,20 +1164,20 @@ static void issueRasterization(vk::Device &dev,
     rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
     rendering_info.renderArea = total_rect;
     rendering_info.layerCount = 1;
-    rendering_info.colorAttachmentCount = 1;
-    rendering_info.pColorAttachments = &color_attach;
+    rendering_info.colorAttachmentCount = depth_only ? 0 : 1;
+    rendering_info.pColorAttachments = depth_only ? nullptr : &color_attach;
     rendering_info.pDepthAttachment = &depth_attach;
 
     dev.dt.cmdBeginRenderingKHR(draw_cmd, &rendering_info);
 
     dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                           draw_pipeline.hdls[0]);
+                           depth_only ? draw_pipeline.hdls[1] : draw_pipeline.hdls[0]);
 
     dev.dt.cmdBindIndexBuffer(draw_cmd, loaded_assets[0].buf.buffer,
                               loaded_assets[0].idxBufferOffset,
                               VK_INDEX_TYPE_UINT32);
 
-    uint32_t num_descriptors = depth_only ? 3 : 4;
+    const uint32_t num_descriptors = 4;
     std::array<VkDescriptorSet, 4> draw_descriptors = {
         batch_frame.viewInstanceSetDraw,
         view_batch.drawBufferSetDraw,
@@ -1282,7 +1325,7 @@ struct BatchRenderer::Impl {
     // Required whether we do batch rendering or not
     PipelineMP<1> prepareViews;
 
-    Optional<PipelineMP<1>> batchDraw;
+    Optional<PipelineMP<2>> batchDraw;
     Optional<PipelineMP<1>> createVisualization;
     Optional<PipelineMP<1>> lighting;
 
@@ -1341,7 +1384,7 @@ BatchRenderer::Impl::Impl(const Config &cfg,
       batchDraw(cfg.enableBatchRenderer ? 
           makeDrawPipeline(dev, rctx.pipelineCache, VK_NULL_HANDLE, 
                            consts::numDrawCmdBuffers * cfg.numFrames, 2, depthOnly, rctx.repeatSampler) :
-          Optional<PipelineMP<1>>::none()),
+          Optional<PipelineMP<2>>::none()),
       createVisualization(cfg.enableBatchRenderer ?
           makeComputePipeline(
               dev, rctx.pipelineCache, 1,
@@ -2161,7 +2204,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                            impl->assetSetTextureMat,
                            impl->renderExtent,
                            loaded_assets,
-                           impl->depthOnly,
+                           !this->renderOptions.outputRGB && this->renderOptions.outputDepth,
                            info.numLights / info.numWorlds);
 
         issueComputeLayoutTransitions(impl->dev,

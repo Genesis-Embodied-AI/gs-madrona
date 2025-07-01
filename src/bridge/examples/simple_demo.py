@@ -1,10 +1,9 @@
 import argparse
-import os
-import cv2
+
+import numpy as np
 
 import genesis as gs
 from genesis.options.renderers import BatchRenderer
-import numpy as np
 from genesis.utils.geom import trans_to_T
 from genesis.utils.image_exporter import FrameImageExporter
 
@@ -27,9 +26,6 @@ def main():
             camera_fov=40,
         ),
         show_viewer=args.vis,
-        rigid_options=gs.options.RigidOptions(
-            # constraint_solver=gs.constraint_solver.Newton,
-        ),
         renderer=gs.options.renderers.BatchRenderer(
             use_rasterizer=True,
         ),
@@ -85,7 +81,7 @@ def main():
     rgb, depth, _, _ = scene.render_all_cameras()
 
     # Create an image exporter
-    output_dir = "img_output/test"
+    output_dir = "img_output/demo"
     exporter = FrameImageExporter(output_dir)
 
     # timer
@@ -96,7 +92,7 @@ def main():
     for i in range(n_steps):
         scene.step()
         if do_batch_dump:
-            rgb, depth, _, _ = scene.render_all_cameras()
+            rgb, depth, _, _ = scene.render_all_cameras(rgb=True, depth=True)
             exporter.export_frame_all_cameras(i, rgb=rgb, depth=depth)
         else:
             rgb, depth, _, _ = cam_0.render()
