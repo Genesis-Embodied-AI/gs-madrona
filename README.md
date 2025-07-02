@@ -73,3 +73,18 @@ Images will be generated in `image_output`
 ```
 python examples/rigid/batch_render_with_ppo.py
 ```
+### Performance Benchmark
+For comprehensive performance benchmarking across multiple renderers (Madrona, Omniverse, PyRender, ManiSkill), please refer to the detailed documentation in `scripts/perf_benchmark/README.md`.
+
+The benchmark suite includes:
+- Multi-renderer performance testing
+- Batch size and resolution scaling tests
+- Rasterizer vs raytracer comparisons
+- Automated report generation
+- Asset preprocessing utilities
+
+Quick start:
+```bash
+cd scripts/perf_benchmark
+python batch_benchmark.py -f benchmark_config_smoke_test.yml
+```
