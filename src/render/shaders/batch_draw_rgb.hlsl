@@ -47,6 +47,9 @@ Texture2D<float4> materialTexturesArray[];
 SamplerState linearSampler;
 
 [[vk::binding(2, 3)]]
+StructuredBuffer<ShadowViewData> shadowViewDataBuffer;
+
+[[vk::binding(3, 3)]]
 Texture2D<float2> shadowMapBuffer[];
 
 struct V2F {
@@ -57,6 +60,7 @@ struct V2F {
     [[vk::location(4)]] uint color : TEXCOORD3;
     [[vk::location(5)]] float3 worldNormal : TEXCOORD4;
     [[vk::location(6)]] uint worldIdx : TEXCOORD5;
+    [[vk::location(7)]] uint viewIdx : TEXCOORD6;
 };
 
 float3 getShadowMapPixelOffset(uint view_idx) {
@@ -77,7 +81,7 @@ float3 getShadowMapPixelOffset(uint view_idx) {
 }
 
 /* Shadowing is done using variance shadow mapping. */
-float shadowFactorVSM(float3 world_pos)
+float shadowFactorVSM(float3 world_pos, uint view_idx)
 {
     float3 shadow_map_pixel_offset = getShadowMapPixelOffset(view_idx);
     uint shadow_map_target_idx = shadow_map_pixel_offset.z;
@@ -174,6 +178,7 @@ void vert(in uint vid : SV_VertexID,
     v2f.uv = vert.uv;
     v2f.worldNormal = rotateVec(instance_data.rotation, vert.normal);
     v2f.worldIdx = instance_data.worldID;
+    v2f.viewIdx = draw_data.viewID;
 
     if (instance_data.matID == -2) {
         v2f.materialIdx = -2;
@@ -234,6 +239,7 @@ PixelOutput frag(in V2F v2f,
 
             float3 totalLighting = 0;
             uint numLights = pushConst.numLights;
+            float shadowFactor = shadowFactorVSM(v2f.worldPos, v2f.viewIdx);
 
             [unroll(1)]
             for (uint i = 0; i < numLights; i++) {
@@ -248,7 +254,12 @@ PixelOutput frag(in V2F v2f,
                 }
 
                 float n_dot_l = max(0.0, dot(normal, -ray_dir));
-                totalLighting += n_dot_l * light.intensity;
+                // Only apply shadow to the first light
+                if (i == 0) {
+                    totalLighting += n_dot_l * light.intensity * shadowFactor;
+                } else {
+                    totalLighting += n_dot_l * light.intensity;
+                }
             }
 
             float3 lighting = totalLighting * color.rgb;
