@@ -1,0 +1,70 @@
+mjcf_list:
+  - xml/franka_emika_panda/panda.xml
+  - xml/unitree_g1/g1.xml
+  - xml/unitree_go2/go2.xml
+
+renderer_list:
+  - renderer: madrona
+    benchmark_script: benchmark_madrona.py
+    timeout: 120
+
+rasterizer_list:
+  - true
+  - false
+
+batch_size_list:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 32
+  - 64
+  - 128
+  - 256
+  - 512
+  - 768
+  - 1024
+  - 1536
+  - 2048
+  - 3072
+  - 4096
+  - 6144
+  - 8192
+  - 12288
+  - 16384
+
+resolution_list:
+  #square:
+  - [128, 128]
+  - [256, 256]
+  
+  #four_three:
+  
+  #sixteen_nine:
+
+comparison_list:
+  - - renderer: madrona
+      rasterizer: true
+    - renderer: madrona
+      rasterizer: false
+
+# Configurations shared betwen batch_benchmark.py and benchmark_*.py
+# Raytracer configuration
+raytracer:
+  max_bounce: 2
+  spp: 1
+
+# Simulation configuration
+simulation:
+  n_steps: 1000
+
+# Camera configuration
+camera:
+  position: [1.5, 0.5, 1.5]  # [x, y, z]
+  lookat: [0.0, 0.0, 0.5]    # [x, y, z]
+  fov: 45.0                  # degrees
+
+# Display configuration
+display:
+  gui: false  # Enable/disable GUI mode

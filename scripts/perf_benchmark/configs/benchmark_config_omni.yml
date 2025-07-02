@@ -1,0 +1,56 @@
+mjcf_list:
+  - xml/franka_emika_panda/panda.xml
+
+renderer_list:
+  - renderer: madrona
+    benchmark_script: benchmark_madrona.py
+    timeout: 120
+  - renderer: omniverse
+    benchmark_script: benchmark_omni.py
+    timeout: 60
+
+rasterizer_list:
+  - true
+  - false
+
+batch_size_list:
+  - 256
+
+resolution_list:
+  #square:
+  - [128, 128]
+  - [256, 256]
+  
+  #four_three:
+  
+  #sixteen_nine:
+
+comparison_list:
+  - - renderer: omniverse
+      rasterizer: true
+    - renderer: madrona
+      rasterizer: true
+    - renderer: omniverse
+      rasterizer: false
+    - renderer: madrona
+      rasterizer: false
+
+# Configurations shared betwen batch_benchmark.py and benchmark_*.py
+# Raytracer configuration
+raytracer:
+  max_bounce: 2
+  spp: 1
+
+# Simulation configuration
+simulation:
+  n_steps: 1000
+
+# Camera configuration
+camera:
+  position: [1.5, 0.5, 1.5]  # [x, y, z]
+  lookat: [0.0, 0.0, 0.5]    # [x, y, z]
+  fov: 45.0                  # degrees
+
+# Display configuration
+display:
+  gui: false  # Enable/disable GUI mode
