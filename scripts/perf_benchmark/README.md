@@ -34,25 +34,36 @@ perf_benchmark/
 
 ## Quick Start
 
-### 1. Run a Quick Smoke Test
+
+### 1. Optional steps
+IsaacLab and Maniskill needs to be installed if they need to be benchmarked.
+
+Install IsaacLab
+-  Download and install IsaacLab from https://developer.nvidia.com/isaac-sim
+-  Add IsaacLab to your PATH:
+
+Install Maniskill
+-  Install ManiSkill2 following the [official instructions](https://github.com/haosulab/ManiSkill2)
+
+### 2. Run a Quick Smoke Test
 
 ```bash
 python batch_benchmark.py -f benchmark_config_smoke_test.yml
 ```
 
-### 2. Run a Full Benchmark Suite
+### 3. Run a Full Benchmark Suite
 
 ```bash
 python batch_benchmark.py -f benchmark_config_full.yml
 ```
 
-### 3. Continue from a Previous Run
+### 4. Continue from a Previous Run
 
 ```bash
 python batch_benchmark.py -f benchmark_config_full.yml -c /path/to/previous/perf_data.csv
 ```
 
-### 4. Preprocess MUJUCO XML Assets to make it compatible with Omniverse (if needed)
+### 5. Preprocess MUJUCO XML Assets to make it compatible with Omniverse (if needed)
 
 ```bash
 python process_xml.py --file ./genesis/assets/xml/franka_emika_panda/panda.xml
