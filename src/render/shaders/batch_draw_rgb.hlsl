@@ -20,6 +20,9 @@ StructuredBuffer<PackedLightData> lightDataBuffer;
 [[vk::binding(4, 0)]]
 StructuredBuffer<RenderOptions> renderOptionsBuffer;
 
+[[vk::binding(5, 0)]]
+StructuredBuffer<ShadowViewData> shadowViewDataBuffer;
+
 // Draw information
 [[vk::binding(0, 1)]]
 RWStructuredBuffer<uint32_t> drawCount;
@@ -46,6 +49,13 @@ Texture2D<float4> materialTexturesArray[];
 [[vk::binding(1, 3)]]
 SamplerState linearSampler;
 
+[[vk::binding(0, 4)]]
+Texture2D<float2> shadowMapTextures[];
+
+// TODO: Ambient intensity is hardcoded for now. Shadow bias is hardcoded for now.
+// Will implement in the future.
+static const float ambient = 0.2;
+
 struct V2F {
     [[vk::location(0)]] float4 position : SV_Position;
     [[vk::location(1)]] float3 worldPos : TEXCOORD0;
@@ -54,10 +64,9 @@ struct V2F {
     [[vk::location(4)]] uint color : TEXCOORD3;
     [[vk::location(5)]] float3 worldNormal : TEXCOORD4;
     [[vk::location(6)]] uint worldIdx : TEXCOORD5;
+    [[vk::location(7)]] uint viewIdx : TEXCOORD6;
 };
 
-// TODO: Ambient intensity is hardcoded for now.  Will implement in the future.
-static const float ambient = 0.2;
 
 [shader("vertex")]
 void vert(in uint vid : SV_VertexID,
@@ -96,8 +105,6 @@ void vert(in uint vid : SV_VertexID,
                      min(0, drawCount[0]) +
                      min(0, drawCommandBuffer[0].vertexOffset) +
                      min(0, int(ceil(meshDataBuffer[0].vertexOffset)));
-
-    // v2f.meshID = draw_data.meshID;
 #endif
 
     clip_pos.x += min(0.0, abs(float(draw_data.meshID))) +
@@ -109,13 +116,7 @@ void vert(in uint vid : SV_VertexID,
     v2f.uv = vert.uv;
     v2f.worldNormal = rotateVec(instance_data.rotation, vert.normal);
     v2f.worldIdx = instance_data.worldID;
-#if 0
-    if (instance_data.matID == -1) {
-        v2f.materialIdx = meshDataBuffer[draw_data.meshID].materialIndex;
-    } else {
-        v2f.materialIdx = instance_data.matID;
-    }
-#endif
+    v2f.viewIdx = draw_data.viewID;
 
     if (instance_data.matID == -2) {
         v2f.materialIdx = -2;
@@ -142,6 +143,110 @@ float3 calculateRayDirection(ShaderLightData light, float3 worldPos) {
         }
         return ray_dir;
     }
+}
+
+float4 getShadowMapPixelScaleOffset(uint view_idx, uint2 shadow_map_dim) {
+    uint num_views_per_image = pushConst.maxShadowMapsXPerTarget * 
+                               pushConst.maxShadowMapsYPerTarget;
+
+    uint target_view_idx = view_idx % num_views_per_image;
+
+    uint target_view_idx_x = target_view_idx % pushConst.maxShadowMapsXPerTarget;
+    uint target_view_idx_y = target_view_idx / pushConst.maxShadowMapsXPerTarget;
+
+    float x_pixel_offset = target_view_idx_x * pushConst.shadowMapWidth;
+    float y_pixel_offset = target_view_idx_y * pushConst.shadowMapHeight;
+
+    float2 scale = float2(pushConst.shadowMapWidth, pushConst.shadowMapHeight) / shadow_map_dim;
+    float2 offset = float2(x_pixel_offset, y_pixel_offset) / shadow_map_dim;
+    return float4(scale, offset);
+}
+
+float linear_step(float low, float high, float v) {
+    return clamp((v - low) / (high - low), 0, 1);
+}
+
+float samplePCF(uint shadow_map_target_idx, float2 uv, float z)
+{
+    float2 moment = shadowMapTextures[shadow_map_target_idx].SampleLevel(linearSampler, uv, 0).rg;
+
+    // Chebychev's inequality
+    float p = (z > moment.x);
+    float sigma = max(moment.y - moment.x * moment.x, 0.0);
+
+    float dist_from_mean = (z - moment.x);
+
+    float pmax = linear_step(0.9, 1.0, sigma / (sigma + dist_from_mean * dist_from_mean));
+    float occ = min(1.0f, max(pmax, p));
+
+    return occ;
+}
+
+float4 calculuateLightSpacePosition(float3 world_pos, uint view_idx)
+{
+    float4 world_pos_v4 = float4(world_pos.xyz, 1.f);
+    float4 ls_pos = mul(shadowViewDataBuffer[view_idx].viewProjectionMatrix, 
+                        world_pos_v4);
+    ls_pos.xyz /= ls_pos.w;
+
+    return ls_pos;
+}
+
+bool isZOutOfRange(float z)
+{
+    return z > 1.0 || z < 0.0;
+}
+
+bool isUVOutOfRange(float2 uv, float4 shadow_map_uv_bounds)
+{
+    return uv.x < shadow_map_uv_bounds.x || uv.y < shadow_map_uv_bounds.y ||
+           uv.x >= shadow_map_uv_bounds.z || uv.y >= shadow_map_uv_bounds.w;
+}
+
+/* Shadowing is done using variance shadow mapping. */
+float shadowFactorVSM(float3 world_pos, uint view_idx)
+{
+    uint shadow_map_target_idx = view_idx / (pushConst.maxShadowMapsXPerTarget * pushConst.maxShadowMapsYPerTarget);
+    uint2 shadow_map_dim;
+    shadowMapTextures[shadow_map_target_idx].GetDimensions(shadow_map_dim.x, shadow_map_dim.y);
+
+    /* Get the scale and offset to transform the shadow map UV to the shadow map texture. */
+    float4 uv_scale_offset = getShadowMapPixelScaleOffset(view_idx, shadow_map_dim);
+
+    /* Light space position */
+    float4 ls_pos = calculuateLightSpacePosition(world_pos, view_idx);
+
+    /* UV to use when sampling in the shadow map. */
+    float2 uv = ls_pos.xy * 0.5 + float2(0.5, 0.5);
+
+    /* Only deal with points which are within the shadow map. */
+    if (isZOutOfRange(ls_pos.z))
+        return 1.0;
+
+    // PCF
+    float pcf_count = 1;
+    float occlusion = 0.0f;
+    float2 shadow_map_uv = uv * uv_scale_offset.xy + uv_scale_offset.zw;
+    float4 shadow_map_uv_bounds = float4(0.0, 0.0, 1.0, 1.0) * uv_scale_offset.xyxy + uv_scale_offset.zwzw;
+
+    // Leave 1-pixel gap at each edge of the shadow map to avoid sampling to neighboring shadow maps.
+    float2 texel_size = float2(1.f, 1.f) / float2(shadow_map_dim);
+    shadow_map_uv_bounds.xy += texel_size;
+    shadow_map_uv_bounds.zw -= texel_size;
+
+    for (int x = int(-pcf_count); x <= int(pcf_count); ++x) {
+        for (int y = int(-pcf_count); y <= int(pcf_count); ++y) {
+            float2 offset_sample_uv = shadow_map_uv + float2(x, y) * texel_size;
+            if(isUVOutOfRange(offset_sample_uv, shadow_map_uv_bounds))
+                occlusion += 1.0;
+            else
+                occlusion += samplePCF(shadow_map_target_idx, offset_sample_uv, ls_pos.z);
+        }
+    }
+
+    occlusion /= (pcf_count * 2.0f + 1.0f) * (pcf_count * 2.0f + 1.0f);
+
+    return occlusion;
 }
 
 struct PixelOutput {
@@ -176,6 +281,7 @@ PixelOutput frag(in V2F v2f,
 
             float3 totalLighting = 0;
             uint numLights = pushConst.numLights;
+            float shadowFactor = shadowFactorVSM(v2f.worldPos, v2f.viewIdx);
 
             [unroll(1)]
             for (uint i = 0; i < numLights; i++) {
@@ -191,6 +297,11 @@ PixelOutput frag(in V2F v2f,
 
                 float n_dot_l = max(0.0, dot(normal, -ray_dir));
                 totalLighting += n_dot_l * light.intensity;
+
+                // Apply shadow to the shadowed light. Only support one shadow per view for now. 
+                if (i == shadowViewDataBuffer[v2f.viewIdx].lightIdx) {
+                    totalLighting *= shadowFactor;
+                }
             }
 
             float3 lighting = totalLighting * color.rgb;

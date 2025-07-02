@@ -4,6 +4,10 @@
 struct BatchDrawPushConst {
     uint drawDataOffset;
     uint numLights;
+    uint maxShadowMapsXPerTarget;
+    uint maxShadowMapsYPerTarget;
+    uint shadowMapWidth;
+    uint shadowMapHeight;
 };
 
 struct GridDrawPushConst {
@@ -32,6 +36,15 @@ struct PrepareViewPushConstant {
     uint32_t numWorlds;
     uint32_t numInstances;
     uint32_t maxDrawsPerView;
+};
+
+struct BatchShadowGenPushConst {
+    uint32_t maxNumViews;
+    uint32_t numLights;
+};
+
+struct ShadowDrawPushConst {
+    uint32_t drawDataOffset;
 };
 
 struct DeferredLightingPushConstBR {
@@ -188,11 +201,12 @@ struct PackedViewData {
 
 struct ShadowViewData {
     float4x4 viewProjectionMatrix;
-    float4x4 cameraViewProjectionMatrix;
 
     float4 cameraRight;
     float4 cameraUp;
     float4 cameraForward;
+    uint32_t lightIdx;
+    uint32_t pad[3];
 };
 
 // Only used in shaders

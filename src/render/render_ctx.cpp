@@ -1582,7 +1582,7 @@ RenderContext::~RenderContext()
     dev.dt.destroyDescriptorSetLayout(dev.hdl, asset_tex_layout_, nullptr);
     dev.dt.destroyDescriptorSetLayout(dev.hdl, asset_batch_draw_layout_, nullptr);
     dev.dt.destroyDescriptorSetLayout(dev.hdl, asset_batch_lighting_layout_, nullptr);
-    // dev.dt.destroyDescriptorSetLayout(dev.hdl, sky_data_layout_, nullptr);
+    dev.dt.destroyDescriptorSetLayout(dev.hdl, aabb_set_layout_, nullptr);
 
     dev.dt.destroyDescriptorPool(dev.hdl, asset_pool_, nullptr);
 
@@ -1606,8 +1606,33 @@ static void copyBufferToImage(const vk::Device &dev,
         const HostBuffer &texture_hb_staging,
         VkImage& texture_image,
         uint32_t width,
-        uint32_t height)
+        uint32_t height,
+        uint32_t mip_levels)
 {
+
+    VkImageMemoryBarrier copy_prepare {
+        VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            nullptr,
+            0,
+            VK_ACCESS_MEMORY_WRITE_BIT,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_QUEUE_FAMILY_IGNORED,
+            VK_QUEUE_FAMILY_IGNORED,
+            texture_image,
+            {
+                VK_IMAGE_ASPECT_COLOR_BIT,
+                0, mip_levels, 0, 1
+            },
+    };
+
+    dev.dt.cmdPipelineBarrier(cmdbuf,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0,
+            0, nullptr, 0, nullptr,
+            1, &copy_prepare);
+
     VkBufferImageCopy copy = {};
     copy.bufferOffset = 0;
     copy.bufferRowLength = 0;
@@ -1627,21 +1652,21 @@ static void copyBufferToImage(const vk::Device &dev,
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             nullptr,
             VK_ACCESS_MEMORY_WRITE_BIT,
-            VK_ACCESS_SHADER_READ_BIT,
+            VK_ACCESS_TRANSFER_READ_BIT,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             VK_QUEUE_FAMILY_IGNORED,
             VK_QUEUE_FAMILY_IGNORED,
             texture_image,
             {
                 VK_IMAGE_ASPECT_COLOR_BIT,
-                0, 1, 0, 1
+                0, mip_levels, 0, 1
             },
     };
 
     dev.dt.cmdPipelineBarrier(cmdbuf,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
             0,
             0, nullptr, 0, nullptr,
             1, &finish_prepare);
@@ -1661,18 +1686,18 @@ static void generateMipmaps(const vk::Device &dev,
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
-    barrier.subresourceRange.levelCount = 1;
 
     int32_t mipWidth = texWidth;
     int32_t mipHeight = texHeight;
 
     for (uint32_t i = 1; i < mipLevels; i++) {
-        // Transition level i-1 to transfer src
-        barrier.subresourceRange.baseMipLevel = i - 1;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        // Transition level i to transfer dst
+        barrier.subresourceRange.baseMipLevel = i;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 
         dev.dt.cmdPipelineBarrier(cmdBuffer,
             VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
@@ -1703,25 +1728,26 @@ static void generateMipmaps(const vk::Device &dev,
             image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1, &blit, VK_FILTER_LINEAR);
 
-        // Transition level i-1 to shader read
-        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        // Transition level i to transfer src
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
         dev.dt.cmdPipelineBarrier(cmdBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
             0, nullptr, 0, nullptr, 1, &barrier);
 
         mipWidth = std::max(1, mipWidth / 2);
         mipHeight = std::max(1, mipHeight / 2);
     }
 
-    // Final mip level to shader read
-    barrier.subresourceRange.baseMipLevel = mipLevels - 1;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    // Final all mip level to shader read
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = mipLevels;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
     dev.dt.cmdPipelineBarrier(cmdBuffer,
@@ -1870,30 +1896,7 @@ static DynArray<MaterialTexture> loadTextures(
 
             dev.dt.bindImageMemory(dev.hdl, texture.image, texture_backing.value(), 0);
 
-            VkImageMemoryBarrier copy_prepare {
-                VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                    nullptr,
-                    0,
-                    VK_ACCESS_MEMORY_WRITE_BIT,
-                    VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_QUEUE_FAMILY_IGNORED,
-                    VK_QUEUE_FAMILY_IGNORED,
-                    texture.image,
-                    {
-                        VK_IMAGE_ASPECT_COLOR_BIT,
-                        0, 1, 0, 1
-                    },
-            };
-
-            dev.dt.cmdPipelineBarrier(cmdbuf,
-                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    0,
-                    0, nullptr, 0, nullptr,
-                    1, &copy_prepare);
-
-            copyBufferToImage(dev, cmdbuf, texture_hb_staging, texture.image, width, height);
+            copyBufferToImage(dev, cmdbuf, texture_hb_staging, texture.image, width, height, mip_levels);
             host_buffers.push_back(std::move(texture_hb_staging));
 
             generateMipmaps(dev, cmdbuf, texture.image, width, height, mip_levels);

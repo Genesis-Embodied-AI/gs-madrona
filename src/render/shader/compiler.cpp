@@ -268,12 +268,13 @@ static HeapArray<uint32_t> hlslToSPV(
         DXC_ARG_DEBUG,
         DXC_ARG_PACK_MATRIX_COLUMN_MAJOR,
         L"-spirv",
-        L"-fspv-target-env=vulkan1.2",
+        L"-fspv-target-env=vulkan1.3",
         //L"-fspv-reflect",
         L"-T", stage_type_str,
         L"-HV", L"2021",
         L"-enable-16bit-types",
-        L"-fspv-preserve-bindings"
+        L"-fspv-preserve-bindings",
+        L"-O0",  // Disable optimization
     };
 
     Optional<HeapArray<wchar_t>> wentry = Optional<HeapArray<wchar_t>>::none();

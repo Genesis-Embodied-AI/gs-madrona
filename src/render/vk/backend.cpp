@@ -163,6 +163,75 @@ static InitializationDispatch fetchInitDispatchTable(
         reinterpret_cast<PFN_vkCreateInstance>(get_addr("vkCreateInstance")),
     };
 }
+static VkResult CreateDebugUtilsMessengerEXT(const InitializationDispatch &dt, VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT) dt.getInstanceAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+    } else {
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+}
+
+static void DestroyDebugUtilsMessengerEXT(const InitializationDispatch &dt, VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) dt.getInstanceAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        func(instance, debugMessenger, pAllocator);
+    }
+}
+
+static VkDebugUtilsMessengerEXT debugMessenger;
+static const std::vector<const char*> validationLayers = {
+    "VK_LAYER_KHRONOS_validation"
+};
+
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
+    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+
+    return VK_FALSE;
+}
+
+static void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
+    createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    createInfo.pfnUserCallback = debugCallback;
+}
+
+static void setupDebugMessenger(VkInstance instance, const InitializationDispatch &dt) {
+
+    VkDebugUtilsMessengerCreateInfoEXT createInfo;
+    populateDebugMessengerCreateInfo(createInfo);
+
+    if (CreateDebugUtilsMessengerEXT(dt, instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
+        FATAL("Failed to set up debug messenger!");
+    }
+}
+
+static bool checkValidationLayerSupport(const InitializationDispatch &dt) {
+    uint32_t layerCount;
+    REQ_VK(dt.enumerateInstanceLayerProperties(&layerCount, nullptr));
+
+    std::vector<VkLayerProperties> availableLayers(layerCount);
+    REQ_VK(dt.enumerateInstanceLayerProperties(&layerCount, availableLayers.data()));
+
+    for (const char* layerName : validationLayers) {
+        bool layerFound = false;
+
+        for (const auto& layerProperties : availableLayers) {
+            if (strcmp(layerName, layerProperties.layerName) == 0) {
+                layerFound = true;
+                break;
+            }
+        }
+
+        if (!layerFound) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 static bool checkValidationAvailable(const InitializationDispatch &dt)
 {
@@ -210,12 +279,39 @@ static bool checkValidationAvailable(const InitializationDispatch &dt)
     }
 }
 
+static bool checkLayerSupport(const InitializationDispatch &dt, const std::vector<const char*>& requested) {
+    uint32_t layerCount;
+    REQ_VK(dt.enumerateInstanceLayerProperties(&layerCount, nullptr));
+    std::vector<VkLayerProperties> available(layerCount);
+    REQ_VK(dt.enumerateInstanceLayerProperties(&layerCount, available.data()));
+
+    for (const char* name : requested) {
+        bool found = false;
+        for (const auto& layer : available) {
+            if (strcmp(name, layer.layerName) == 0) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            std::cerr << "Missing layer: " << name << std::endl;
+            return false;
+        }
+    }
+    std::cout << "All layers supported" << std::endl;
+    return true;
+}
+
 Backend::Init Backend::Init::init(
     PFN_vkGetInstanceProcAddr get_inst_addr,
     bool want_validation,
     Span<const char *const> extra_exts)
 {
+    printf("Want validation: %d\n", want_validation);
     InitializationDispatch dt = fetchInitDispatchTable(get_inst_addr);
+    if (want_validation && !checkValidationLayerSupport(dt)) {
+        FATAL("Validation layers requested, but not available!");
+    }
 
     uint32_t inst_version;
     REQ_VK(dt.enumerateInstanceVersion(&inst_version));
@@ -228,7 +324,7 @@ Backend::Init Backend::Init::init(
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pApplicationName = "madrona";
     app_info.pEngineName = "madrona";
-    app_info.apiVersion = VK_API_VERSION_1_2;
+    app_info.apiVersion = VK_API_VERSION_1_3;
 
     vector<const char *> layers;
     DynArray<const char *> extensions(extra_exts.size());
@@ -247,6 +343,8 @@ Backend::Init Backend::Init::init(
         layers.push_back("VK_LAYER_KHRONOS_validation");
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         extensions.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
+        extensions.push_back("VK_KHR_xcb_surface");
+        extensions.push_back("VK_KHR_surface");
 
         val_enabled.push_back(
             VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
@@ -271,6 +369,17 @@ Backend::Init Backend::Init::init(
         val_features.enabledValidationFeatureCount = val_enabled.size();
         val_features.pEnabledValidationFeatures = val_enabled.data();
     }
+    // layers.push_back("VK_LAYER_KHRONOS_validation");
+
+    // uint32_t layerCount = 0;
+    // REQ_VK(dt.enumerateInstanceLayerProperties(&layerCount, nullptr));
+    // std::vector<VkLayerProperties> availableLayers(layerCount);
+    // REQ_VK(dt.enumerateInstanceLayerProperties(&layerCount, availableLayers.data()));
+    
+    // for (const auto& layer : availableLayers) {
+    //     std::cout << "Layer: " << layer.layerName << std::endl;
+    // }
+    checkLayerSupport(dt, layers);
 
     VkInstanceCreateInfo inst_info {};
     inst_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -285,16 +394,29 @@ Backend::Init Backend::Init::init(
     if (layers.size() > 0) {
         inst_info.enabledLayerCount = layers.size();
         inst_info.ppEnabledLayerNames = layers.data();
+        // print all layers
+        for (const char* layer : layers) {
+            std::cout << "Layer: " << layer << std::endl;
+        }
     }
 
     if (extensions.size() > 0) {
         inst_info.enabledExtensionCount = extensions.size();
         inst_info.ppEnabledExtensionNames = extensions.data();
+        // print all extensions
+        for (const char* ext : extensions) {
+            std::cout << "Extension: " << ext << std::endl;
+        }
     }
 
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+    populateDebugMessengerCreateInfo(debugCreateInfo);
+    val_features.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
+
+    printf("Before create instance\n");
     VkInstance inst;
     REQ_VK(dt.createInstance(&inst_info, nullptr, &inst));
-
+    printf("After create instance\n");
     return {
         inst,
         dt,
