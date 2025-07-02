@@ -86,6 +86,13 @@ add_library(madrona_render STATIC
     ${MADRONA_INC_DIR}/render/api.hpp ../render/api.cpp
 )
 
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(madrona_render PRIVATE
+        MADRONA_VK_VALIDATE
+    )
+    message(STATUS "Building with Vulkan validation layers")
+endif()
+
 target_link_libraries(madrona_render
     PUBLIC
         madrona_common

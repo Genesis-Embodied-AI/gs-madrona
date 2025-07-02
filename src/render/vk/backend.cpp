@@ -17,6 +17,12 @@
 #include <dlfcn.h>
 #include <csignal>
 #include <filesystem>
+#include <cstdio>
+#if defined(MADRONA_LINUX)
+#include <sys/ptrace.h>
+#elif defined(MADRONA_MACOS)
+#include <sys/ptrace.h>
+#endif
 #elif defined(MADRONA_WINDOWS)
 #include <windows.h>
 #endif
@@ -164,6 +170,56 @@ static InitializationDispatch fetchInitDispatchTable(
     };
 }
 
+static std::string lexSeverityFlags(VkDebugUtilsMessageSeverityFlagsEXT severity) {
+    std::string result;
+
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
+        result += "VERBOSE | ";
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+        result += "INFO | ";
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+        result += "WARNING | ";
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+        result += "ERROR | ";
+
+    if (!result.empty())
+        result.erase(result.size() - 3);  // Remove trailing " | "
+
+    return result.empty() ? "UNKNOWN" : result;
+}
+
+static std::string lexMessageTypeFlags(VkDebugUtilsMessageTypeFlagsEXT types) {
+    std::string result;
+
+    if (types & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT)
+        result += "GENERAL | ";
+    if (types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
+        result += "VALIDATION | ";
+    if (types & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
+        result += "PERFORMANCE | ";
+
+    if (!result.empty())
+        result.erase(result.size() - 3);  // Remove trailing " | "
+
+    return result.empty() ? "UNKNOWN" : result;
+}
+
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
+    std::cerr << "[" << lexSeverityFlags(messageSeverity) << " | "
+              << lexMessageTypeFlags(messageType) << "] "
+              << pCallbackData->pMessage << std::endl;
+
+    return VK_FALSE;
+}
+
+static void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
+    createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    createInfo.pfnUserCallback = debugCallback;
+}
+
 static bool checkValidationAvailable(const InitializationDispatch &dt)
 {
     uint32_t num_layers;
@@ -210,6 +266,29 @@ static bool checkValidationAvailable(const InitializationDispatch &dt)
     }
 }
 
+static bool checkVulkanLayerSupport(const InitializationDispatch &dt, const std::vector<const char*>& requested) {
+    uint32_t layerCount;
+    REQ_VK(dt.enumerateInstanceLayerProperties(&layerCount, nullptr));
+    std::vector<VkLayerProperties> available(layerCount);
+    REQ_VK(dt.enumerateInstanceLayerProperties(&layerCount, available.data()));
+
+    for (const char* name : requested) {
+        bool found = false;
+        for (const auto& layer : available) {
+            if (strcmp(name, layer.layerName) == 0) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            std::cerr << "Missing Vulkan layer: " << name << std::endl;
+            return false;
+        }
+    }
+    std::cout << "All Vulkan layers supported" << std::endl;
+    return true;
+}
+
 Backend::Init Backend::Init::init(
     PFN_vkGetInstanceProcAddr get_inst_addr,
     bool want_validation,
@@ -228,7 +307,7 @@ Backend::Init Backend::Init::init(
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pApplicationName = "madrona";
     app_info.pEngineName = "madrona";
-    app_info.apiVersion = VK_API_VERSION_1_2;
+    app_info.apiVersion = VK_API_VERSION_1_3;
 
     vector<const char *> layers;
     DynArray<const char *> extensions(extra_exts.size());
@@ -247,6 +326,8 @@ Backend::Init Backend::Init::init(
         layers.push_back("VK_LAYER_KHRONOS_validation");
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         extensions.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
+        extensions.push_back("VK_KHR_xcb_surface");
+        extensions.push_back("VK_KHR_surface");
 
         val_enabled.push_back(
             VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
@@ -270,6 +351,10 @@ Backend::Init Backend::Init::init(
 
         val_features.enabledValidationFeatureCount = val_enabled.size();
         val_features.pEnabledValidationFeatures = val_enabled.data();
+
+        VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+        populateDebugMessengerCreateInfo(debugCreateInfo);
+        val_features.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
     }
 
     VkInstanceCreateInfo inst_info {};
@@ -282,6 +367,7 @@ Backend::Init Backend::Init::init(
     extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
 #endif
 
+    checkVulkanLayerSupport(dt, layers);
     if (layers.size() > 0) {
         inst_info.enabledLayerCount = layers.size();
         inst_info.ppEnabledLayerNames = layers.data();
@@ -310,10 +396,45 @@ validationDebug(VkDebugUtilsMessageSeverityFlagBitsEXT,
 {
     fprintf(stderr, "%s\n", data->pMessage);
 
-#if defined(MADRONA_LINUX) || defined(MADRONA_MACOS)
-    signal(SIGTRAP, SIG_IGN);
-    raise(SIGTRAP);
-    signal(SIGTRAP, SIG_DFL);
+#if defined(MADRONA_LINUX)
+    // Check if debugger is attached by trying to read from /proc/self/status
+    bool debugger_attached = false;
+    FILE* status_file = fopen("/proc/self/status", "r");
+    if (status_file) {
+        char line[256];
+        while (fgets(line, sizeof(line), status_file)) {
+            if (strncmp(line, "TracerPid:", 10) == 0) {
+                int tracer_pid;
+                if (sscanf(line + 10, "%d", &tracer_pid) == 1 && tracer_pid != 0) {
+                    debugger_attached = true;
+                }
+                break;
+            }
+        }
+        fclose(status_file);
+    }
+    
+    if (debugger_attached) {
+        signal(SIGTRAP, SIG_IGN);
+        raise(SIGTRAP);
+        signal(SIGTRAP, SIG_DFL);
+    }
+#elif defined(MADRONA_MACOS)
+    // On macOS, check if debugger is attached by checking if we can trace ourselves
+    bool debugger_attached = false;
+    if (ptrace(PT_TRACE_ME, 0, 0, 0) == 0) {
+        // We can trace ourselves, so no debugger is attached
+        ptrace(PT_DETACH, 0, 0, 0);
+    } else {
+        // We can't trace ourselves, so a debugger is attached
+        debugger_attached = true;
+    }
+    
+    if (debugger_attached) {
+        signal(SIGTRAP, SIG_IGN);
+        raise(SIGTRAP);
+        signal(SIGTRAP, SIG_DFL);
+    }
 #elif defined(MADRONA_WINDOWS)
     if (IsDebuggerPresent()) {
         DebugBreak();
