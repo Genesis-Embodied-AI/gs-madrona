@@ -1328,6 +1328,7 @@ struct BatchRenderer::Impl {
     Optional<PipelineMP<2>> batchDraw;
     Optional<PipelineMP<1>> createVisualization;
     Optional<PipelineMP<1>> lighting;
+    Optional<PipelineMP<1>> postProcess; // Add post-processing pipeline
 
     //One frame is on simulation frame
     HeapArray<BatchFrame> batchFrames;
@@ -1336,6 +1337,7 @@ struct BatchRenderer::Impl {
     VkDescriptorSet assetSetDraw;
     VkDescriptorSet assetSetTextureMat;
     VkDescriptorSet assetSetLighting;
+    VkDescriptorSet postProcessDescriptor;
 
     VkExtent2D renderExtent;
 
@@ -1398,6 +1400,12 @@ BatchRenderer::Impl::Impl(const Config &cfg,
               consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler, 
               getDrawDeferredPath(!depthOnly), depthOnly, "lighting", makeShadersLighting) :
           Optional<PipelineMP<1>>::none()),
+      postProcess(cfg.enableBatchRenderer ?
+          makeComputePipeline(dev, rctx.pipelineCache, 1,
+              sizeof(uint32_t) * 4, // push constants for width, height, view count, etc.
+              consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
+              "post_process.hlsl", false, "main", makeShaders) :
+          Optional<PipelineMP<1>>::none()),
       batchFrames(cfg.numFrames),
       assetSetPrepare(rctx.asset_set_cull_),
       assetSetDraw(rctx.asset_set_draw_),
@@ -1447,6 +1455,10 @@ BatchRenderer::Impl::Impl(const Config &cfg,
             .maxDepth = 1.f
         };
     }
+
+    if (postProcess.has_value()) {
+        postProcessDescriptor = postProcess->descPools[0].makeSet();
+    }
 }
 
 BatchRenderer::BatchRenderer(const Config &cfg,
@@ -1470,6 +1482,11 @@ BatchRenderer::~BatchRenderer()
 
         impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->lighting->hdls[0], nullptr);
         impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->lighting->layout, nullptr);
+
+        if (impl->postProcess.has_value()) {
+            impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->postProcess->hdls[0], nullptr);
+            impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->postProcess->layout, nullptr);
+        }
 
         for(int i=0;i<impl->batchFrames.size();i++){
             impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].prepareCmdPool, nullptr);
@@ -1566,6 +1583,61 @@ static void issueMemoryBarrier(vk::Device &dev,
 
     dev.dt.cmdPipelineBarrier(draw_cmd, src_stage, dst_stage, 0, 1, &barrier, 
                               0, nullptr, 0, nullptr);
+}
+
+static void issuePostProcess(vk::Device &dev, 
+                            VkCommandBuffer draw_cmd, 
+                            PipelineMP<1> &postProcess, 
+                            VkPipelineLayout layout, 
+                            VkDescriptorSet descriptorSet, 
+                            BatchFrame &frame_data,
+                            BatchRenderInfo &info) {
+    // Add memory barrier before post-processing
+    issueMemoryBarrier(dev, draw_cmd,
+                   VK_ACCESS_SHADER_WRITE_BIT,
+                   VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+                   VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                   VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
+    dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, 
+                         postProcess.hdls[0]);
+
+    struct PostProcessPushConst {
+        uint32_t viewWidth;
+        uint32_t viewHeight;
+        uint32_t totalViews;
+        uint32_t blurRadius;
+    } postProcessPushConst = {
+        frame_data.targets[0].viewWidth,
+        frame_data.targets[0].viewHeight,
+        info.numViews,
+        4, // Blur radius
+    };
+
+    dev.dt.cmdPushConstants(draw_cmd, layout,
+                          VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                          sizeof(PostProcessPushConst),
+                          &postProcessPushConst);
+    
+    VkDescriptorBufferInfo rgb_buffer_info {
+        .buffer = frame_data.rgbOutput.buf.buffer,
+        .offset = 0,
+        .range = VK_WHOLE_SIZE,
+    };
+
+    VkWriteDescriptorSet desc_update {};
+    vk::DescHelper::storage(desc_update, descriptorSet, &rgb_buffer_info, 0);
+    vk::DescHelper::update(dev, &desc_update, 1);
+
+    dev.dt.cmdBindDescriptorSets(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                               layout, 0, 1,
+                               &descriptorSet, 0, nullptr);
+
+    uint32_t num_workgroups_x = (frame_data.targets[0].viewWidth + 15) / 16;
+    uint32_t num_workgroups_y = (frame_data.targets[0].viewHeight + 15) / 16;
+    uint32_t num_workgroups_z = info.numViews;
+
+    dev.dt.cmdDispatch(draw_cmd, num_workgroups_x, num_workgroups_y, num_workgroups_z);
 }
 
 static void sortInstancesAndViewsCPU(EngineInterop *interop)
@@ -2238,6 +2310,11 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
         frame_data.pbrSet,
         frame_data.targets[0].viewWidth,
         frame_data.targets[0].viewHeight);
+
+    // Post-processing pass for anti-aliasing
+    if (info.renderOptions.enableAntialiasing && impl->postProcess.has_value()) {
+        issuePostProcess(impl->dev, draw_cmd, *impl->postProcess, impl->postProcess->layout, impl->postProcessDescriptor, frame_data, info);
+    }
 
     impl->dev.dt.cmdWriteTimestamp(draw_cmd, 
                 VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, impl->timeQueryPool, 1);

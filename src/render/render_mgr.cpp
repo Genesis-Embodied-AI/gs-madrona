@@ -45,6 +45,7 @@ void RenderManager::batchRender(const RenderOptions &render_options)
         .numInstances = cur_num_instances,
         .numWorlds = rctx_->num_worlds_,
         .numLights = cur_num_lights,
+        .renderOptions = render_options,
     };
 
     rctx_->batchRenderer->setRenderOptions(render_options);
@@ -52,7 +53,6 @@ void RenderManager::batchRender(const RenderOptions &render_options)
     rctx_->batchRenderer->renderViews(
         info, rctx_->loaded_assets_, &rctx_->engine_interop_, *rctx_);
 }
-
 
 const uint8_t * RenderManager::batchRendererRGBOut() const
 {

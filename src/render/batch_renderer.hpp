@@ -44,6 +44,7 @@ struct BatchRenderInfo {
     uint32_t numInstances;
     uint32_t numWorlds;
     uint32_t numLights;
+    RenderOptions renderOptions;
 };
 
 struct BatchImportedBuffers {
