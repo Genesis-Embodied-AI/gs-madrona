@@ -4,6 +4,8 @@
 struct BatchDrawPushConst {
     uint drawDataOffset;
     uint numLights;
+    uint maxShadowMapXYPerTarget;
+    uint shadowMapSize;
 };
 
 struct GridDrawPushConst {
@@ -39,8 +41,6 @@ struct DeferredLightingPushConstBR {
     uint32_t maxImagesYPerTarget;
     uint32_t viewWidth;
     uint32_t viewHeight;
-    uint32_t maxShadowMapXYPerTarget;
-    uint32_t shadowMapSize;
 };
 
 struct BlurPushConst {

@@ -19,9 +19,6 @@ RWStructuredBuffer<float> depthOutputBuffer;
 Texture2D<float> depthInBuffer[];
 
 [[vk::binding(4, 0)]]
-Texture2D<float2> shadowMapBuffer[];
-
-[[vk::binding(5, 0)]]
 SamplerState linearSampler;
 
 [[vk::binding(0, 1)]]
@@ -95,77 +92,6 @@ uint32_t linearToSRGB8(float3 rgb)
         linearToSRGB(rgb.z));
 
     return float3ToUint32(srgb);
-}
-
-float3 getShadowMapPixelOffset(uint view_idx) {
-    uint num_views_per_image = pushConst.maxShadowMapXYPerTarget * 
-                               pushConst.maxShadowMapXYPerTarget;
-
-    uint target_idx = view_idx / num_views_per_image;
-
-    uint target_view_idx = view_idx % num_views_per_image;
-
-    uint target_view_idx_x = target_view_idx % pushConst.maxShadowMapXYPerTarget;
-    uint target_view_idx_y = target_view_idx / pushConst.maxShadowMapXYPerTarget;
-
-    float x_pixel_offset = target_view_idx_x * pushConst.shadowMapSize;
-    float y_pixel_offset = target_view_idx_y * pushConst.shadowMapSize;
-
-    return float3(x_pixel_offset, y_pixel_offset, target_idx);
-}
-
-/* Shadowing is done using variance shadow mapping. */
-float shadowFactorVSM(float3 world_pos)
-{
-    float3 shadow_map_pixel_offset = getShadowMapPixelOffset(view_idx);
-    uint shadow_map_target_idx = shadow_map_pixel_offset.z;
-
-    /* Light space position */
-    float4 world_pos_v4 = float4(world_pos.xyz, 1.f);
-    float4 ls_pos = mul(shadowViewDataBuffer[pushConst.viewIdx].viewProjectionMatrix, 
-                        world_pos_v4);
-    ls_pos.xyz /= ls_pos.w;
-    ls_pos.z += SHADOW_BIAS;
-
-    /* UV to use when sampling in the shadow map. */
-    float2 uv = ls_pos.xy * 0.5 + float2(0.5, 0.5);
-
-    /* Only deal with points which are within the shadow map. */
-    if (uv.x > 1.0 || uv.x < 0.0 || uv.y > 1.0 || uv.y < 0.0 ||
-        ls_pos.z > 1.0 || ls_pos.z < 0.0)
-        return 1.0;
-
-    uint2 shadow_map_dim = shadowMapBuffer[shadow_map_target_idx].GetDimensions();
-    float2 texel_size = float2(1.f, 1.f) / float2(shadow_map_dim);
-    float2 shadow_map_uv = (uv + shadow_map_pixel_offset.xy) / float2(shadow_map_dim);
-    float2 moment = shadowMapBuffer[shadow_map_target_idx].SampleLevel(linearSampler, shadow_map_uv, 0);
-
-    float occlusion = 0.0f;
-
-    // PCF
-    float pcf_count = 1;
-
-    for (int x = int(-pcf_count); x <= int(pcf_count); ++x) {
-        for (int y = int(-pcf_count); y <= int(pcf_count); ++y) {
-            float2 moment = shadowMap.SampleLevel(linearSampler, 
-                                                  uv + float2(x, y) * texel_size, 0).rg;
-
-            // Chebychev's inequality
-            float p = (ls_pos.z > moment.x);
-            float sigma = max(moment.y - moment.x * moment.x, 0.0);
-
-            float dist_from_mean = (ls_pos.z - moment.x);
-
-            float pmax = linear_step(0.9, 1.0, sigma / (sigma + dist_from_mean * dist_from_mean));
-            float occ = min(1.0f, max(pmax, p));
-
-            occlusion += occ;
-        }
-    }
-
-    occlusion /= (pcf_count * 2.0f + 1.0f) * (pcf_count * 2.0f + 1.0f);
-
-    return occlusion;
 }
 
 float3 getPixelOffset(uint view_idx) {

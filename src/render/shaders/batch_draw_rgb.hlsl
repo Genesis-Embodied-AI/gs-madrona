@@ -46,6 +46,9 @@ Texture2D<float4> materialTexturesArray[];
 [[vk::binding(1, 3)]]
 SamplerState linearSampler;
 
+[[vk::binding(2, 3)]]
+Texture2D<float2> shadowMapBuffer[];
+
 struct V2F {
     [[vk::location(0)]] float4 position : SV_Position;
     [[vk::location(1)]] float3 worldPos : TEXCOORD0;
@@ -55,6 +58,77 @@ struct V2F {
     [[vk::location(5)]] float3 worldNormal : TEXCOORD4;
     [[vk::location(6)]] uint worldIdx : TEXCOORD5;
 };
+
+float3 getShadowMapPixelOffset(uint view_idx) {
+    uint num_views_per_image = pushConst.maxShadowMapXYPerTarget * 
+                               pushConst.maxShadowMapXYPerTarget;
+
+    uint target_idx = view_idx / num_views_per_image;
+
+    uint target_view_idx = view_idx % num_views_per_image;
+
+    uint target_view_idx_x = target_view_idx % pushConst.maxShadowMapXYPerTarget;
+    uint target_view_idx_y = target_view_idx / pushConst.maxShadowMapXYPerTarget;
+
+    float x_pixel_offset = target_view_idx_x * pushConst.shadowMapSize;
+    float y_pixel_offset = target_view_idx_y * pushConst.shadowMapSize;
+
+    return float3(x_pixel_offset, y_pixel_offset, target_idx);
+}
+
+/* Shadowing is done using variance shadow mapping. */
+float shadowFactorVSM(float3 world_pos)
+{
+    float3 shadow_map_pixel_offset = getShadowMapPixelOffset(view_idx);
+    uint shadow_map_target_idx = shadow_map_pixel_offset.z;
+
+    /* Light space position */
+    float4 world_pos_v4 = float4(world_pos.xyz, 1.f);
+    float4 ls_pos = mul(shadowViewDataBuffer[pushConst.viewIdx].viewProjectionMatrix, 
+                        world_pos_v4);
+    ls_pos.xyz /= ls_pos.w;
+    ls_pos.z += SHADOW_BIAS;
+
+    /* UV to use when sampling in the shadow map. */
+    float2 uv = ls_pos.xy * 0.5 + float2(0.5, 0.5);
+
+    /* Only deal with points which are within the shadow map. */
+    if (uv.x > 1.0 || uv.x < 0.0 || uv.y > 1.0 || uv.y < 0.0 ||
+        ls_pos.z > 1.0 || ls_pos.z < 0.0)
+        return 1.0;
+
+    uint2 shadow_map_dim = shadowMapBuffer[shadow_map_target_idx].GetDimensions();
+    float2 texel_size = float2(1.f, 1.f) / float2(shadow_map_dim);
+    float2 shadow_map_uv = (uv + shadow_map_pixel_offset.xy) / float2(shadow_map_dim);
+    float2 moment = shadowMapBuffer[shadow_map_target_idx].SampleLevel(linearSampler, shadow_map_uv, 0);
+
+    float occlusion = 0.0f;
+
+    // PCF
+    float pcf_count = 1;
+
+    for (int x = int(-pcf_count); x <= int(pcf_count); ++x) {
+        for (int y = int(-pcf_count); y <= int(pcf_count); ++y) {
+            float2 moment = shadowMap.SampleLevel(linearSampler, 
+                                                  uv + float2(x, y) * texel_size, 0).rg;
+
+            // Chebychev's inequality
+            float p = (ls_pos.z > moment.x);
+            float sigma = max(moment.y - moment.x * moment.x, 0.0);
+
+            float dist_from_mean = (ls_pos.z - moment.x);
+
+            float pmax = linear_step(0.9, 1.0, sigma / (sigma + dist_from_mean * dist_from_mean));
+            float occ = min(1.0f, max(pmax, p));
+
+            occlusion += occ;
+        }
+    }
+
+    occlusion /= (pcf_count * 2.0f + 1.0f) * (pcf_count * 2.0f + 1.0f);
+
+    return occlusion;
+}
 
 // TODO: Ambient intensity is hardcoded for now.  Will implement in the future.
 static const float ambient = 0.2;
@@ -91,31 +165,15 @@ void vert(in uint vid : SV_VertexID,
         view_data.zNear,
         view_pos.y);
 
-#if 1
-    uint something = min(0, instanceOffsets[0]) +
-                     min(0, drawCount[0]) +
-                     min(0, drawCommandBuffer[0].vertexOffset) +
-                     min(0, int(ceil(meshDataBuffer[0].vertexOffset)));
-
-    // v2f.meshID = draw_data.meshID;
-#endif
 
     clip_pos.x += min(0.0, abs(float(draw_data.meshID))) +
-                  min(0.0, abs(float(draw_data.instanceID))) +
-                  something;
+                  min(0.0, abs(float(draw_data.instanceID)));
 
     v2f.worldPos = rotateVec(instance_data.rotation, instance_data.scale * vert.position) + instance_data.position;
     v2f.position = clip_pos;
     v2f.uv = vert.uv;
     v2f.worldNormal = rotateVec(instance_data.rotation, vert.normal);
     v2f.worldIdx = instance_data.worldID;
-#if 0
-    if (instance_data.matID == -1) {
-        v2f.materialIdx = meshDataBuffer[draw_data.meshID].materialIndex;
-    } else {
-        v2f.materialIdx = instance_data.matID;
-    }
-#endif
 
     if (instance_data.matID == -2) {
         v2f.materialIdx = -2;
