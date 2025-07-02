@@ -342,7 +342,10 @@ def sort_and_dedupe_benchmark_result_file(benchmark_result_file):
 
     # Deduplicate by keeping the first occurrence of each unique combination of mjcf, renderer, rasterizer, resX, resY, n_envs
     # Keep succeeded runs if there are multiple runs for the same combination.
-    df = df.drop_duplicates(subset=["mjcf", "renderer", "rasterizer", "resX", "resY", "n_envs"], keep="first")
+    df = df.drop_duplicates(
+        subset=["mjcf", "renderer", "rasterizer", "resX", "resY", "n_envs"],
+        keep="first",
+    )
     df.to_csv(benchmark_result_file, index=False)
 
 

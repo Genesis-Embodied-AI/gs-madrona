@@ -18,8 +18,16 @@ def init_gs(benchmark_args):
     ########################## create a scene ##########################
     scene = gs.Scene(
         viewer_options=gs.options.ViewerOptions(
-            camera_pos=(benchmark_args.camera_posX, benchmark_args.camera_posY, benchmark_args.camera_posZ),
-            camera_lookat=(benchmark_args.camera_lookatX, benchmark_args.camera_lookatY, benchmark_args.camera_lookatZ),
+            camera_pos=(
+                benchmark_args.camera_posX,
+                benchmark_args.camera_posY,
+                benchmark_args.camera_posZ,
+            ),
+            camera_lookat=(
+                benchmark_args.camera_lookatX,
+                benchmark_args.camera_lookatY,
+                benchmark_args.camera_lookatZ,
+            ),
             camera_fov=benchmark_args.camera_fov,
         ),
         show_viewer=False,
@@ -40,8 +48,16 @@ def init_gs(benchmark_args):
     ########################## cameras ##########################
     cam_0 = scene.add_camera(
         res=(benchmark_args.resX, benchmark_args.resY),
-        pos=(benchmark_args.camera_posX, benchmark_args.camera_posY, benchmark_args.camera_posZ),
-        lookat=(benchmark_args.camera_lookatX, benchmark_args.camera_lookatY, benchmark_args.camera_lookatZ),
+        pos=(
+            benchmark_args.camera_posX,
+            benchmark_args.camera_posY,
+            benchmark_args.camera_posZ,
+        ),
+        lookat=(
+            benchmark_args.camera_lookatX,
+            benchmark_args.camera_lookatY,
+            benchmark_args.camera_lookatZ,
+        ),
         fov=benchmark_args.camera_fov,
     )
     scene.add_light(

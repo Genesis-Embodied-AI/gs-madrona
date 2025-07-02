@@ -278,7 +278,12 @@ def generate_individual_plots(df, plots_dir, width, height):
                         fps_array[batch_to_idx[batch]] = fps
 
                     # Plot bars
-                    bars = plt.bar(x + i * bar_width, fps_array, bar_width, label=f"{resolution[0]}x{resolution[1]}")
+                    bars = plt.bar(
+                        x + i * bar_width,
+                        fps_array,
+                        bar_width,
+                        label=f"{resolution[0]}x{resolution[1]}",
+                    )
 
                     # Add value labels on top of bars
                     for bar in bars:
@@ -405,7 +410,12 @@ def generate_comparison_plots(df, plots_dir, width, height, comparison_list, asp
             ]
             for i, (fps, renderer, rasterizer_str) in enumerate(zip(fps_array, renderer_array, rasterizer_str_array)):
                 x = np.arange(len(fps))
-                bars = plt.bar(x + i * bar_width, fps, bar_width, label=f"{renderer} {rasterizer_str}")
+                bars = plt.bar(
+                    x + i * bar_width,
+                    fps,
+                    bar_width,
+                    label=f"{renderer} {rasterizer_str}",
+                )
                 add_labels(bars)
 
             # Customize plot

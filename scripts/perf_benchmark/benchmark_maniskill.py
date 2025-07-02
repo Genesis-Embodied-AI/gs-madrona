@@ -16,13 +16,24 @@ from mani_skill.utils.wrappers.flatten import FlattenActionSpaceWrapper
 from batch_benchmark import BenchmarkArgs
 from benchmark_profiler import BenchmarkProfiler
 
+
 @register_env("SingleRobotBenchmark-v1")
 class SingleRobotBenchmarkEnv(BaseEnv):
     SUPPORTED_REWARD_MODES = ["none"]
     SUPPORTED_ROBOTS = ["panda", "unitree_go2", "unitree_g1"]
-    def __init__(self, *args, robot_uid="panda", camera_mode="minimal",
-                 camera_width=128, camera_height=128, camera_fov=0.7854,    # math.radian(45)
-                 camera_pos=(1.5, 0.5, 1.5), camera_lookat=(0.0, 0.0, 0.5), **kwargs):
+
+    def __init__(
+        self,
+        *args,
+        robot_uid="panda",
+        camera_mode="minimal",
+        camera_width=128,
+        camera_height=128,
+        camera_fov=0.7854,  # math.radian(45)
+        camera_pos=(1.5, 0.5, 1.5),
+        camera_lookat=(0.0, 0.0, 0.5),
+        **kwargs,
+    ):
         self.camera_mode = camera_mode
         self.camera_width = camera_width
         self.camera_height = camera_height
@@ -30,7 +41,7 @@ class SingleRobotBenchmarkEnv(BaseEnv):
         self.camera_lookat = camera_lookat
         self.camera_fov = camera_fov
         super().__init__(*args, robot_uids=robot_uid, **kwargs)
-    
+
     @property
     def _default_sensor_configs(self):
         return [
@@ -43,11 +54,11 @@ class SingleRobotBenchmarkEnv(BaseEnv):
                 shader_pack=self.camera_mode,
             ),
         ]
-    
+
     @property
     def _default_human_render_camera_configs(self):
         return dict()
-    
+
     def _load_agent(self, options: dict):
         super()._load_agent(options, sapien.Pose(p=[0, 0, 0], q=[1, 0, 0, 0]))
 
@@ -56,22 +67,25 @@ class SingleRobotBenchmarkEnv(BaseEnv):
         urdf_loader = self.scene.create_urdf_loader()
         urdf_loader.fix_root_link = True
         ground_actor = urdf_loader.parse(ground_path)["actor_builders"][0]
-        ground_actor._auto_inertial = True      # Force ground urdf to be static!
+        ground_actor._auto_inertial = True  # Force ground urdf to be static!
         self.ground = ground_actor.build_static(name="ground")
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
         with torch.device(self.device):
             qpos = np.zeros(len(self.agent.robot.get_active_joints()))
             self.agent.robot.set_qpos(qpos)
-            
 
     def _load_lighting(self, options: Dict):
         self.scene.add_directional_light(
-            [0.26490647, 0.26490647, -0.92717265],    # norm([1.0, 1.0, -2.0] - [0, 0, 1.5])
+            [
+                0.26490647,
+                0.26490647,
+                -0.92717265,
+            ],  # norm([1.0, 1.0, -2.0] - [0, 0, 1.5])
             [3.0, 3.0, 3.0],
             shadow=False,
         )
-    
+
     def _get_obs_extra(self, info: Dict):
         return dict()
 
@@ -81,18 +95,18 @@ class SingleRobotBenchmarkEnv(BaseEnv):
 
 def main():
     args = BenchmarkArgs.parse_benchmark_args()
-    
+
     env_id = "SingleRobotBenchmark-v1"
     n_envs = args.n_envs
     n_steps = args.n_steps
     sim_config = SimConfig(
-        gpu_memory_config = GPUMemoryConfig(
+        gpu_memory_config=GPUMemoryConfig(
             max_rigid_contact_count=n_envs * max(1024, n_envs) * 80,
             max_rigid_patch_count=n_envs * max(1024, n_envs) * 4,
             found_lost_pairs_capacity=2**26,
         ),
-        sim_freq=100,       # dt = 0.01
-        control_freq=100,   # substep = 1
+        sim_freq=100,  # dt = 0.01
+        control_freq=100,  # substep = 1
         spacing=10.0,
     )
 
@@ -104,14 +118,14 @@ def main():
         robot_uid = "unitree_g1"
     else:
         raise Exception(f"Invalid robot: {args.mjcf}")
-    
+
     if args.rasterizer:
         camera_mode = "minimal"
     else:
         camera_mode = "rt-fast"
     save_image = True
-    obs_mode = "rgbd"   # Or "rgb"
-    render_mode = "sensors"   # "human for GUI"
+    obs_mode = "rgbd"  # Or "rgb"
+    render_mode = "sensors"  # "human for GUI"
     env = gym.make(
         env_id,
         num_envs=n_envs,
@@ -184,15 +198,18 @@ def main():
     fps_per_env = profiler.get_rendering_fps_per_env()
 
     os.makedirs(os.path.dirname(args.benchmark_result_file), exist_ok=True)
-    with open(args.benchmark_result_file, 'a') as f:
-        f.write(f'succeeded,{args.mjcf},{args.renderer},'
-                f'{args.rasterizer},{args.n_envs},{args.n_steps},'\
-                f'{args.resX},{args.resY},'
-                f'{args.camera_posX},{args.camera_posY},{args.camera_posZ},'
-                f'{args.camera_lookatX},{args.camera_lookatY},{args.camera_lookatZ},'
-                f'{args.camera_fov},'
-                f'{time_taken_gpu},{time_taken_per_env_gpu},{time_taken_cpu},'
-                f'{time_taken_per_env_cpu},{fps},{fps_per_env}\n')
-        
+    with open(args.benchmark_result_file, "a") as f:
+        f.write(
+            f"succeeded,{args.mjcf},{args.renderer},"
+            f"{args.rasterizer},{args.n_envs},{args.n_steps},"
+            f"{args.resX},{args.resY},"
+            f"{args.camera_posX},{args.camera_posY},{args.camera_posZ},"
+            f"{args.camera_lookatX},{args.camera_lookatY},{args.camera_lookatZ},"
+            f"{args.camera_fov},"
+            f"{time_taken_gpu},{time_taken_per_env_gpu},{time_taken_cpu},"
+            f"{time_taken_per_env_cpu},{fps},{fps_per_env}\n"
+        )
+
+
 if __name__ == "__main__":
     main()

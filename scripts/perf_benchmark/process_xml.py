@@ -38,6 +38,7 @@ def wrap_visual_geoms_with_bodies(input_file, output_file):
     wrap_geom(root)
     tree.write(output_file, encoding="utf-8", xml_declaration=True)
 
+
 # Example usage
 parser = argparse.ArgumentParser()
 parser.add_argument("--file", type=str, required=True, default="./panda.xml")

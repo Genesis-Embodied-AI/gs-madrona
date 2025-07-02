@@ -23,7 +23,12 @@ import isaaclab.sim as sim_utils
 import isaacsim.core.utils.prims as prim_utils
 import isaacsim.core.utils.stage as stage_utils
 from isaaclab.sensors.camera import TiledCamera, TiledCameraCfg
-from isaaclab.sim.converters import MjcfConverter, MjcfConverterCfg, UrdfConverter, UrdfConverterCfg
+from isaaclab.sim.converters import (
+    MjcfConverter,
+    MjcfConverterCfg,
+    UrdfConverter,
+    UrdfConverterCfg,
+)
 from isaaclab.utils.math import (
     create_rotation_matrix_from_view,
     quat_from_matrix,
@@ -53,7 +58,12 @@ def load_mjcf(mjcf_path):
 
 def load_urdf(urdf_path):
     return UrdfConverter(
-        UrdfConverterCfg(asset_path=urdf_path, joint_drive=None, fix_base=True, force_usd_conversion=True)
+        UrdfConverterCfg(
+            asset_path=urdf_path,
+            joint_drive=None,
+            fix_base=True,
+            force_usd_conversion=True,
+        )
     ).usd_path
 
 
@@ -148,8 +158,16 @@ def init_isaac(benchmark_args):
             dt=0.01,
         )
     )
-    cam_eye = (benchmark_args.camera_posX, benchmark_args.camera_posY, benchmark_args.camera_posZ)
-    cam_target = (benchmark_args.camera_lookatX, benchmark_args.camera_lookatY, benchmark_args.camera_lookatZ)
+    cam_eye = (
+        benchmark_args.camera_posX,
+        benchmark_args.camera_posY,
+        benchmark_args.camera_posZ,
+    )
+    cam_target = (
+        benchmark_args.camera_lookatX,
+        benchmark_args.camera_lookatY,
+        benchmark_args.camera_lookatZ,
+    )
     scene.set_camera_view(eye=cam_eye, target=cam_target)
     cam_eye = torch.Tensor(cam_eye).reshape(-1, 3)
     cam_target = torch.Tensor(cam_target).reshape(-1, 3)
@@ -220,14 +238,19 @@ def init_isaac(benchmark_args):
     dir_light_pos = torch.Tensor([[0.0, 0.0, 1.5]])
     dir_light_quat = quat_from_matrix(
         create_rotation_matrix_from_view(
-            dir_light_pos, torch.Tensor([[1.0, 1.0, -2.0]]), stage_utils.get_stage_up_axis()
+            dir_light_pos,
+            torch.Tensor([[1.0, 1.0, -2.0]]),
+            stage_utils.get_stage_up_axis(),
         )
     )
     dir_light_pos = tuple(dir_light_pos.detach().cpu().squeeze().numpy())
     dir_light_quat = tuple(dir_light_quat.detach().cpu().squeeze().numpy())
     dir_light_cfg = sim_utils.DistantLightCfg(intensity=500.0, angle=45.0)
     dir_light_prim = dir_light_cfg.func(
-        "/World/DirectionalLight", dir_light_cfg, translation=dir_light_pos, orientation=dir_light_quat
+        "/World/DirectionalLight",
+        dir_light_cfg,
+        translation=dir_light_pos,
+        orientation=dir_light_quat,
     )
 
     cone_light_pos = torch.Tensor([[4, -4, 4]])
@@ -238,7 +261,10 @@ def init_isaac(benchmark_args):
     cone_light_pos = tuple(cone_light_pos.detach().cpu().squeeze().numpy())
     cone_light_quat = tuple(cone_light_quat.detach().cpu().squeeze().numpy())
     cone_light_prim = cone_light_cfg.func(
-        "/World/ConeLight", cone_light_cfg, translation=cone_light_pos, orientation=cone_light_quat
+        "/World/ConeLight",
+        cone_light_cfg,
+        translation=cone_light_pos,
+        orientation=cone_light_quat,
     )
     cone_light = UsdLux.LightAPI(cone_light_prim)
     UsdLux.ShapingAPI.Apply(cone_light_prim)
