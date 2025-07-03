@@ -3,7 +3,6 @@
 [[vk::push_constant]]
 ShadowDrawPushConst pushConst;
 
-
 [[vk::binding(1, 0)]]
 StructuredBuffer<PackedInstanceData> engineInstanceBuffer;
 

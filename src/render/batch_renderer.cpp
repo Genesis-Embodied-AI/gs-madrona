@@ -49,6 +49,7 @@ inline constexpr VkFormat depthOnlyFormat = VK_FORMAT_R32_SFLOAT;
 inline constexpr VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
 inline constexpr VkFormat outputColorFormat = VK_FORMAT_R8G8B8A8_UNORM;
 inline constexpr uint32_t numDrawCmdBuffers = 4; // Triple buffering
+inline constexpr uint32_t maxShadowMapSize = 256;
 
 }
 
@@ -63,6 +64,17 @@ inline constexpr uint32_t numDrawCmdBuffers = 4; // Triple buffering
 // A layered target will have a color image with the max amount of layers, depth
 // image with max amount of layers.
 
+static uint32_t getShadowMapSize(uint32_t width, uint32_t height)
+{
+    uint32_t minWH = std::min(width, height);
+    // Calculate largest power of 2 that is less than or equal to minWH
+    uint32_t shadow_map_size = 1;
+    while (shadow_map_size < minWH) {
+        shadow_map_size *= 2;
+    }
+    return std::min(shadow_map_size, consts::maxShadowMapSize);
+}
+
 static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
                                                    uint32_t height,
                                                    uint32_t max_num_views,
@@ -70,18 +82,17 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
                                                    vk::MemoryAllocator &alloc,
                                                    bool depth_only)
 {
+    uint32_t shadow_map_size = getShadowMapSize(width, height);
     uint32_t max_image_dim_x = std::min(consts::maxTextureDim, consts::maxNumImagesX * width);
     uint32_t max_image_dim_y = std::min(consts::maxTextureDim, consts::maxNumImagesY * height);
     // Each view is going to be stored in one section of the layer (one viewport of
     // the layer). Each image, will have as many layers as possible.
     uint32_t max_images_x = max_image_dim_x / width;
     uint32_t max_images_y = max_image_dim_y / height;
-
     uint32_t max_views_per_target = max_images_x * max_images_y;
 
     // Number of images to allocate
-    uint32_t num_targets = utils::divideRoundUp(max_num_views,
-                                                max_views_per_target);
+    uint32_t num_targets = utils::divideRoundUp(max_num_views, max_views_per_target);
 
     HeapArray<LayeredTarget> local_images (num_targets);
 
@@ -92,10 +103,12 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
         uint32_t num_views_in_image = std::min((uint32_t)views_left,
                                                max_views_per_target);
 
-        uint32_t image_width = width * std::min(num_views_in_image, max_images_x);
-
-        uint32_t image_height = height * 
-            utils::divideRoundUp(num_views_in_image, max_images_x);
+        uint32_t num_images_x = std::min(num_views_in_image, max_images_x);
+        uint32_t num_images_y = utils::divideRoundUp(num_views_in_image, max_images_x);
+        uint32_t image_width = width * num_images_x;
+        uint32_t image_height = height * num_images_y;
+        uint32_t shadow_image_width = shadow_map_size * num_images_x;
+        uint32_t shadow_image_height = shadow_map_size * num_images_y;
 
         LayeredTarget target = {
             .vizBuffer = alloc.makeColorAttachment(image_width, image_height,
@@ -106,12 +119,21 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
                                                1,
                                                consts::depthFormat),
             .depthView = {},
+            .shadowBuffer = alloc.makeColorAttachment(shadow_image_width, shadow_image_height,
+                                                   1,
+                                                   consts::varianceFormat),
+            .shadowBufferView = {},
+            .shadowDepth = alloc.makeDepthAttachment(shadow_image_width, shadow_image_height,
+                                                    1,
+                                                    consts::depthFormat),
+            .shadowDepthView = {},
             .numViews = num_views_in_image,
             .lightingSet = {},
             .pixelWidth = image_width,
             .pixelHeight = image_height,
             .viewWidth = width,
             .viewHeight = height,
+            .shadowMapSize = shadow_map_size,
         };
 
         VkImageViewCreateInfo view_info = {};
@@ -134,6 +156,15 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
         view_info.format = consts::depthFormat;
         view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.depthView));
+
+        view_info.image = target.shadowBuffer.image;
+        view_info.format = consts::varianceFormat;
+        REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.shadowBufferView));
+
+        view_info.image = target.shadowDepth.image;
+        view_info.format = consts::depthFormat;
+        view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.shadowDepthView));
 
         local_images.emplace(i, std::move(target));
 
@@ -1344,6 +1375,127 @@ static void issueShadowGen(vk::Device &dev,
             0, 0, nullptr, 1, &draw_pckg_barrier,
             0, nullptr);
     }
+}
+static void issueShadowDraw(vk::Device &dev,
+                            PipelineMP<1> &pipeline,
+                            LayeredTarget &target,
+                            VkCommandBuffer draw_cmd,
+                            BatchFrame &frame,
+                            uint32_t max_num_views)
+{
+    dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            objectShadowDraw.hdls[0]);
+
+    std::array draw_descriptors {
+        frame.shadowDrawSet,
+        frame.assetSetDraw,
+    };
+
+    dev.dt.cmdBindDescriptorSets(draw_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            objectShadowDraw.layout, 0,
+            draw_descriptors.size(),
+            draw_descriptors.data(),
+            0, nullptr);
+
+    uint32_t max_image_dim_x = std::min(consts::maxTextureDim, consts::maxNumImagesX * target.viewWidth);
+    uint32_t max_num_image_x = max_image_dim_x / target.viewWidth;
+
+    for (uint32_t i = 0; i < target.numViews; ++i) {
+        uint32_t image_x = i % max_num_image_x;
+        uint32_t image_y = i / max_num_image_x;
+
+        uint32_t count_offset = i * sizeof(uint32_t);
+
+        VkViewport viewport = {
+            .x = (float)(image_x * target.shadowMapSize),
+            .y = (float)(image_y * target.shadowMapSize),
+            .width = (float)target.shadowMapSize,
+            .height = (float)target.shadowMapSize,
+            .minDepth = 0.f,
+            .maxDepth = 1.f
+        };
+
+        VkRect2D rect = {
+            .offset = { (int32_t)(image_x * target.shadowMapSize),
+                        (int32_t)(image_y * target.shadowMapSize) },
+            .extent = { (uint32_t)target.shadowMapSize,
+                        (uint32_t)target.shadowMapSize }
+        };
+
+        dev.dt.cmdSetViewport(draw_cmd, 0, 1, &viewport);
+        dev.dt.cmdSetScissor(draw_cmd, 0, 1, &rect);
+
+        render::shader::ShadowDrawPushConst push_const {
+            i * consts::maxDrawsPerView
+        };
+
+        dev.dt.cmdPushConstants(draw_cmd, pipeline.layout,
+                                VK_SHADER_STAGE_VERTEX_BIT, 0,
+                                sizeof(push_const),
+                                &push_const);
+
+        dev.dt.cmdBindIndexBuffer(draw_cmd, frame.buffers.shadowViewData.buffer,
+                                  count_offset,
+                                  VK_INDEX_TYPE_UINT32);
+
+        dev.dt.cmdDrawIndexedIndirectCount(draw_cmd, 
+                                           frame.buffers.shadowViewData.buffer,
+    }
+
+    dev.dt.cmdBindIndexBuffer(draw_cmd, rctx.loaded_assets_[0].buf.buffer,
+            rctx.loaded_assets_[0].idxBufferOffset,
+            VK_INDEX_TYPE_UINT32);
+
+    VkRect2D total_rect = {
+        .offset = { 0, 0 },
+        .extent = { (uint32_t)target.shadowMapSize,
+                    (uint32_t)target.shadowMapSize }
+    };
+
+    VkRenderingInfo rendering_info = {};
+    rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    rendering_info.renderArea = total_rect;
+    rendering_info.layerCount = 1;
+    rendering_info.colorAttachmentCount = 1
+    rendering_info.pColorAttachments = depth_only ? nullptr : &color_attach;
+    rendering_info.pDepthAttachment = &depth_attach;
+
+    dev.dt.cmdBeginRenderPass(draw_cmd, &render_pass_info,
+            VK_SUBPASS_CONTENTS_INLINE);
+
+    dev.dt.cmdDrawIndexedIndirect(draw_cmd,
+            frame.renderInput.buffer,
+            frame.drawCmdOffset,
+            rctx.engine_interop_.maxInstancesPerWorld * 10,
+            sizeof(DrawCmd));
+
+    dev.dt.cmdEndRenderPass(draw_cmd);
+
+    // issueShadowBlurPass(dev, frame, blur, draw_cmd);
+    array<VkImageMemoryBarrier, 1> finish_prepare {{
+        {
+            VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            nullptr,
+            VK_ACCESS_MEMORY_WRITE_BIT,
+            VK_ACCESS_SHADER_READ_BIT,
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_QUEUE_FAMILY_IGNORED,
+            VK_QUEUE_FAMILY_IGNORED,
+            frame.shadowFB.depthAttachment.image,
+            {
+                VK_IMAGE_ASPECT_DEPTH_BIT,
+                0, 1, 0, 1
+            },
+        }
+    }};
+
+    dev.dt.cmdPipelineBarrier(draw_cmd,
+            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0,
+            0, nullptr, 0, nullptr,
+            finish_prepare.size(), finish_prepare.data());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
