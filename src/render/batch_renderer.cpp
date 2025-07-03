@@ -1283,8 +1283,7 @@ static void issueShadowGen(vk::Device &dev,
                            PipelineMP<1> &pipeline,
                            BatchFrame &frame,
                            VkCommandBuffer draw_cmd,
-                           uint32_t view_idx,
-                           uint32_t world_idx)
+                           uint32_t max_num_views)
 {
     { // Issue buffer barrier for this draw package buffer
         VkBufferMemoryBarrier draw_pckg_barrier = {
@@ -1311,18 +1310,18 @@ static void issueShadowGen(vk::Device &dev,
 
     // Push constants
     dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.hdls[0]);
-    render::shader::ShadowGenPushConst push_const = { view_idx, world_idx };
+    render::shader::BatchShadowGenPushConst push_const = { max_num_views };
     dev.dt.cmdPushConstants(draw_cmd,
                             pipeline.layout,
                             VK_SHADER_STAGE_COMPUTE_BIT,
-                            0, sizeof(render::shader::ShadowGenPushConst),
+                            0, sizeof(render::shader::BatchShadowGenPushConst),
                             &push_const);
 
     // Descriptor sets
     dev.dt.cmdBindDescriptorSets(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
             pipeline.layout, 0, 1, &frame.shadowGenSet, 0, nullptr);
 
-    uint32_t num_workgroups_x = utils::divideRoundUp(max_views, 32_u32);
+    uint32_t num_workgroups_x = utils::divideRoundUp(max_num_views, 256_u32);
     dev.dt.cmdDispatch(draw_cmd, num_workgroups_x, 1, 1);
 
     { // Issue buffer barrier for this draw package buffer
@@ -2187,6 +2186,12 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
         }
     }
 
+    issueShadowGen(impl->dev,
+                   impl->shadowGen,
+                   frame_data,
+                   draw_cmd,
+                   impl->maxNumViews);
+
     // Issue the memory barrier for the draw packages
     issueMemoryBarrier(impl->dev, draw_cmd,
         VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT |
@@ -2206,7 +2211,8 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
         auto &draw_package = frame_data.drawPackageSwapchain[draw_package_idx];
 
         // Issue the prepare views pipeline with the current draw package
-        issuePrepareViewsPipeline(impl->dev, draw_cmd,
+        issuePrepareViewsPipeline(impl->dev,
+                                  draw_cmd,
                                   impl->prepareViews,
                                   frame_data,
                                   draw_package,
@@ -2217,13 +2223,6 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                                   num_processed_views,
                                   draw_package_idx,
                                   rctx);
-
-        issueShadowGen(impl->dev,
-                       draw_cmd,
-                       frame_data,
-                       impl->renderExtent,
-                       info.numViews);
-
         
         // Now, start the rasterization
         issueRasterLayoutTransitions(impl->dev,

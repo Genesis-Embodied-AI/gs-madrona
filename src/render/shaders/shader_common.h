@@ -36,6 +36,10 @@ struct PrepareViewPushConstant {
     uint32_t maxDrawsPerView;
 };
 
+struct BatchShadowGenPushConst {
+    uint32_t maxNumViews;
+};
+
 struct DeferredLightingPushConstBR {
     uint32_t maxImagesXPerTarget;
     uint32_t maxImagesYPerTarget;

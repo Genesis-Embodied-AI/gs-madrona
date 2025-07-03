@@ -1,7 +1,7 @@
 #include "shader_utils.hlsl"
 
 [[vk::push_constant]]
-ShadowGenPushConst pushConst;
+BatchShadowGenPushConst pushConst;
 
 [[vk::binding(0, 0)]]
 RWStructuredBuffer<ShadowViewData> shadowViewDataBuffer;
@@ -17,21 +17,20 @@ float4 invQuat(float4 rot)
     return float4(-rot.x, -rot.y, -rot.z, rot.w);
 }
 
-PerspectiveCameraData getCameraData()
+PerspectiveCameraData getCameraData(uint32_t view_idx)
 {
-    //int view_idx = pushConst.viewIdx + viewOffsetsBuffer[pushConst.worldIdx];
-    return unpackViewData(viewDataBuffer[pushConst.viewIdx]);
+    return unpackViewData(viewDataBuffer[view_idx]);
 }
 
-[numThreads(32, 1, 1)]
+[numThreads(256, 1, 1)]
 [shader("compute")]
 void shadowGen(uint3 idx : SV_DispatchThreadID)
 {
-    /* Assume that the sun is from lights[0] */
-    // if (idx.x != 0)
-    //     return;
+    if (idx.x >= pushConst.maxNumViews)
+        return;
 
-    PerspectiveCameraData unpackedView = getCameraData();
+    uint32_t view_idx = idx.x;
+    PerspectiveCameraData unpackedView = getCameraData(view_idx);
 
     float3 cam_pos = unpackedView.pos;
     float4 cam_rot = invQuat(unpackedView.rot);
@@ -120,7 +119,6 @@ void shadowGen(uint3 idx : SV_DispatchThreadID)
         y_max = y_min;
         y_min = tmp;
     }
-    
 
     float4x4 projection =(float4x4(
         float4(2.0f / (x_max - x_min),             0.0f,                       0.0f,                        -(x_max + x_min) / (x_max - x_min)),
@@ -128,7 +126,7 @@ void shadowGen(uint3 idx : SV_DispatchThreadID)
         float4(0.0f,                               1.0f / (y_max - y_min),     0.0f,                        -(y_min) / (y_max - y_min)),
         float4(0.0f,                               0.0f,                       0.0f,                        1.0f)));
 
-    shadowViewDataBuffer[pushConst.viewIdx].viewProjectionMatrix = mul(
+    shadowViewDataBuffer[view_idx].viewProjectionMatrix = mul(
         projection, float4x4(
             float4(to_light[0].xyz, 0.f),
             float4(to_light[1].xyz, 0.f),
@@ -138,8 +136,8 @@ void shadowGen(uint3 idx : SV_DispatchThreadID)
     );
 
     {
-        shadowViewDataBuffer[pushConst.viewIdx].cameraRight = float4(cam_right, 1.f);
-        shadowViewDataBuffer[pushConst.viewIdx].cameraUp = float4(cam_up, 1.f);
-        shadowViewDataBuffer[pushConst.viewIdx].cameraForward = float4(cam_fwd, 1.f);
+        shadowViewDataBuffer[view_idx].cameraRight = float4(cam_right, 1.f);
+        shadowViewDataBuffer[view_idx].cameraUp = float4(cam_up, 1.f);
+        shadowViewDataBuffer[view_idx].cameraForward = float4(cam_fwd, 1.f);
     }
 }
