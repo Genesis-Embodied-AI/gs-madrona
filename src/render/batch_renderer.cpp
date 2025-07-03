@@ -636,13 +636,12 @@ static DrawCommandPackage makeDrawCommandPackage(vk::Device& dev,
     VkDescriptorSet draw_set = draw_views.descPools[1].makeSet();
 
     // Make Draw Buffers
-    std::array<int64_t, 4> buffer_sizes = {
+    std::array<int64_t, 3> buffer_sizes = {
         (int64_t)sizeof(uint32_t) * max_views_per_target,
         (int64_t)sizeof(shader::DrawCmd) * consts::maxDrawsPerLayeredImage,
         (int64_t)sizeof(shader::DrawDataBR) * consts::maxDrawsPerLayeredImage,
-        (int64_t)sizeof(shader::ShadowViewData) * max_views_per_target
     };
-    std::array<int64_t, 3> buffer_offsets;
+    std::array<int64_t, 2> buffer_offsets;
 
     int64_t num_draw_bytes = utils::computeBufferOffsets(
         buffer_sizes, buffer_offsets, 256);
@@ -1322,11 +1321,60 @@ static void issueDeferred(vk::Device &dev,
 }
 
 static void issueShadowGen(vk::Device &dev,
+                           Pipeline<1> &pipeline,
                            VkCommandBuffer draw_cmd,
-                           BatchFrame &batch_frame,
-                           VkExtent2D render_dims,
-                           uint32_t total_num_views)
+                           uint32_t view_idx,
+                           uint32_t world_idx)
 {
+    // {
+    //     VkBufferMemoryBarrier compute_prepare = {
+    //         VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+    //         nullptr,
+    //         VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT,
+    //         VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT,
+    //         VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+    //         frame.renderInput.buffer,
+    //         0, 
+    //         (VkDeviceSize)frame.renderInputSize
+    //     };
+
+    //     dev.dt.cmdPipelineBarrier(draw_cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 
+    //             0, 0, nullptr, 1, &compute_prepare, 0, nullptr);
+    // }
+
+
+    dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.hdls[0]);
+
+    render::shader::ShadowGenPushConst push_const = { view_idx, world_idx };
+
+    dev.dt.cmdPushConstants(draw_cmd,
+                            pipeline.layout,
+                            VK_SHADER_STAGE_COMPUTE_BIT,
+                            0, sizeof(render::shader::ShadowGenPushConst),
+                            &push_const);
+
+    dev.dt.cmdBindDescriptorSets(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+            pipeline.layout, 0, 1, &frame.shadowGenSet, 0, nullptr);
+
+    uint32_t num_workgroups_x = utils::divideRoundUp(max_views, 32_u32);
+    dev.dt.cmdDispatch(draw_cmd, num_workgroups_x, 1, 1);
+
+
+    {
+        VkBufferMemoryBarrier compute_prepare = {
+            VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            nullptr,
+            VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT,
+            VK_ACCESS_MEMORY_WRITE_BIT,
+            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+            frame.renderInput.buffer,
+            0, 
+            (VkDeviceSize)frame.renderInputSize
+        };
+
+        dev.dt.cmdPipelineBarrier(draw_cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
+                0, 0, nullptr, 1, &compute_prepare, 0, nullptr);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1547,6 +1595,30 @@ static void issuePrepareViewsPipeline(vk::Device& dev,
                                       uint32_t num_processed_batches,
                                       RenderContext &rctx)
 {
+
+    { // Issue buffer barrier for this draw package buffer
+        VkBufferMemoryBarrier draw_pckg_barrier = {
+            VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            nullptr,
+            VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
+                VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
+                VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+            VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+            batch.drawBuffer.buffer,
+            0, VK_WHOLE_SIZE
+        };
+
+        dev.dt.cmdPipelineBarrier(
+            draw_cmd,
+            VK_PIPELINE_STAGE_TRANSFER_BIT | 
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+                VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0, 0, nullptr, 1, &draw_pckg_barrier,
+            0, nullptr);
+    }
+
     (void)num_views;
     (void)num_processed_batches;
     dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
@@ -1579,6 +1651,27 @@ static void issuePrepareViewsPipeline(vk::Device& dev,
 
         uint32_t num_workgroups = num_views;
         dev.dt.cmdDispatch(draw_cmd, num_workgroups, 1, 1);
+    }
+
+    { // Issue buffer barrier for this draw package buffer
+        VkBufferMemoryBarrier draw_pckg_barrier = {
+            VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            nullptr,
+            VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+            VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_READ_BIT,
+            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+            batch.drawBuffer.buffer,
+            0, VK_WHOLE_SIZE
+        };
+
+        dev.dt.cmdPipelineBarrier(
+            draw_cmd,
+           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+           VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+               VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
+               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 1, &draw_pckg_barrier,
+            0, nullptr);
     }
 }
 
@@ -2162,29 +2255,6 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
         auto &draw_package =
             frame_data.drawPackageSwapchain[draw_package_idx];
 
-        { // Issue buffer barrier for this draw package buffer
-            VkBufferMemoryBarrier draw_pckg_barrier = {
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-                nullptr,
-                VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
-                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
-                    VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
-                VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
-                VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-                draw_package.drawBuffer.buffer,
-                0, VK_WHOLE_SIZE
-            };
-
-            impl->dev.dt.cmdPipelineBarrier(
-                draw_cmd,
-                VK_PIPELINE_STAGE_TRANSFER_BIT | 
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
-                    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                0, 0, nullptr, 1, &draw_pckg_barrier,
-                0, nullptr);
-        }
-
         // Issue the prepare views pipeline with the current draw package
         issuePrepareViewsPipeline(impl->dev, draw_cmd,
                                   impl->prepareViews,
@@ -2197,27 +2267,6 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                                   num_processed_views,
                                   draw_package_idx,
                                   rctx);
-
-        { // Issue buffer barrier for this draw package buffer
-            VkBufferMemoryBarrier draw_pckg_barrier = {
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-                nullptr,
-                VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
-                VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_READ_BIT,
-                VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-                draw_package.drawBuffer.buffer,
-                0, VK_WHOLE_SIZE
-            };
-
-            impl->dev.dt.cmdPipelineBarrier(
-                draw_cmd,
-               VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-               VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                   VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
-                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                0, 0, nullptr, 1, &draw_pckg_barrier,
-                0, nullptr);
-        }
 
         issueShadowGen(impl->dev,
                        draw_cmd,
