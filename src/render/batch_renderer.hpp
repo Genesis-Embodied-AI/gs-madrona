@@ -28,6 +28,10 @@ struct LayeredTarget {
     render::vk::LocalImage depth;
     VkImageView depthView;
 
+    // Shadow map
+    render::vk::LocalImage shadowMap;
+    VkImageView shadowMapView;
+
     uint32_t numViews;
 
     VkDescriptorSet lightingSet;
@@ -55,6 +59,8 @@ struct BatchImportedBuffers {
 
     render::vk::LocalBuffer lights;
     render::vk::LocalBuffer lightOffsets;
+
+    render::vk::LocalBuffer shadowViewData;
 };
 
 struct BatchRenderer {

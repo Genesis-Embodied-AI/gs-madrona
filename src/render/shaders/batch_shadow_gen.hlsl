@@ -6,19 +6,11 @@ ShadowGenPushConst pushConst;
 [[vk::binding(0, 0)]]
 RWStructuredBuffer<ShadowViewData> shadowViewDataBuffer;
 
-// TODO: Remove this.
 [[vk::binding(1, 0)]]
-StructuredBuffer<PackedViewData> flycamBuffer;
-
-[[vk::binding(2, 0)]]
 StructuredBuffer<PackedLightData> lights;
 
-[[vk::binding(3, 0)]]
+[[vk::binding(2, 0)]]
 StructuredBuffer<PackedViewData> viewDataBuffer;
-
-// TODO: Remove this.
-[[vk::binding(4, 0)]]
-StructuredBuffer<int> viewOffsetsBuffer;
 
 float4 invQuat(float4 rot)
 {

@@ -20,6 +20,9 @@ StructuredBuffer<PackedLightData> lightDataBuffer;
 [[vk::binding(4, 0)]]
 StructuredBuffer<RenderOptions> renderOptionsBuffer;
 
+[[vk::binding(5, 0)]]
+StructuredBuffer<ShadowViewData> shadowViewDataBuffer;
+
 // Draw information
 [[vk::binding(0, 1)]]
 RWStructuredBuffer<uint32_t> drawCount;
@@ -45,9 +48,6 @@ Texture2D<float4> materialTexturesArray[];
 
 [[vk::binding(1, 3)]]
 SamplerState linearSampler;
-
-[[vk::binding(2, 3)]]
-StructuredBuffer<ShadowViewData> shadowViewDataBuffer;
 
 [[vk::binding(3, 3)]]
 Texture2D<float2> shadowMapBuffer[];
