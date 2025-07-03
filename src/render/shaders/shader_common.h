@@ -40,6 +40,10 @@ struct BatchShadowGenPushConst {
     uint32_t maxNumViews;
 };
 
+struct ShadowDrawPushConst {
+    uint32_t drawDataOffset;
+};
+
 struct DeferredLightingPushConstBR {
     uint32_t maxImagesXPerTarget;
     uint32_t maxImagesYPerTarget;

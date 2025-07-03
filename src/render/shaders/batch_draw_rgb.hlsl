@@ -169,10 +169,6 @@ void vert(in uint vid : SV_VertexID,
         view_data.zNear,
         view_pos.y);
 
-
-    clip_pos.x += min(0.0, abs(float(draw_data.meshID))) +
-                  min(0.0, abs(float(draw_data.instanceID)));
-
     v2f.worldPos = rotateVec(instance_data.rotation, instance_data.scale * vert.position) + instance_data.position;
     v2f.position = clip_pos;
     v2f.uv = vert.uv;

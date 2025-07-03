@@ -1,10 +1,8 @@
 #include "shader_utils.hlsl"
 
 [[vk::push_constant]]
-DrawPushConst push_const;
+ShadowDrawPushConst pushConst;
 
-[[vk::binding(0, 0)]]
-StructuredBuffer<PackedViewData> flycamBuffer;
 
 [[vk::binding(1, 0)]]
 StructuredBuffer<PackedInstanceData> engineInstanceBuffer;
@@ -15,30 +13,21 @@ StructuredBuffer<DrawData> drawDataBuffer;
 [[vk::binding(3, 0)]]
 StructuredBuffer<ShadowViewData> shadowViewDataBuffer;
 
-[[vk::binding(4, 0)]]
-StructuredBuffer<PackedViewData> viewDataBuffer;
-
-[[vk::binding(5, 0)]]
-StructuredBuffer<int> viewOffsetsBuffer;
-
 // Asset descriptor bindings
-
 [[vk::binding(0, 1)]]
 StructuredBuffer<PackedVertex> vertexDataBuffer;
-
-[[vk::binding(1, 1)]]
-StructuredBuffer<MaterialData> materialBuffer;
 
 
 [shader("vertex")]
 float4 vert(in uint vid : SV_VertexID,
             in uint draw_id : SV_InstanceID) : SV_Position
 {
+    DrawDataBR draw_data = drawDataBuffer[draw_id + pushConst.drawDataOffset];
+
     Vertex vert = unpackVertex(vertexDataBuffer[vid]);
-    DrawData draw_data = drawDataBuffer[draw_id];
     uint instance_id = draw_data.instanceID;
 
-    float4x4 shadow_matrix = shadowViewDataBuffer[push_const.viewIdx].viewProjectionMatrix;
+    float4x4 shadow_matrix = shadowViewDataBuffer[draw_data.viewID].viewProjectionMatrix;
 
     EngineInstanceData instance_data = unpackEngineInstanceData(
         engineInstanceBuffer[instance_id]);
@@ -58,7 +47,6 @@ float2 frag(in float4 position : SV_Position) : SV_Target0
     float depth = position.z;
 
     // VSM
-    // TODO: Use PCF.
     float dx = ddx(depth);
     float dy = ddy(depth);
     float sigma = depth * depth + 0.25 * (dx * dx + dy * dy);
