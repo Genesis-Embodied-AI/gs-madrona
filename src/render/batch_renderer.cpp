@@ -133,6 +133,8 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
             .pixelHeight = image_height,
             .viewWidth = width,
             .viewHeight = height,
+            .shadowTextureWidth = shadow_image_width,
+            .shadowTextureHeight = shadow_image_height,
             .shadowMapSize = shadow_map_size,
         };
 
@@ -1380,22 +1382,58 @@ static void issueShadowDraw(vk::Device &dev,
                             PipelineMP<1> &pipeline,
                             LayeredTarget &target,
                             VkCommandBuffer draw_cmd,
-                            BatchFrame &frame,
-                            uint32_t max_num_views)
+                            DrawCommandPackage &view_batch,
+                            BatchFrame &batch_frame,
+                            const DynArray<AssetData> &loaded_assets)
 {
-    dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-            objectShadowDraw.hdls[0]);
+    VkRenderingAttachmentInfoKHR color_attach = {};
+    color_attach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+    color_attach.imageView = target.shadowBufferView;
+    color_attach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color_attach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color_attach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
-    std::array draw_descriptors {
-        frame.shadowDrawSet,
-        frame.assetSetDraw,
+    VkRenderingAttachmentInfoKHR depth_attach = {};
+    depth_attach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+    depth_attach.imageView = target.shadowDepthView;
+    depth_attach.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    depth_attach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth_attach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+    VkRect2D total_rect = {
+        .offset = { 0, 0 },
+        .extent = { (uint32_t)target.shadowTextureWidth,
+                    (uint32_t)target.shadowTextureHeight }
     };
 
-    dev.dt.cmdBindDescriptorSets(draw_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-            objectShadowDraw.layout, 0,
-            draw_descriptors.size(),
-            draw_descriptors.data(),
-            0, nullptr);
+    VkRenderingInfo rendering_info = {};
+    rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    rendering_info.renderArea = total_rect;
+    rendering_info.layerCount = 1;
+    rendering_info.colorAttachmentCount = 1;
+    rendering_info.pColorAttachments = &color_attach;
+    rendering_info.pDepthAttachment = &depth_attach;
+
+    dev.dt.cmdBeginRenderingKHR(draw_cmd, &rendering_info);
+
+    dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pipeline.hdls[0]);
+
+    dev.dt.cmdBindIndexBuffer(draw_cmd, loaded_assets[0].buf.buffer,
+            loaded_assets[0].idxBufferOffset,
+            VK_INDEX_TYPE_UINT32);
+
+    std::array draw_descriptors {
+        batch_frame.shadowDrawSet,
+        batch_frame.assetSetDraw,
+    };
+
+    dev.dt.cmdBindDescriptorSets(draw_cmd,
+                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipeline.layout, 0,
+                                 2,
+                                 draw_descriptors.data(),
+                                 0, nullptr);
 
     uint32_t max_image_dim_x = std::min(consts::maxTextureDim, consts::maxNumImagesX * target.viewWidth);
     uint32_t max_num_image_x = max_image_dim_x / target.viewWidth;
@@ -1434,68 +1472,17 @@ static void issueShadowDraw(vk::Device &dev,
                                 sizeof(push_const),
                                 &push_const);
 
-        dev.dt.cmdBindIndexBuffer(draw_cmd, frame.buffers.shadowViewData.buffer,
-                                  count_offset,
-                                  VK_INDEX_TYPE_UINT32);
-
         dev.dt.cmdDrawIndexedIndirectCount(draw_cmd, 
-                                           frame.buffers.shadowViewData.buffer,
+                                            view_batch.drawBuffer.buffer,
+                                            view_batch.drawCmdOffset + (i * consts::maxDrawsPerView) * 
+                                                sizeof(shader::DrawCmd),
+                                            view_batch.drawBuffer.buffer,
+                                            count_offset, 
+                                            consts::maxDrawsPerView,
+                                            sizeof(shader::DrawCmd));
     }
 
-    dev.dt.cmdBindIndexBuffer(draw_cmd, rctx.loaded_assets_[0].buf.buffer,
-            rctx.loaded_assets_[0].idxBufferOffset,
-            VK_INDEX_TYPE_UINT32);
-
-    VkRect2D total_rect = {
-        .offset = { 0, 0 },
-        .extent = { (uint32_t)target.shadowMapSize,
-                    (uint32_t)target.shadowMapSize }
-    };
-
-    VkRenderingInfo rendering_info = {};
-    rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    rendering_info.renderArea = total_rect;
-    rendering_info.layerCount = 1;
-    rendering_info.colorAttachmentCount = 1
-    rendering_info.pColorAttachments = depth_only ? nullptr : &color_attach;
-    rendering_info.pDepthAttachment = &depth_attach;
-
-    dev.dt.cmdBeginRenderPass(draw_cmd, &render_pass_info,
-            VK_SUBPASS_CONTENTS_INLINE);
-
-    dev.dt.cmdDrawIndexedIndirect(draw_cmd,
-            frame.renderInput.buffer,
-            frame.drawCmdOffset,
-            rctx.engine_interop_.maxInstancesPerWorld * 10,
-            sizeof(DrawCmd));
-
-    dev.dt.cmdEndRenderPass(draw_cmd);
-
-    // issueShadowBlurPass(dev, frame, blur, draw_cmd);
-    array<VkImageMemoryBarrier, 1> finish_prepare {{
-        {
-            VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-            nullptr,
-            VK_ACCESS_MEMORY_WRITE_BIT,
-            VK_ACCESS_SHADER_READ_BIT,
-            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            VK_QUEUE_FAMILY_IGNORED,
-            VK_QUEUE_FAMILY_IGNORED,
-            frame.shadowFB.depthAttachment.image,
-            {
-                VK_IMAGE_ASPECT_DEPTH_BIT,
-                0, 1, 0, 1
-            },
-        }
-    }};
-
-    dev.dt.cmdPipelineBarrier(draw_cmd,
-            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            0, nullptr, 0, nullptr,
-            finish_prepare.size(), finish_prepare.data());
+    dev.dt.cmdEndRenderingKHR(draw_cmd);    
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1520,6 +1507,7 @@ struct BatchRenderer::Impl {
     PipelineMP<1> createVisualization;
     PipelineMP<1> lighting;
     PipelineMP<1> shadowGen;
+    PipelineMP<1> shadowDraw;
 
     //One frame is on simulation frame
     HeapArray<BatchFrame> batchFrames;
@@ -1529,6 +1517,7 @@ struct BatchRenderer::Impl {
     VkDescriptorSet assetSetTextureMat;
     VkDescriptorSet assetSetLighting;
     VkDescriptorSet shadowGenSet;
+    VkDescriptorSet shadowDrawSet;
 
     VkExtent2D renderExtent;
 
@@ -2375,6 +2364,14 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                                   num_processed_views,
                                   draw_package_idx,
                                   rctx);
+
+        issueShadowDraw(impl->dev,
+                        *(impl->shadowDraw),
+                        target,
+                        draw_cmd,
+                        draw_package,
+                        frame_data,
+                        loaded_assets);
         
         // Now, start the rasterization
         issueRasterLayoutTransitions(impl->dev,
