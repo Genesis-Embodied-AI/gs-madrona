@@ -60,7 +60,7 @@ python batch_benchmark.py -f benchmark_config_full.yml
 ### 4. Continue from a Previous Run
 
 ```bash
-python batch_benchmark.py -f benchmark_config_full.yml -c /path/to/previous/perf_data.csv
+python batch_benchmark.py -f benchmark_config_full.yml -c /name/of/previous/run/folder
 ```
 
 ### 5. Preprocess MUJUCO XML Assets to make it compatible with Omniverse (if needed)

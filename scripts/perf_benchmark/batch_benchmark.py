@@ -198,8 +198,10 @@ def create_batch_args(benchmark_result_file, config_file):
     return batch_args_dict
 
 
-def create_benchmark_result_file(continue_from_file):
-    if continue_from_file is not None:
+def create_benchmark_result_file(continue_from):
+    benchmark_report_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "benchmark_reports")
+    if continue_from is not None:
+        continue_from_file = os.path.join(benchmark_report_root, continue_from, "perf_data.csv")
         if not os.path.exists(continue_from_file):
             raise FileNotFoundError(f"Continue from file not found: {continue_from_file}")
         print(f"Continuing from file: {continue_from_file}")
@@ -209,10 +211,7 @@ def create_benchmark_result_file(continue_from_file):
         benchmark_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Get the benchmark project root directory
-        project_root = os.path.dirname(os.path.abspath(__file__))
-        benchmark_data_directory = os.path.join(
-            project_root, "benchmark_reports", f"perf_benchmark_{benchmark_timestamp}"
-        )
+        benchmark_data_directory = os.path.join(benchmark_report_root, f"perf_benchmark_{benchmark_timestamp}")
 
         if not os.path.exists(benchmark_data_directory):
             os.makedirs(benchmark_data_directory)
@@ -354,7 +353,7 @@ def main():
     benchmark_result_file = create_benchmark_result_file(batch_benchmark_args.continue_from)
 
     # Get list of previous runs if continuing from a previous run
-    previous_runs = get_previous_runs(batch_benchmark_args.continue_from)
+    previous_runs = get_previous_runs(benchmark_result_file)
 
     # Run benchmark in batch
     batch_args_dict = create_batch_args(benchmark_result_file, config_file=batch_benchmark_args.config_file)
