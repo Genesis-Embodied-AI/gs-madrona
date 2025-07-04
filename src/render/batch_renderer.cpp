@@ -200,7 +200,7 @@ struct DrawCommandPackage {
 static vk::PipelineShaders makeDrawShaders(const vk::Device &dev, 
                                            VkSampler repeat_sampler,
                                            VkSampler clamp_sampler,
-                                           bool depth_only)
+                                           bool depth_only = false)
 {
     (void)repeat_sampler;
     (void)clamp_sampler;
@@ -255,10 +255,9 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
                                     VkRenderPass render_pass,
                                     uint32_t num_frames,
                                     uint32_t num_pools,
-                                    bool depth_only,
                                     VkSampler repeat_sampler)
 {
-    auto shaders = makeDrawShaders(dev, repeat_sampler, repeat_sampler, depth_only);
+    auto shaders = makeDrawShaders(dev, repeat_sampler, repeat_sampler);
 
     VkPipelineVertexInputStateCreateInfo vert_info {};
     VkPipelineInputAssemblyStateCreateInfo input_assembly_info {};
@@ -283,15 +282,10 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
     // Blend
     VkPipelineColorBlendAttachmentState blend_attach {};
     blend_attach.blendEnable = VK_FALSE;
-
-    if (depth_only) {
-        blend_attach.colorWriteMask = VK_COLOR_COMPONENT_R_BIT;
-    } else {
-        blend_attach.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-                                      VK_COLOR_COMPONENT_G_BIT |
-                                      VK_COLOR_COMPONENT_B_BIT |
-                                      VK_COLOR_COMPONENT_A_BIT;
-    }
+    blend_attach.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+                                    VK_COLOR_COMPONENT_G_BIT |
+                                    VK_COLOR_COMPONENT_B_BIT |
+                                    VK_COLOR_COMPONENT_A_BIT;
 
     std::array<VkPipelineColorBlendAttachmentState, 1> blend_attachments {{
         blend_attach
@@ -316,32 +310,28 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
     dyn_info.dynamicStateCount = dyn_enable.size();
     dyn_info.pDynamicStates = dyn_enable.data();
 
+    VkPipelineLayoutCreateInfo gfx_layout_info;
+    gfx_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    gfx_layout_info.pNext = nullptr;
+    gfx_layout_info.flags = 0;
+    
+    // Descriptor set layouts
+    uint32_t num_layouts = 4;
+    std::array<VkDescriptorSetLayout, 4> draw_desc_layouts {{
+        shaders.getLayout(0),
+        shaders.getLayout(1),
+        shaders.getLayout(2),
+        shaders.getLayout(3)
+    }};
+    gfx_layout_info.setLayoutCount = static_cast<uint32_t>(num_layouts);
+    gfx_layout_info.pSetLayouts = draw_desc_layouts.data();
+
+    // Push constant range
     VkPushConstantRange push_const {
         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
         0,
         sizeof(shader::BatchDrawPushConst),
     };
-
-    // Layout configuration
-
-    uint32_t num_layouts = depth_only ? 3 : 4;
-    std::array<VkDescriptorSetLayout, 4> draw_desc_layouts {{
-        shaders.getLayout(0),
-        shaders.getLayout(1),
-        shaders.getLayout(2)
-    }};
-
-    if (!depth_only) {
-        draw_desc_layouts[3] = shaders.getLayout(3);
-    }
-
-    VkPipelineLayoutCreateInfo gfx_layout_info;
-    gfx_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    gfx_layout_info.pNext = nullptr;
-    gfx_layout_info.flags = 0;
-    gfx_layout_info.setLayoutCount =
-        static_cast<uint32_t>(num_layouts);
-    gfx_layout_info.pSetLayouts = draw_desc_layouts.data();
     gfx_layout_info.pushConstantRangeCount = 1;
     gfx_layout_info.pPushConstantRanges = &push_const;
 
@@ -447,7 +437,158 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
                                           gfx_infos.data(), nullptr,
                                           pipelines.data()));
 
-    // std::array<vk::FixedDescriptorPool, D> desc_pools;
+    DynArray<vk::FixedDescriptorPool> desc_pools(num_pools);
+    for (int i = 0; i < (int)num_pools; ++i) {
+        desc_pools.emplace_back(dev, shaders, i, num_frames);
+    }
+
+    return {
+        std::move(shaders),
+        draw_layout,
+        pipelines,
+        std::move(desc_pools)
+    };
+}
+
+static PipelineMP<1> makeShadowDrawPipeline(const vk::Device &dev,
+                                    VkPipelineCache pipeline_cache,
+                                    VkRenderPass render_pass,
+                                    uint32_t num_frames,
+                                    uint32_t num_pools,
+                                    VkSampler repeat_sampler)
+{
+    auto shaders = makeDrawShaders(dev, repeat_sampler, repeat_sampler);
+
+    VkPipelineVertexInputStateCreateInfo vert_info {};
+    VkPipelineInputAssemblyStateCreateInfo input_assembly_info {};
+    VkPipelineViewportStateCreateInfo viewport_info {};
+    VkPipelineMultisampleStateCreateInfo multisample_info {};
+    VkPipelineRasterizationStateCreateInfo raster_info {};
+
+    initCommonDrawPipelineInfo(vert_info, input_assembly_info,
+        viewport_info, multisample_info, raster_info);
+
+    // Depth/Stencil
+    VkPipelineDepthStencilStateCreateInfo depth_info {};
+    depth_info.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depth_info.depthTestEnable = VK_TRUE;
+    depth_info.depthWriteEnable = VK_TRUE;
+    depth_info.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
+    depth_info.depthBoundsTestEnable = VK_FALSE;
+    depth_info.stencilTestEnable = VK_FALSE;
+    depth_info.back.compareOp = VK_COMPARE_OP_ALWAYS;
+
+    // Blend
+    VkPipelineColorBlendAttachmentState blend_attach {};
+    blend_attach.blendEnable = VK_FALSE;
+    blend_attach.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT;
+
+    std::array<VkPipelineColorBlendAttachmentState, 1> blend_attachments {{
+        blend_attach
+    }};
+
+    VkPipelineColorBlendStateCreateInfo blend_info {};
+    blend_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    blend_info.logicOpEnable = VK_FALSE;
+    blend_info.attachmentCount = static_cast<uint32_t>(blend_attachments.size());
+    blend_info.pAttachments = blend_attachments.data();
+
+    // Dynamic
+    std::array dyn_enable {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR,
+    };
+
+    VkPipelineDynamicStateCreateInfo dyn_info {};
+    dyn_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dyn_info.dynamicStateCount = dyn_enable.size();
+    dyn_info.pDynamicStates = dyn_enable.data();
+
+    VkPipelineLayoutCreateInfo gfx_layout_info;
+    gfx_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    gfx_layout_info.pNext = nullptr;
+    gfx_layout_info.flags = 0;
+    
+    // Descriptor set layouts
+    uint32_t num_layouts = 2;
+    std::array<VkDescriptorSetLayout, 2> draw_desc_layouts {{
+        shaders.getLayout(0),
+        shaders.getLayout(1)
+    }};
+    gfx_layout_info.setLayoutCount = static_cast<uint32_t>(num_layouts);
+    gfx_layout_info.pSetLayouts = draw_desc_layouts.data();
+
+    // Push constant range
+    VkPushConstantRange push_const {
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+        0,
+        sizeof(shader::ShadowDrawPushConst),
+    };
+    gfx_layout_info.pushConstantRangeCount = 1;
+    gfx_layout_info.pPushConstantRanges = &push_const;
+
+    // Pipeline layout
+    VkPipelineLayout draw_layout;
+    REQ_VK(dev.dt.createPipelineLayout(dev.hdl, &gfx_layout_info, nullptr,
+                                       &draw_layout));
+
+    // Shadow pass
+    std::array<VkPipelineShaderStageCreateInfo, 2> gfx_stages {{
+        {
+            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            nullptr,
+            0,
+            VK_SHADER_STAGE_VERTEX_BIT,
+            shaders.getShader(0),
+            "vert",
+            nullptr,
+        },
+        {
+            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            nullptr,
+            0,
+            VK_SHADER_STAGE_FRAGMENT_BIT,
+            shaders.getShader(1),
+            "frag",
+            nullptr,
+        },
+    }};
+
+    VkPipelineRenderingCreateInfo rendering_info = {};
+    rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    rendering_info.colorAttachmentCount = 1;
+    rendering_info.pColorAttachmentFormats = &consts::colorOnlyFormat;
+    rendering_info.depthAttachmentFormat = consts::depthFormat;
+
+    VkGraphicsPipelineCreateInfo gfx_infos =
+    {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .pNext = &rendering_info,
+        .flags = 0,
+        .stageCount = gfx_stages.size(),
+        .pStages = gfx_stages.data(),
+        .pVertexInputState = &vert_info,
+        .pInputAssemblyState = &input_assembly_info,
+        .pTessellationState = nullptr,
+        .pViewportState = &viewport_info,
+        .pRasterizationState = &raster_info,
+        .pMultisampleState = &multisample_info,
+        .pDepthStencilState = &depth_info,
+        .pColorBlendState = &blend_info,
+        .pDynamicState = &dyn_info,
+        .layout = draw_layout,
+        .renderPass = render_pass,
+        .subpass = 0,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = -1,
+    };
+
+    std::array<VkPipeline, 1> pipelines;
+    REQ_VK(dev.dt.createGraphicsPipelines(dev.hdl, pipeline_cache, 1,
+                                          &gfx_infos, nullptr,
+                                          pipelines.data()));
+
     DynArray<vk::FixedDescriptorPool> desc_pools(num_pools);
     for (int i = 0; i < (int)num_pools; ++i) {
         desc_pools.emplace_back(dev, shaders, i, num_frames);
@@ -610,6 +751,7 @@ struct BatchFrame {
     VkDescriptorSet viewInstanceSetDraw;
     VkDescriptorSet viewInstanceSetLighting;
     VkDescriptorSet shadowGenSet;
+    VkDescriptorSet shadowDrawSet;
 
     HeapArray<LayeredTarget> targets;
     vk::DedicatedBuffer rgbOutput;
@@ -728,6 +870,7 @@ static void makeBatchFrame(vk::Device& dev,
                            PipelineMP<2> &draw,
                            PipelineMP<1> &lighting,
                            PipelineMP<1> &shadowGen,
+                           PipelineMP<1> &shadowDraw,
                            RenderContext &rctx,
                            uint32_t view_width,
                            uint32_t view_height,
@@ -787,6 +930,7 @@ static void makeBatchFrame(vk::Device& dev,
     VkDescriptorSet draw_views_set = draw.descPools[0].makeSet();
     VkDescriptorSet aabb_set = prepare_views.descPools[3].makeSet();
     VkDescriptorSet shadow_gen_set = shadowGen.descPools[0].makeSet();
+    VkDescriptorSet shadow_draw_set = shadowDraw.descPools[0].makeSet();
 
     //Descriptor sets
     static constexpr int num_desc_updates = 30;
@@ -1574,6 +1718,8 @@ BatchRenderer::Impl::Impl(const Config &cfg,
               sizeof(shader::ShadowGenPushConst),
               consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
               "batch_shadow_gen.hlsl", false, "shadowGen", makeShaders)),
+      shadowDraw(makeShadowDrawPipeline(dev, rctx.pipelineCache, VK_NULL_HANDLE, 
+                           consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler)),
       batchFrames(cfg.numFrames),
       assetSetPrepare(rctx.asset_set_cull_),
       assetSetDraw(rctx.asset_set_draw_),
@@ -1595,6 +1741,7 @@ BatchRenderer::Impl::Impl(const Config &cfg,
                        batchDraw,
                        lighting,
                        shadowGen,
+                       shadowDraw,
                        rctx,
                        cfg.renderWidth, cfg.renderHeight,
                        depthOnly);
