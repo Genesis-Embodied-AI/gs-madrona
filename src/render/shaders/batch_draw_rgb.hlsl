@@ -23,6 +23,9 @@ StructuredBuffer<RenderOptions> renderOptionsBuffer;
 [[vk::binding(5, 0)]]
 StructuredBuffer<ShadowViewData> shadowViewDataBuffer;
 
+[[vk::binding(6, 0)]]
+Texture2D<float2> shadowMapTextures[];
+
 // Draw information
 [[vk::binding(0, 1)]]
 RWStructuredBuffer<uint32_t> drawCount;
@@ -48,9 +51,6 @@ Texture2D<float4> materialTexturesArray[];
 
 [[vk::binding(1, 3)]]
 SamplerState linearSampler;
-
-[[vk::binding(3, 3)]]
-Texture2D<float2> shadowMapTextures[];
 
 struct V2F {
     [[vk::location(0)]] float4 position : SV_Position;

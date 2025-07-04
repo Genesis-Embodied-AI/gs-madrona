@@ -1071,9 +1071,13 @@ static void makeBatchFrame(vk::Device& dev,
         // output buffer
         HeapArray<VkWriteDescriptorSet> lighting_desc_updates(
             2*layered_targets.size() + 2);
+        HeapArray<VkWriteDescriptorSet> shadow_map_desc_updates(
+            layered_targets.size());
         HeapArray<VkDescriptorImageInfo> vbuffer_infos(
             layered_targets.size());
         HeapArray<VkDescriptorImageInfo> depth_buffer_infos(
+            layered_targets.size());
+        HeapArray<VkDescriptorImageInfo> shadow_map_infos(
             layered_targets.size());
 
         for (CountT i = 0; i < layered_targets.size(); ++i) {
@@ -1089,16 +1093,27 @@ static void makeBatchFrame(vk::Device& dev,
                 .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
             };
 
+            shadow_map_infos[i] = {
+                .sampler = VK_NULL_HANDLE,
+                .imageView = layered_targets[i].shadowMapView,
+                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            };
+
             vk::DescHelper::storageImage(lighting_desc_updates[i*2],
                                          lighting_set, 
                                          &vbuffer_infos[i],
                                          0, i);
 
             vk::DescHelper::textures(lighting_desc_updates[i*2 + 1],
-                                         lighting_set, 
-                                         &depth_buffer_infos[i],
-                                         1,
-                                         3, i);
+                                        lighting_set, 
+                                        &depth_buffer_infos[i],
+                                        1,
+                                        3, i);
+
+            vk::DescHelper::textures(shadow_map_desc_updates[i], 
+                                        draw_views_set,
+                                        &shadow_map_infos[i],
+                                        1, 6, i);
         }
 
         VkDescriptorBufferInfo rgb_buffer_info {
