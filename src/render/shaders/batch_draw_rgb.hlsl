@@ -50,7 +50,7 @@ Texture2D<float4> materialTexturesArray[];
 SamplerState linearSampler;
 
 [[vk::binding(3, 3)]]
-Texture2D<float2> shadowMapBuffer[];
+Texture2D<float2> shadowMapTextures[];
 
 struct V2F {
     [[vk::location(0)]] float4 position : SV_Position;
@@ -101,10 +101,10 @@ float shadowFactorVSM(float3 world_pos, uint view_idx)
         ls_pos.z > 1.0 || ls_pos.z < 0.0)
         return 1.0;
 
-    uint2 shadow_map_dim = shadowMapBuffer[shadow_map_target_idx].GetDimensions();
+    uint2 shadow_map_dim = shadowMapTextures[shadow_map_target_idx].GetDimensions();
     float2 texel_size = float2(1.f, 1.f) / float2(shadow_map_dim);
     float2 shadow_map_uv = (uv + shadow_map_pixel_offset.xy) / float2(shadow_map_dim);
-    float2 moment = shadowMapBuffer[shadow_map_target_idx].SampleLevel(linearSampler, shadow_map_uv, 0);
+    float2 moment = shadowMapTextures[shadow_map_target_idx].SampleLevel(linearSampler, shadow_map_uv, 0);
 
     float occlusion = 0.0f;
 
