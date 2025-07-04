@@ -511,10 +511,11 @@ static PipelineMP<1> makeShadowDrawPipeline(const vk::Device &dev,
     gfx_layout_info.flags = 0;
     
     // Descriptor set layouts
-    uint32_t num_layouts = 2;
-    std::array<VkDescriptorSetLayout, 2> draw_desc_layouts {{
+    const uint32_t num_layouts = 3;
+    std::array<VkDescriptorSetLayout, num_layouts> draw_desc_layouts {{
         shaders.getLayout(0),
-        shaders.getLayout(1)
+        shaders.getLayout(1),
+        shaders.getLayout(2)
     }};
     gfx_layout_info.setLayoutCount = static_cast<uint32_t>(num_layouts);
     gfx_layout_info.pSetLayouts = draw_desc_layouts.data();
@@ -951,6 +952,7 @@ static void makeBatchFrame(vk::Device& dev,
     instance_info.range = instance_size;
     vk::DescHelper::storage(desc_updates[desc_index++], prepare_views_set, &instance_info, 1);
     vk::DescHelper::storage(desc_updates[desc_index++], draw_views_set, &instance_info, 1);
+    vk::DescHelper::storage(desc_updates[desc_index++], shadow_draw_set, &instance_info, 0);
 
     VkDescriptorBufferInfo offset_info;
     offset_info.buffer = instance_offsets.buffer;
@@ -1015,6 +1017,7 @@ static void makeBatchFrame(vk::Device& dev,
     shadow_view_data_info.range = shadow_view_data_size;
     vk::DescHelper::storage(desc_updates[desc_index++], draw_views_set, &shadow_view_data_info, 5);
     vk::DescHelper::storage(desc_updates[desc_index++], shadow_gen_set, &shadow_view_data_info, 0);
+    vk::DescHelper::storage(desc_updates[desc_index++], shadow_draw_set, &shadow_view_data_info, 1);
 
     assert(desc_index <= num_desc_updates);
     vk::DescHelper::update(dev, desc_updates.data(), desc_index);
@@ -1528,6 +1531,7 @@ static void issueShadowDraw(vk::Device &dev,
                             VkCommandBuffer draw_cmd,
                             DrawCommandPackage &view_batch,
                             BatchFrame &batch_frame,
+                            VkDescriptorSet asset_set,
                             const DynArray<AssetData> &loaded_assets)
 {
     VkRenderingAttachmentInfoKHR color_attach = {};
@@ -1569,13 +1573,14 @@ static void issueShadowDraw(vk::Device &dev,
 
     std::array draw_descriptors {
         batch_frame.shadowDrawSet,
-        batch_frame.assetSetDraw,
+        view_batch.drawBufferSetDraw,
+        asset_set,
     };
 
     dev.dt.cmdBindDescriptorSets(draw_cmd,
                                  VK_PIPELINE_BIND_POINT_GRAPHICS,
                                  pipeline.layout, 0,
-                                 2,
+                                 draw_descriptors.size(),
                                  draw_descriptors.data(),
                                  0, nullptr);
 
@@ -2518,6 +2523,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                         draw_cmd,
                         draw_package,
                         frame_data,
+                        impl->assetSetLighting,
                         loaded_assets);
         
         // Now, start the rasterization

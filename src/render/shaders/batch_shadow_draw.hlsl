@@ -3,17 +3,17 @@
 [[vk::push_constant]]
 ShadowDrawPushConst pushConst;
 
-[[vk::binding(1, 0)]]
+[[vk::binding(0, 0)]]
 StructuredBuffer<PackedInstanceData> engineInstanceBuffer;
 
-[[vk::binding(2, 0)]]
-StructuredBuffer<DrawData> drawDataBuffer;
-
-[[vk::binding(3, 0)]]
+[[vk::binding(1, 0)]]
 StructuredBuffer<ShadowViewData> shadowViewDataBuffer;
 
+[[vk::binding(2, 1)]]
+RWStructuredBuffer<DrawDataBR> drawDataBuffer;
+
 // Asset descriptor bindings
-[[vk::binding(0, 1)]]
+[[vk::binding(0, 2)]]
 StructuredBuffer<PackedVertex> vertexDataBuffer;
 
 
