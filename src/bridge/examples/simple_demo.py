@@ -105,6 +105,5 @@ def main():
     print(f"FPS: {n_envs * n_steps / (end_time - start_time)}")
     print(f"FPS per env: {n_steps / (end_time - start_time)}")
 
-
 if __name__ == "__main__":
     main()
