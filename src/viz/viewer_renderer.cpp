@@ -522,7 +522,7 @@ static Pipeline<1> makeShadowDrawPipeline(const Device &dev,
         blend_attach,
     }};
 
-    VkPipelineColorBlendStateCreateInfo blend_info {};`
+    VkPipelineColorBlendStateCreateInfo blend_info {};
     blend_info.sType =
         VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     blend_info.logicOpEnable = VK_FALSE;

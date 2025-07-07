@@ -64,18 +64,18 @@ struct V2F {
 };
 
 float3 getShadowMapPixelOffset(uint view_idx) {
-    uint num_views_per_image = pushConst.maxShadowMapXYPerTarget * 
-                               pushConst.maxShadowMapXYPerTarget;
+    uint num_views_per_image = pushConst.maxShadowMapsXPerTarget * 
+                               pushConst.maxShadowMapsYPerTarget;
 
     uint target_idx = view_idx / num_views_per_image;
 
     uint target_view_idx = view_idx % num_views_per_image;
 
-    uint target_view_idx_x = target_view_idx % pushConst.maxShadowMapXYPerTarget;
-    uint target_view_idx_y = target_view_idx / pushConst.maxShadowMapXYPerTarget;
+    uint target_view_idx_x = target_view_idx % pushConst.maxShadowMapsXPerTarget;
+    uint target_view_idx_y = target_view_idx / pushConst.maxShadowMapsXPerTarget;
 
-    float x_pixel_offset = target_view_idx_x * pushConst.shadowMapSize;
-    float y_pixel_offset = target_view_idx_y * pushConst.shadowMapSize;
+    float x_pixel_offset = target_view_idx_x * pushConst.shadowMapWidth;
+    float y_pixel_offset = target_view_idx_y * pushConst.shadowMapHeight;
 
     return float3(x_pixel_offset, y_pixel_offset, target_idx);
 }

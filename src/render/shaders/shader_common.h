@@ -4,8 +4,10 @@
 struct BatchDrawPushConst {
     uint drawDataOffset;
     uint numLights;
-    uint maxShadowMapXYPerTarget;
-    uint shadowMapSize;
+    uint maxShadowMapsXPerTarget;
+    uint maxShadowMapsYPerTarget;
+    uint shadowMapWidth;
+    uint shadowMapHeight;
 };
 
 struct GridDrawPushConst {

@@ -30,33 +30,17 @@ enum class LatestOperation {
 };
 
 namespace consts {
-
-
 inline constexpr uint32_t maxDrawsPerView = 512*4;
-
-
 inline constexpr uint32_t maxTextureDim = 16384;
 inline constexpr uint32_t maxNumImagesX = 16;
 inline constexpr uint32_t maxNumImagesY = 16;
-inline constexpr uint32_t maxNumImagesPerTarget = 
-    maxNumImagesX * maxNumImagesY;
-
-
+inline constexpr uint32_t maxNumImagesPerTarget = maxNumImagesX * maxNumImagesY;
 // 256, is the number of views per image we can have
 inline constexpr uint32_t maxDrawsPerLayeredImage = maxDrawsPerView * maxNumImagesPerTarget;
-inline constexpr VkFormat colorOnlyFormat = VK_FORMAT_R8G8B8A8_UNORM;
-inline constexpr VkFormat depthOnlyFormat = VK_FORMAT_R32_SFLOAT;
-inline constexpr VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
-inline constexpr VkFormat outputColorFormat = VK_FORMAT_R8G8B8A8_UNORM;
 inline constexpr uint32_t numDrawCmdBuffers = 4; // Triple buffering
-inline constexpr uint32_t maxShadowMapSize = 256;
-
+inline constexpr uint32_t maxBatchShadowMapSize = 256;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// LAYERED OUTPUT CREATION                                                    //
-////////////////////////////////////////////////////////////////////////////////
-// 
 ////////////////////////////////////////////////////////////////////////////////
 // LAYERED OUTPUT CREATION                                                    //
 ////////////////////////////////////////////////////////////////////////////////
@@ -72,7 +56,7 @@ static uint32_t getShadowMapSize(uint32_t width, uint32_t height)
     while (shadow_map_size < minWH) {
         shadow_map_size *= 2;
     }
-    return std::min(shadow_map_size, consts::maxShadowMapSize);
+    return std::min(shadow_map_size, consts::maxBatchShadowMapSize);
 }
 
 static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
@@ -113,19 +97,19 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
         LayeredTarget target = {
             .vizBuffer = alloc.makeColorAttachment(image_width, image_height,
                                                    1,
-                                                   depth_only ? consts::depthOnlyFormat : consts::colorOnlyFormat),
+                                                   depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::colorOnlyFormat),
             .vizBufferView = {},
             .depth = alloc.makeDepthAttachment(image_width, image_height,
                                                1,
-                                               consts::depthFormat),
+                                               InternalConfig::depthFormat),
             .depthView = {},
-            .shadowBuffer = alloc.makeColorAttachment(shadow_image_width, shadow_image_height,
+            .shadowMap = alloc.makeColorAttachment(shadow_image_width, shadow_image_height,
                                                    1,
-                                                   consts::varianceFormat),
-            .shadowBufferView = {},
+                                                   InternalConfig::varianceFormat),
+            .shadowMapView = {},
             .shadowDepth = alloc.makeDepthAttachment(shadow_image_width, shadow_image_height,
                                                     1,
-                                                    consts::depthFormat),
+                                                    InternalConfig::depthFormat),
             .shadowDepthView = {},
             .numViews = num_views_in_image,
             .lightingSet = {},
@@ -151,20 +135,20 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
         };
 
         view_info.image = target.vizBuffer.image;
-        view_info.format = depth_only ? consts::depthOnlyFormat : consts::colorOnlyFormat;
+        view_info.format = depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::colorOnlyFormat;
         REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.vizBufferView));
 
         view_info.image = target.depth.image;
-        view_info.format = consts::depthFormat;
+        view_info.format = InternalConfig::depthFormat;
         view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.depthView));
 
-        view_info.image = target.shadowBuffer.image;
-        view_info.format = consts::varianceFormat;
-        REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.shadowBufferView));
+        view_info.image = target.shadowMap.image;
+        view_info.format = InternalConfig::varianceFormat;
+        REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.shadowMapView));
 
         view_info.image = target.shadowDepth.image;
-        view_info.format = consts::depthFormat;
+        view_info.format = InternalConfig::depthFormat;
         view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.shadowDepthView));
 
@@ -364,8 +348,8 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
     VkPipelineRenderingCreateInfo rendering_info = {};
     rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     rendering_info.colorAttachmentCount = 1;
-    rendering_info.pColorAttachmentFormats = &consts::colorOnlyFormat;
-    rendering_info.depthAttachmentFormat = consts::depthFormat;
+    rendering_info.pColorAttachmentFormats = &InternalConfig::colorOnlyFormat;
+    rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
 
     // Depth pass
     std::array<VkPipelineShaderStageCreateInfo, 1> depth_gfx_stages {{
@@ -384,7 +368,7 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
     depth_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     depth_rendering_info.colorAttachmentCount = 0;
     depth_rendering_info.pColorAttachmentFormats = nullptr;
-    depth_rendering_info.depthAttachmentFormat = consts::depthFormat;
+    depth_rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
 
     std::array<VkGraphicsPipelineCreateInfo, 2> gfx_infos {{
         {
@@ -559,8 +543,8 @@ static PipelineMP<1> makeShadowDrawPipeline(const vk::Device &dev,
     VkPipelineRenderingCreateInfo rendering_info = {};
     rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     rendering_info.colorAttachmentCount = 1;
-    rendering_info.pColorAttachmentFormats = &consts::colorOnlyFormat;
-    rendering_info.depthAttachmentFormat = consts::depthFormat;
+    rendering_info.pColorAttachmentFormats = &InternalConfig::colorOnlyFormat;
+    rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
 
     VkGraphicsPipelineCreateInfo gfx_infos =
     {
@@ -813,12 +797,12 @@ static DrawCommandPackage makeDrawCommandPackage(vk::Device& dev,
     VkDescriptorSet draw_set = draw_views.descPools[1].makeSet();
 
     // Make Draw Buffers
-    std::array<int64_t, 3> buffer_sizes = {
+    int64_t buffer_sizes[] = {
         (int64_t)sizeof(uint32_t) * max_views_per_target,
         (int64_t)sizeof(shader::DrawCmd) * consts::maxDrawsPerLayeredImage,
         (int64_t)sizeof(shader::DrawDataBR) * consts::maxDrawsPerLayeredImage,
     };
-    std::array<int64_t, 2> buffer_offsets;
+    int64_t buffer_offsets[2];
 
     int64_t num_draw_bytes = utils::computeBufferOffsets(
         buffer_sizes, buffer_offsets, 256);
@@ -927,6 +911,8 @@ static void makeBatchFrame(vk::Device& dev,
     bool supports_cuda_export = false;
 #endif
 
+    VkDescriptorSet lighting_set = lighting.descPools[0].makeSet();
+    VkDescriptorSet pbr_set = lighting.descPools[3].makeSet();
     VkDescriptorSet prepare_views_set = prepare_views.descPools[0].makeSet();
     VkDescriptorSet draw_views_set = draw.descPools[0].makeSet();
     VkDescriptorSet aabb_set = prepare_views.descPools[3].makeSet();
@@ -962,7 +948,6 @@ static void makeBatchFrame(vk::Device& dev,
     vk::DescHelper::storage(desc_updates[desc_index++], draw_views_set, &offset_info, 2);
 
     // PBR descriptor sets
-
     VkDescriptorBufferInfo light_data_info;
     light_data_info.buffer = lights.buffer;
     light_data_info.offset = 0;
@@ -1035,7 +1020,7 @@ static void makeBatchFrame(vk::Device& dev,
         uint32_t max_views_per_target = max_images_x * max_images_y;
 
         draw_packages.emplace(i, makeDrawCommandPackage(
-                    dev, alloc, prepare_views, *draw,
+                    dev, alloc, prepare_views, draw,
                     max_views_per_target));
     }
 
@@ -1163,6 +1148,7 @@ static void makeBatchFrame(vk::Device& dev,
         draw_views_set,
         prepare_views_set,
         shadow_gen_set,
+        shadow_draw_set,
         std::move(layered_targets),
         std::move(rgb_output_buffer),
         std::move(depth_output_buffer),
@@ -1364,6 +1350,11 @@ static void issueRasterization(vk::Device &dev,
     uint32_t max_image_dim_x = std::min(consts::maxTextureDim, consts::maxNumImagesX * target.viewWidth);
     uint32_t max_num_image_x = max_image_dim_x / target.viewWidth;
 
+    uint32_t max_shadow_map_dim_x = std::min(consts::maxTextureDim, consts::maxNumImagesX * target.shadowMapSize);
+    uint32_t max_shadow_map_dim_y = std::min(consts::maxTextureDim, consts::maxNumImagesY * target.shadowMapSize);
+    uint32_t max_shadow_map_x = max_shadow_map_dim_x / target.shadowMapSize;
+    uint32_t max_shadow_map_y = max_shadow_map_dim_y / target.shadowMapSize;
+
     for (uint32_t i = 0; i < target.numViews; ++i) {
         uint32_t image_x = i % max_num_image_x;
         uint32_t image_y = i / max_num_image_x;
@@ -1391,8 +1382,12 @@ static void issueRasterization(vk::Device &dev,
         dev.dt.cmdSetScissor(draw_cmd, 0, 1, &rect);
 
         shader::BatchDrawPushConst push_const = {
-            i * consts::maxDrawsPerView,
-            num_lights_per_world
+            .drawDataOffset = i * consts::maxDrawsPerView,
+            .numLights = num_lights_per_world,
+            .maxShadowMapsXPerTarget = max_shadow_map_x,
+            .maxShadowMapsYPerTarget = max_shadow_map_y,
+            .shadowMapWidth = target.shadowMapSize,
+            .shadowMapHeight = target.shadowMapSize
         };
 
         dev.dt.cmdPushConstants(draw_cmd, draw_pipeline.layout,
@@ -1551,7 +1546,7 @@ static void issueShadowDraw(vk::Device &dev,
 {
     VkRenderingAttachmentInfoKHR color_attach = {};
     color_attach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
-    color_attach.imageView = target.shadowBufferView;
+    color_attach.imageView = target.shadowMapView;
     color_attach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     color_attach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     color_attach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1724,7 +1719,7 @@ BatchRenderer::Impl::Impl(const Config &cfg,
           4 + consts::numDrawCmdBuffers, rctx.repeatSampler,
           "prepare_views.hlsl", false, "main", makeShaders)),
       batchDraw(makeDrawPipeline(dev, rctx.pipelineCache, VK_NULL_HANDLE, 
-                           consts::numDrawCmdBuffers * cfg.numFrames, 2, depthOnly, rctx.repeatSampler)),
+                           consts::numDrawCmdBuffers * cfg.numFrames, 2, rctx.repeatSampler)),
       createVisualization(makeComputePipeline(
               dev, rctx.pipelineCache, 1,
               sizeof(uint32_t) * 2,
@@ -1739,7 +1734,7 @@ BatchRenderer::Impl::Impl(const Config &cfg,
               consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
               "batch_shadow_gen.hlsl", false, "shadowGen", makeShaders)),
       shadowDraw(makeShadowDrawPipeline(dev, rctx.pipelineCache, VK_NULL_HANDLE, 
-                           consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler)),
+                           consts::numDrawCmdBuffers * cfg.numFrames, 3, rctx.repeatSampler)),
       batchFrames(cfg.numFrames),
       assetSetPrepare(rctx.asset_set_cull_),
       assetSetDraw(rctx.asset_set_draw_),
@@ -1806,42 +1801,38 @@ BatchRenderer::~BatchRenderer()
     impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->prepareViews.layout, nullptr);
 
     // If the batch renderer was enabled
-    if (impl->batchDraw.has_value()) {
-        impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->batchDraw->hdls[0], nullptr);
-        impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->batchDraw->layout, nullptr);
+    impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->batchDraw.hdls[0], nullptr);
+    impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->batchDraw.hdls[1], nullptr);
+    impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->batchDraw.layout, nullptr);
 
-        impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->createVisualization->hdls[0], nullptr);
-        impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->createVisualization->layout, nullptr);
+    impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->createVisualization.hdls[0], nullptr);
+    impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->createVisualization.layout, nullptr);
 
-        impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->lighting->hdls[0], nullptr);
-        impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->lighting->layout, nullptr);
+    impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->lighting.hdls[0], nullptr);
+    impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->lighting.layout, nullptr);
 
-        for(int i=0;i<impl->batchFrames.size();i++){
-            impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].prepareCmdPool, nullptr);
-            impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].renderCmdPool, nullptr);
-            impl->dev.dt.destroySemaphore(impl->dev.hdl, impl->batchFrames[i].prepareFinished, nullptr);
-            impl->dev.dt.destroySemaphore(impl->dev.hdl, impl->batchFrames[i].renderFinished, nullptr);
-            impl->dev.dt.destroySemaphore(impl->dev.hdl, impl->batchFrames[i].layoutTransitionFinished, nullptr);
-            impl->dev.dt.destroyFence(impl->dev.hdl, impl->batchFrames[i].prepareFence, nullptr);
-            impl->dev.dt.destroyFence(impl->dev.hdl, impl->batchFrames[i].renderFence, nullptr);
+    impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->shadowGen.hdls[0], nullptr);
+    impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->shadowGen.layout, nullptr);
 
-            for(int j=0;j<impl->batchFrames[i].targets.size();j++){
-                impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].vizBufferView, nullptr);
-                impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].depthView, nullptr);
-            }
+    impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->shadowDraw.hdls[0], nullptr);
+    impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->shadowDraw.layout, nullptr);
+
+    for(int i=0;i<impl->batchFrames.size();i++){
+        impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].prepareCmdPool, nullptr);
+        impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].renderCmdPool, nullptr);
+        impl->dev.dt.destroySemaphore(impl->dev.hdl, impl->batchFrames[i].prepareFinished, nullptr);
+        impl->dev.dt.destroySemaphore(impl->dev.hdl, impl->batchFrames[i].renderFinished, nullptr);
+        impl->dev.dt.destroySemaphore(impl->dev.hdl, impl->batchFrames[i].layoutTransitionFinished, nullptr);
+        impl->dev.dt.destroyFence(impl->dev.hdl, impl->batchFrames[i].prepareFence, nullptr);
+        impl->dev.dt.destroyFence(impl->dev.hdl, impl->batchFrames[i].renderFence, nullptr);
+
+        for(int j=0;j<impl->batchFrames[i].targets.size();j++){
+            impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].vizBufferView, nullptr);
+            impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].depthView, nullptr);
+            impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].shadowMapView, nullptr);
+            impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].shadowDepthView, nullptr);
         }
-    }
-    else {
-        for(int i=0;i<impl->batchFrames.size();i++){
-            impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].prepareCmdPool, nullptr);
-            impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].renderCmdPool, nullptr);
-            impl->dev.dt.destroySemaphore(impl->dev.hdl, impl->batchFrames[i].prepareFinished, nullptr);
-            impl->dev.dt.destroySemaphore(impl->dev.hdl, impl->batchFrames[i].renderFinished, nullptr);
-            impl->dev.dt.destroySemaphore(impl->dev.hdl, impl->batchFrames[i].layoutTransitionFinished, nullptr);
-            impl->dev.dt.destroyFence(impl->dev.hdl, impl->batchFrames[i].prepareFence, nullptr);
-            impl->dev.dt.destroyFence(impl->dev.hdl, impl->batchFrames[i].renderFence, nullptr);
-        }
-    }
+    }        
 
     impl->dev.dt.destroyQueryPool(impl->dev.hdl, impl->timeQueryPool, nullptr);
 }
@@ -2533,7 +2524,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                                   rctx);
 
         issueShadowDraw(impl->dev,
-                        *(impl->shadowDraw),
+                        impl->shadowDraw,
                         target,
                         draw_cmd,
                         draw_package,
@@ -2548,7 +2539,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
 
         // Begin rendering
         issueRasterization(impl->dev,
-                           *(impl->batchDraw),
+                           impl->batchDraw,
                            target,
                            draw_cmd,
                            draw_package,
@@ -2582,7 +2573,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
 
     issueDeferred(
         impl->dev,
-        *(impl->lighting), 
+        impl->lighting, 
         draw_cmd,
         frame_data,
         impl->renderExtent,
