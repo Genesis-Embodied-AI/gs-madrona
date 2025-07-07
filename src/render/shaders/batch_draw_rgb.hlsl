@@ -52,6 +52,12 @@ Texture2D<float4> materialTexturesArray[];
 [[vk::binding(1, 3)]]
 SamplerState linearSampler;
 
+#define SHADOW_BIAS 0.002f
+
+float linear_step(float low, float high, float v) {
+    return clamp((v - low) / (high - low), 0, 1);
+}
+
 struct V2F {
     [[vk::location(0)]] float4 position : SV_Position;
     [[vk::location(1)]] float3 worldPos : TEXCOORD0;
@@ -88,7 +94,7 @@ float shadowFactorVSM(float3 world_pos, uint view_idx)
 
     /* Light space position */
     float4 world_pos_v4 = float4(world_pos.xyz, 1.f);
-    float4 ls_pos = mul(shadowViewDataBuffer[pushConst.viewIdx].viewProjectionMatrix, 
+    float4 ls_pos = mul(shadowViewDataBuffer[view_idx].viewProjectionMatrix, 
                         world_pos_v4);
     ls_pos.xyz /= ls_pos.w;
     ls_pos.z += SHADOW_BIAS;
@@ -101,19 +107,19 @@ float shadowFactorVSM(float3 world_pos, uint view_idx)
         ls_pos.z > 1.0 || ls_pos.z < 0.0)
         return 1.0;
 
-    uint2 shadow_map_dim = shadowMapTextures[shadow_map_target_idx].GetDimensions();
+    uint2 shadow_map_dim;
+    shadowMapTextures[shadow_map_target_idx].GetDimensions(shadow_map_dim.x, shadow_map_dim.y);
     float2 texel_size = float2(1.f, 1.f) / float2(shadow_map_dim);
     float2 shadow_map_uv = (uv + shadow_map_pixel_offset.xy) / float2(shadow_map_dim);
     float2 moment = shadowMapTextures[shadow_map_target_idx].SampleLevel(linearSampler, shadow_map_uv, 0);
 
-    float occlusion = 0.0f;
-
     // PCF
     float pcf_count = 1;
+    float occlusion = 0.0f;
 
     for (int x = int(-pcf_count); x <= int(pcf_count); ++x) {
         for (int y = int(-pcf_count); y <= int(pcf_count); ++y) {
-            float2 moment = shadowMap.SampleLevel(linearSampler, 
+            float2 moment = shadowMapTextures[shadow_map_target_idx].SampleLevel(linearSampler, 
                                                   uv + float2(x, y) * texel_size, 0).rg;
 
             // Chebychev's inequality

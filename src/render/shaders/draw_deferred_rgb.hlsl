@@ -57,8 +57,6 @@ StructuredBuffer<RenderOptions> renderOptionsBuffer;
 
 #include "lighting.h"
 
-#define SHADOW_BIAS 0.002f
-
 float calculateLinearDepth(float depth_in)
 {
     // Calculate linear depth with reverse-z buffer
