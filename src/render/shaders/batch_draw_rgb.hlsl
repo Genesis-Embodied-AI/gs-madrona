@@ -242,6 +242,7 @@ PixelOutput frag(in V2F v2f,
             float3 totalLighting = 0;
             uint numLights = pushConst.numLights;
             float shadowFactor = shadowFactorVSM(v2f.worldPos, v2f.viewIdx);
+            shadowFactor = 1.f;
 
             [unroll(1)]
             for (uint i = 0; i < numLights; i++) {

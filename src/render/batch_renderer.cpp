@@ -891,6 +891,7 @@ static void makeBatchFrame(vk::Device& dev,
     vk::LocalBuffer light_offsets = alloc.makeLocalBuffer(light_offsets_size).value();
 
     VkDeviceSize shadow_view_data_size = cfg.numWorlds * cfg.maxViewsPerWorld * sizeof(shader::ShadowViewData);
+    shadow_view_data_size = std::max(shadow_view_data_size, (VkDeviceSize)1024);
     vk::LocalBuffer shadow_view_data = alloc.makeLocalBuffer(shadow_view_data_size).value();
 
     VkCommandPool prepare_cmdpool = vk::makeCmdPool(dev, dev.gfxQF);
