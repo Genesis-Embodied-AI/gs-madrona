@@ -461,7 +461,7 @@ def main():
         "-d",
         "--data_file_path",
         type=str,
-        default="logs/benchmark/batch_benchmark_20250615_234412.csv",
+        default="scripts/perf_benchmark/benchmark_reports/Perf_Run_Name/perf_data.csv",
         help="Path to the benchmark data CSV file",
     )
     parser.add_argument(
