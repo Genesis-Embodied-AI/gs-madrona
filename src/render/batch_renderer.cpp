@@ -2176,6 +2176,17 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
 
     // Start the command buffer and stuff
     VkCommandBuffer draw_cmd = frame_data.prepareCmdbuf;
+
+    // Start a label for the prepare for rendering
+    VkDebugUtilsLabelEXT label = {};
+    label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+    label.pLabelName = "Prepare for rendering";
+    label.color[0] = 0.8f;  // RGBA
+    label.color[1] = 0.1f;
+    label.color[2] = 0.1f;
+    label.color[3] = 1.0f;
+    impl->dev.dt.cmdBeginDebugUtilsLabelEXT(draw_cmd, &label);
+
     {
         REQ_VK(impl->dev.dt.resetCommandPool(impl->dev.hdl, frame_data.prepareCmdPool, 0));
         VkCommandBufferBeginInfo begin_info {};
@@ -2282,6 +2293,8 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
     frame_data.latestOp = LatestOperation::RenderPrepare;
 
     didRender = true;
+
+    impl->dev.dt.cmdEndDebugUtilsLabelEXT(draw_cmd);
 }
 
 static void packSky( const vk::Device &dev,
@@ -2385,6 +2398,17 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
 
     // Start the command buffer and stuff
     VkCommandBuffer draw_cmd = frame_data.renderCmdbuf;
+
+    // Start a label for the prepare for rendering
+    VkDebugUtilsLabelEXT label = {};
+    label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+    label.pLabelName = "Render views";
+    label.color[0] = 0.8f;  // RGBA
+    label.color[1] = 0.1f;
+    label.color[2] = 0.1f;
+    label.color[3] = 1.0f;
+    impl->dev.dt.cmdBeginDebugUtilsLabelEXT(draw_cmd, &label);
+
     {
         REQ_VK(impl->dev.dt.resetCommandPool(impl->dev.hdl, frame_data.renderCmdPool, 0));
         VkCommandBufferBeginInfo begin_info {};
@@ -2522,11 +2546,16 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
         }
     }
 
+    label.pLabelName = "Shadow generation";
+    impl->dev.dt.cmdBeginDebugUtilsLabelEXT(draw_cmd, &label);
+
     issueShadowGen(impl->dev,
                    impl->shadowGen,
                    frame_data,
                    draw_cmd,
                    impl->maxNumViews);
+
+    impl->dev.dt.cmdEndDebugUtilsLabelEXT(draw_cmd);
 
     // Issue the memory barrier for the draw packages
     issueMemoryBarrier(impl->dev, draw_cmd,
@@ -2547,6 +2576,9 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
         auto &draw_package = frame_data.drawPackageSwapchain[draw_package_idx];
 
         // Issue the prepare views pipeline with the current draw package
+        label.pLabelName = "Prepare views";
+        impl->dev.dt.cmdBeginDebugUtilsLabelEXT(draw_cmd, &label);
+
         issuePrepareViewsPipeline(impl->dev,
                                   draw_cmd,
                                   impl->prepareViews,
@@ -2560,6 +2592,11 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                                   draw_package_idx,
                                   rctx);
 
+        impl->dev.dt.cmdEndDebugUtilsLabelEXT(draw_cmd);
+
+        label.pLabelName = "Shadow draw";
+        impl->dev.dt.cmdBeginDebugUtilsLabelEXT(draw_cmd, &label);
+
         issueShadowDraw(impl->dev,
                         impl->shadowDraw,
                         target,
@@ -2568,7 +2605,12 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                         frame_data,
                         impl->assetSetLighting,
                         loaded_assets);
-        
+
+        impl->dev.dt.cmdEndDebugUtilsLabelEXT(draw_cmd);
+
+        label.pLabelName = "Rasterization";
+        impl->dev.dt.cmdBeginDebugUtilsLabelEXT(draw_cmd, &label);
+
         // Now, start the rasterization
         issueRasterLayoutTransitions(impl->dev,
                                      target,
@@ -2588,6 +2630,11 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                            !this->renderOptions.outputRGB && this->renderOptions.outputDepth,
                            info.numLights / info.numWorlds);
 
+        impl->dev.dt.cmdEndDebugUtilsLabelEXT(draw_cmd);
+
+        label.pLabelName = "Compute layout transitions";
+        impl->dev.dt.cmdBeginDebugUtilsLabelEXT(draw_cmd, &label);
+
         issueComputeLayoutTransitions(impl->dev,
                                       target,
                                       draw_cmd);
@@ -2602,11 +2649,16 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                            VK_PIPELINE_STAGE_TRANSFER_BIT);
 
+        impl->dev.dt.cmdEndDebugUtilsLabelEXT(draw_cmd);
+
         impl->dev.dt.cmdFillBuffer(draw_cmd, draw_package.drawBuffer.buffer,
                                    0, target.numViews * sizeof(uint32_t), 0);
 
         num_processed_views += target.numViews;
     }
+
+    label.pLabelName = "Deferred lighting";
+    impl->dev.dt.cmdBeginDebugUtilsLabelEXT(draw_cmd, &label);
 
     issueDeferred(
         impl->dev,
@@ -2621,6 +2673,8 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
         frame_data.pbrSet,
         frame_data.targets[0].viewWidth,
         frame_data.targets[0].viewHeight);
+
+    impl->dev.dt.cmdEndDebugUtilsLabelEXT(draw_cmd);
 
     impl->dev.dt.cmdWriteTimestamp(draw_cmd, 
                                    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
@@ -2663,6 +2717,8 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                 VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
 
     frame_data.latestOp = LatestOperation::RenderViews;
+
+    impl->dev.dt.cmdEndDebugUtilsLabelEXT(draw_cmd);
 }
 
 BatchImportedBuffers &BatchRenderer::getImportedBuffers(uint32_t frame_id) 

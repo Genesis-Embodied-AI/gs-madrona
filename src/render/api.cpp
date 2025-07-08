@@ -15,12 +15,13 @@ static APIBackendSelect chooseBackend(APIBackendSelect desired)
 
 static bool checkVkValidationOverride(bool enable_validation)
 {
-    char *validate_env = getenv("MADRONA_VK_VALIDATE");
-    if (validate_env != nullptr && validate_env[0] == '1') {
-        enable_validation = true;
-    }
+//     char *validate_env = getenv("MADRONA_VK_VALIDATE");
+//     if (validate_env != nullptr && validate_env[0] == '1') {
+//         enable_validation = true;
+//     }
 
-    return enable_validation;
+//     return enable_validation;
+    return true;
 }
 
 static APIBackend * initVkBackend(APILib *lib, const APIManager::Config &cfg)

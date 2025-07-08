@@ -228,7 +228,7 @@ Backend::Init Backend::Init::init(
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pApplicationName = "madrona";
     app_info.pEngineName = "madrona";
-    app_info.apiVersion = VK_API_VERSION_1_2;
+    app_info.apiVersion = VK_API_VERSION_1_3;
 
     vector<const char *> layers;
     DynArray<const char *> extensions(extra_exts.size());
@@ -242,6 +242,7 @@ Backend::Init Backend::Init::init(
     val_features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
 
     bool enable_validation = want_validation && checkValidationAvailable(dt);
+    printf("enable_validation: %d\n", enable_validation);
 
     if (enable_validation) {
         layers.push_back("VK_LAYER_KHRONOS_validation");
@@ -272,6 +273,9 @@ Backend::Init Backend::Init::init(
         val_features.pEnabledValidationFeatures = val_enabled.data();
     }
 
+    // For Renderdoc scopes and labels
+    // extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+
     VkInstanceCreateInfo inst_info {};
     inst_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     inst_info.pNext = &val_features;
@@ -291,6 +295,25 @@ Backend::Init Backend::Init::init(
         inst_info.enabledExtensionCount = extensions.size();
         inst_info.ppEnabledExtensionNames = extensions.data();
     }
+
+    //
+    // Before the createInstance call, add:
+    std::cout << "Requesting " << inst_info.enabledLayerCount << " layers:" << std::endl;
+    for (uint32_t i = 0; i < inst_info.enabledLayerCount; i++) {
+        std::cout << "  - " << inst_info.ppEnabledLayerNames[i] << std::endl;
+    }
+
+    // Check available layers
+    uint32_t layerCount;
+    dt.enumerateInstanceLayerProperties(&layerCount, nullptr);
+    std::vector<VkLayerProperties> availableLayers(layerCount);
+    dt.enumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+    std::cout << "Available layers:" << std::endl;
+    for (const auto& layer : availableLayers) {
+        std::cout << "  - " << layer.layerName << std::endl;
+    }
+    //
 
     VkInstance inst;
     REQ_VK(dt.createInstance(&inst_info, nullptr, &inst));
@@ -659,6 +682,9 @@ Device * Backend::makeDevice(
         extensions.push_back(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
 #endif
     }
+
+    // For RenderDoc labels
+    // extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
     VkPhysicalDeviceFeatures2 feats;
     feats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
