@@ -228,6 +228,10 @@ static vk::PipelineShaders makeDrawShaders(const vk::Device &dev,
                      InternalConfig::maxTextures, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
                  },
                  vk::BindingOverride {
+                     0, 6, VK_NULL_HANDLE,
+                     InternalConfig::maxTextures, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+                 },
+                 vk::BindingOverride {
                      3, 1, repeat_sampler, 1, 0
                  }
             }));
@@ -433,6 +437,33 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
         std::move(desc_pools)
     };
 }
+static vk::PipelineShaders makeShadowDrawShaders(const vk::Device &dev,
+                                           VkSampler repeat_sampler)
+{
+    std::filesystem::path shader_dir =
+        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
+        "shaders";
+
+    auto shader_path = (shader_dir / "batch_shadow_draw.hlsl").string();
+
+    ShaderCompiler compiler;
+    SPIRVShader vert_spirv = compiler.compileHLSLFileToSPV(
+        shader_path.c_str(), {}, {},
+        { "vert", ShaderStage::Vertex });
+
+    SPIRVShader frag_spirv = compiler.compileHLSLFileToSPV(
+        shader_path.c_str(), {}, {},
+        { "frag", ShaderStage::Fragment });
+
+    std::array<SPIRVShader, 2> shaders {
+        std::move(vert_spirv),
+        std::move(frag_spirv),
+    };
+
+    StackAlloc tmp_alloc;
+    return vk::PipelineShaders(dev, tmp_alloc, shaders,
+        Span<const vk::BindingOverride>({}));
+}
 
 static PipelineMP<1> makeShadowDrawPipeline(const vk::Device &dev,
                                     VkPipelineCache pipeline_cache,
@@ -441,7 +472,7 @@ static PipelineMP<1> makeShadowDrawPipeline(const vk::Device &dev,
                                     uint32_t num_pools,
                                     VkSampler repeat_sampler)
 {
-    auto shaders = makeDrawShaders(dev, repeat_sampler, repeat_sampler);
+    auto shaders = makeShadowDrawShaders(dev, repeat_sampler);
 
     VkPipelineVertexInputStateCreateInfo vert_info {};
     VkPipelineInputAssemblyStateCreateInfo input_assembly_info {};
