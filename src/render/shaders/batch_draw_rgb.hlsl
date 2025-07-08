@@ -175,6 +175,19 @@ void vert(in uint vid : SV_VertexID,
         view_data.zNear,
         view_pos.y);
 
+#if 1
+    uint something = min(0, instanceOffsets[0]) +
+                     min(0, drawCount[0]) +
+                     min(0, drawCommandBuffer[0].vertexOffset) +
+                     min(0, int(ceil(meshDataBuffer[0].vertexOffset)));
+
+    // v2f.meshID = draw_data.meshID;
+#endif
+
+    clip_pos.x += min(0.0, abs(float(draw_data.meshID))) +
+                  min(0.0, abs(float(draw_data.instanceID))) +
+                  something;
+
     v2f.worldPos = rotateVec(instance_data.rotation, instance_data.scale * vert.position) + instance_data.position;
     v2f.position = clip_pos;
     v2f.uv = vert.uv;

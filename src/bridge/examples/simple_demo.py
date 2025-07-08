@@ -78,7 +78,7 @@ def main():
 
     # warmup
     scene.step()
-    rgb, depth, _, _ = scene.render_all_cameras()
+    rgb, depth, _, _ = scene.render_all_cameras(rgb=True, depth=False)
 
     # Create an image exporter
     output_dir = "img_output/demo"
@@ -92,7 +92,7 @@ def main():
     for i in range(n_steps):
         scene.step()
         if do_batch_dump:
-            rgb, depth, _, _ = scene.render_all_cameras(rgb=True, depth=True)
+            rgb, depth, _, _ = scene.render_all_cameras(rgb=True, depth=False)
             exporter.export_frame_all_cameras(i, rgb=rgb, depth=depth)
         else:
             rgb, depth, _, _ = cam_0.render()
