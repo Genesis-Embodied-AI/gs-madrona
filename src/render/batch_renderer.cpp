@@ -300,8 +300,8 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
     gfx_layout_info.flags = 0;
     
     // Descriptor set layouts
-    uint32_t num_layouts = 4;
-    std::array<VkDescriptorSetLayout, 4> draw_desc_layouts {{
+    const uint32_t num_layouts = 4;
+    std::array<VkDescriptorSetLayout, num_layouts> draw_desc_layouts {{
         shaders.getLayout(0),
         shaders.getLayout(1),
         shaders.getLayout(2),
