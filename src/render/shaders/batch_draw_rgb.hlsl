@@ -54,7 +54,7 @@ Texture2D<float2> shadowMapTextures[];
 
 // TODO: Ambient intensity is hardcoded for now. Shadow bias is hardcoded for now.
 // Will implement in the future.
-static const float ambient = 0.2;
+static const float ambient = 0.05;
 
 struct V2F {
     [[vk::location(0)]] float4 position : SV_Position;
@@ -303,11 +303,8 @@ PixelOutput frag(in V2F v2f,
                     totalLighting *= shadowFactor;
                 }
             }
-
-            float3 lighting = totalLighting * color.rgb;
-            lighting += color.rgb * ambient;
             
-            color.rgb = lighting;
+            color.rgb = (totalLighting + ambient) * color.rgb;
             output.rgbOut = color;
         }
     }

@@ -42,6 +42,7 @@ def main():
 
     ########################## cameras ##########################
     cam_0 = scene.add_camera(
+        res=(256, 256),
         pos=(1.5, 0.5, 1.5),
         lookat=(0.0, 0.0, 0.5),
         fov=45,
@@ -49,6 +50,7 @@ def main():
     )
     cam_0.attach(franka.links[6], trans_to_T(np.array([0.0, 0.5, 0.0])))
     cam_1 = scene.add_camera(
+        res=(256, 256),
         pos=(3.5, 0.0, 2.5),
         lookat=(0, 0, 0.5),
         fov=30,
@@ -60,15 +62,15 @@ def main():
         directional=1,
         castshadow=1,
         cutoff=45.0,
-        intensity=0.5,
+        intensity=0.8,
     )
     scene.add_light(
         pos=[4, -4, 4],
         dir=[-1, 1, -1],
         directional=0,
-        castshadow=1,
+        castshadow=0,
         cutoff=45.0,
-        intensity=0.5,
+        intensity=0.2,
     )
     ########################## build ##########################
     n_envs = 3
