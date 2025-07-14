@@ -20,7 +20,7 @@ static bool checkVkValidationOverride(bool enable_validation)
         enable_validation = true;
     }
 
-    return true;
+    return enable_validation;
 }
 
 static APIBackend * initVkBackend(APILib *lib, const APIManager::Config &cfg)
