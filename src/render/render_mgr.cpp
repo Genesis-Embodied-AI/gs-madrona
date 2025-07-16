@@ -75,4 +75,14 @@ const int32_t *RenderManager::batchRendererSegmentationOut() const
         0, ComponentNames::Segmentation);
 }
 
+const float * RenderManager::batchRendererNormalOut() const
+{
+    return rctx_->batchRenderer->getNormalCUDAPtr();
+}
+
+const int32_t * RenderManager::batchRendererSegmentationOut() const
+{
+    return rctx_->batchRenderer->getSegmentationCUDAPtr();
+}
+
 }
