@@ -2541,6 +2541,16 @@ const vk::LocalBuffer &BatchRenderer::getComponentBuffer(uint32_t frame_id, uint
     return impl->batchFrames[frame_id].getComponentOutputBuffer(component);
 }
 
+const vk::LocalBuffer & BatchRenderer::getNormalBuffer() const
+{
+    return impl->batchFrames[0].normalOutput.buf;
+}
+
+const vk::LocalBuffer & BatchRenderer::getSegmentationBuffer() const
+{
+    return impl->batchFrames[0].segmentationOutput.buf;
+}
+
 // Get the semaphore that the viewer renderer has to wait on
 VkSemaphore BatchRenderer::getLatestWaitSemaphore()
 {
@@ -2564,6 +2574,30 @@ const void *BatchRenderer::getComponentCUDAPtr(uint32_t frame_id, uint32_t compo
 #else
     if (!renderOptions.outputs[component]) { return nullptr; }
     return impl->batchFrames[frame_id].getComponentOutputBufferCUDA(component);
+#endif
+}
+
+const float * BatchRenderer::getNormalCUDAPtr() const
+{
+#ifndef MADRONA_VK_CUDA_SUPPORT
+    return nullptr;
+#else
+    if(this->renderOptions.outputNormal == 0) {
+        return nullptr;
+    }
+    return (float *)impl->batchFrames[0].normalOutputCUDA.getDevicePointer();
+#endif
+}
+
+const int32_t * BatchRenderer::getSegmentationCUDAPtr() const
+{
+#ifndef MADRONA_VK_CUDA_SUPPORT
+    return nullptr;
+#else
+    if(this->renderOptions.outputSegmentation == 0) {
+        return nullptr;
+    }
+    return (int32_t *)impl->batchFrames[0].segmentationOutputCUDA.getDevicePointer();
 #endif
 }
 
