@@ -136,6 +136,8 @@ struct BVHParams {
 
     void *rgbOutput;
     void *depthOutput;
+    void *normalOutput;
+    void *segmentationOutput;
     uint32_t renderOutputWidth;
     uint32_t renderOutputHeight;
 

@@ -112,6 +112,8 @@ struct BatchRenderer {
 
     const vk::LocalBuffer & getRGBBuffer() const;
     const vk::LocalBuffer & getDepthBuffer() const;
+    const vk::LocalBuffer & getNormalBuffer() const;
+    const vk::LocalBuffer & getSegmentationBuffer() const;
 
     // Get the semaphore that the viewer renderer has to wait on.
     // This is either going to be the semaphore from prepareForRendering,
@@ -120,6 +122,8 @@ struct BatchRenderer {
 
     const uint8_t * getRGBCUDAPtr() const;
     const float * getDepthCUDAPtr() const;
+    const float * getNormalCUDAPtr() const;
+    const int32_t * getSegmentationCUDAPtr() const;
 };
 
 }

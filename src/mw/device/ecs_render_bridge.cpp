@@ -70,6 +70,12 @@ extern "C" __global__ void initBVHParams(madrona::BVHParams *params,
     params->depthOutput = (void *)mgr->getArchetypeComponent<
         RaycastOutputArchetype, render::DepthOutputBuffer>();
 
+    params->normalOutput = (void *)mgr->getArchetypeComponent<
+        RaycastOutputArchetype, render::NormalOutputBuffer>();
+
+    params->segmentationOutput = (void *)mgr->getArchetypeComponent<
+        RaycastOutputArchetype, render::SegmentationOutputBuffer>();
+
     params->renderOutputWidth = 
         mwGPU::GPUImplConsts::get().raycastOutputWidth;
     params->renderOutputHeight = 

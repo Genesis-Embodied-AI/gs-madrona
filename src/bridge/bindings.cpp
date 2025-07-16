@@ -223,6 +223,8 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
         .def("camera_rotations_tensor", &Manager::cameraRotationsTensor)
         .def("rgb_tensor", &Manager::rgbTensor)
         .def("depth_tensor", &Manager::depthTensor)
+        .def("normal_tensor", &Manager::normalTensor)
+        .def("segmentation_tensor", &Manager::segmentationTensor)
     ;
 }
 

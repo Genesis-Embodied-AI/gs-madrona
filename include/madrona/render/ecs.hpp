@@ -153,6 +153,8 @@ struct RenderOutputBuffer {
 
 struct RGBOutputBuffer : RenderOutputBuffer {};
 struct DepthOutputBuffer : RenderOutputBuffer {};
+struct NormalOutputBuffer : RenderOutputBuffer {};
+struct SegmentationOutputBuffer : RenderOutputBuffer {};
 
 // Reference to an output
 struct RenderOutputRef {

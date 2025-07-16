@@ -310,6 +310,15 @@ struct Manager::Impl {
         renderImpl(makeRenderOptions(render_options));
     }
 
+    inline const uint8_t * getRGBOut() const
+    {
+        if (cfg.useRT) {
+            return (uint8_t *)gpuExec.getExported((uint32_t)ExportID::RaycastRGB);
+        } else {
+            return renderMgr->batchRendererRGBOut();
+        }
+    }
+
     inline const float * getDepthOut() const
     {
         if (cfg.useRT) {
@@ -319,12 +328,21 @@ struct Manager::Impl {
         }
     }
 
-    inline const uint8_t * getRGBOut() const
+    inline const float * getNormalOut() const
     {
         if (cfg.useRT) {
-            return (uint8_t *)gpuExec.getExported((uint32_t)ExportID::RaycastRGB);
+            return (float *)gpuExec.getExported((uint32_t)ExportID::RaycastNormal);
         } else {
-            return renderMgr->batchRendererRGBOut();
+            return renderMgr->batchRendererNormalOut();
+        }
+    }
+
+    inline const int32_t * getSegmentationOut() const
+    {
+        if (cfg.useRT) {
+            return (int32_t *)gpuExec.getExported((uint32_t)ExportID::RaycastSegmentation);
+        } else {
+            return renderMgr->batchRendererSegmentationOut();
         }
     }
 
@@ -799,6 +817,38 @@ Tensor Manager::depthTensor() const
     }
 
     return Tensor((void *)depth_ptr, TensorElementType::Float32, {
+        impl_->cfg.numWorlds,
+        impl_->numCams,
+        impl_->cfg.batchRenderViewHeight,
+        impl_->cfg.batchRenderViewWidth,
+        1,
+    }, impl_->cfg.gpuID);
+}
+
+Tensor Manager::normalTensor() const
+{
+    const float *normal_ptr = impl_->getNormalOut();
+    if(normal_ptr == nullptr) {
+        return Tensor::none();
+    }
+
+    return Tensor((void *)normal_ptr, TensorElementType::Float32, {
+        impl_->cfg.numWorlds,
+        impl_->numCams,
+        impl_->cfg.batchRenderViewHeight,
+        impl_->cfg.batchRenderViewWidth,
+        3,
+    }, impl_->cfg.gpuID);
+}
+
+Tensor Manager::segmentationTensor() const
+{
+    const int32_t *segmentation_ptr = impl_->getSegmentationOut();
+    if(segmentation_ptr == nullptr) {
+        return Tensor::none();
+    }
+
+    return Tensor((void *)segmentation_ptr, TensorElementType::Int32, {
         impl_->cfg.numWorlds,
         impl_->numCams,
         impl_->cfg.batchRenderViewHeight,

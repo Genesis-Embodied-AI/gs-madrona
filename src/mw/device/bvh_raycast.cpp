@@ -847,8 +847,7 @@ static __device__ TraceResult traceRay(
     return result;
 }
 
-static __device__ void writeRGB(uint32_t pixel_byte_offset,
-                           const Vector3 &color)
+static __device__ void writeRGB(uint32_t pixel_byte_offset, const Vector3 &color)
 {
     uint8_t *rgb_out = (uint8_t *)bvhParams.rgbOutput + pixel_byte_offset;
 
@@ -858,12 +857,25 @@ static __device__ void writeRGB(uint32_t pixel_byte_offset,
     *(rgb_out + 3) = 255;
 }
 
-static __device__ void writeDepth(uint32_t pixel_byte_offset,
-                             float depth)
+static __device__ void writeDepth(uint32_t pixel_byte_offset, float depth)
 {
-    float *depth_out = (float *)
-        ((uint8_t *)bvhParams.depthOutput + pixel_byte_offset);
+    float *depth_out = (float *)((uint8_t *)bvhParams.depthOutput + pixel_byte_offset);
     *depth_out = depth;
+}
+
+static __device__ void writeNormal(uint32_t pixel_byte_offset, const Vector3 &normal)
+{
+    float *normal_out = (float *)((uint8_t *)bvhParams.normalOutput + pixel_byte_offset);
+
+    *(normal_out + 0) = normal.x;
+    *(normal_out + 1) = normal.y;
+    *(normal_out + 2) = normal.z;
+}
+
+static __device__ void writeSegmentaion(uint32_t pixel_byte_offset, int32_t segmentaion)
+{
+    int32_t *segmentaion_out = (int32_t *)((uint8_t *)bvhParams.segmentaionOutput + pixel_byte_offset);
+    *segmentaion_out = segmentaion;
 }
 
 static __device__ float linearToSRGB(float color) {

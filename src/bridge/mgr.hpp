@@ -112,6 +112,8 @@ public:
 
     MGR_EXPORT madrona::py::Tensor rgbTensor() const;
     MGR_EXPORT madrona::py::Tensor depthTensor() const;
+    MGR_EXPORT madrona::py::Tensor normalTensor() const;
+    MGR_EXPORT madrona::py::Tensor segmentationTensor() const;
 
     MGR_EXPORT uint32_t numWorlds() const;
     MGR_EXPORT uint32_t numCams() const;

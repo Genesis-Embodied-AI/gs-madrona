@@ -761,10 +761,14 @@ struct BatchFrame {
     HeapArray<LayeredTarget> targets;
     vk::DedicatedBuffer rgbOutput;
     vk::DedicatedBuffer depthOutput;
+    vk::DedicatedBuffer normalOutput;
+    vk::DedicatedBuffer segmentationOutput;
 
 #ifdef MADRONA_VK_CUDA_SUPPORT
     vk::CudaImportedBuffer rgbOutputCUDA;
     vk::CudaImportedBuffer depthOutputCUDA;
+    vk::CudaImportedBuffer normalOutputCUDA;
+    vk::CudaImportedBuffer segmentationOutputCUDA;
 #endif
 
     // Swapchain of draw packages which get used to feed to the rasterizer
@@ -2736,6 +2740,16 @@ const vk::LocalBuffer & BatchRenderer::getDepthBuffer() const
     return impl->batchFrames[0].depthOutput.buf;
 }
 
+const vk::LocalBuffer & BatchRenderer::getNormalBuffer() const
+{
+    return impl->batchFrames[0].normalOutput.buf;
+}
+
+const vk::LocalBuffer & BatchRenderer::getSegmentationBuffer() const
+{
+    return impl->batchFrames[0].segmentationOutput.buf;
+}
+
 // Get the semaphore that the viewer renderer has to wait on
 VkSemaphore BatchRenderer::getLatestWaitSemaphore()
 {
@@ -2776,6 +2790,30 @@ const float * BatchRenderer::getDepthCUDAPtr() const
         return nullptr;
     }
     return (float *)impl->batchFrames[0].depthOutputCUDA.getDevicePointer();
+#endif
+}
+
+const float * BatchRenderer::getNormalCUDAPtr() const
+{
+#ifndef MADRONA_VK_CUDA_SUPPORT
+    return nullptr;
+#else
+    if(this->renderOptions.outputNormal == 0) {
+        return nullptr;
+    }
+    return (float *)impl->batchFrames[0].normalOutputCUDA.getDevicePointer();
+#endif
+}
+
+const int32_t * BatchRenderer::getSegmentationCUDAPtr() const
+{
+#ifndef MADRONA_VK_CUDA_SUPPORT
+    return nullptr;
+#else
+    if(this->renderOptions.outputSegmentation == 0) {
+        return nullptr;
+    }
+    return (int32_t *)impl->batchFrames[0].segmentationOutputCUDA.getDevicePointer();
 #endif
 }
 

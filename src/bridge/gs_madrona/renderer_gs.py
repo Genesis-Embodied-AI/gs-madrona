@@ -163,6 +163,9 @@ class MadronaBatchRendererAdapter:
         geom_pos, geom_rot = self.get_geom_pos_rot_torch(rigid)
         cam_pos, cam_rot = self.get_camera_pos_rot_torch(cam_pos_tensor, cam_rot_tensor)
 
+        print(geom_pos.shape, geom_rot.shape)
+        print(cam_pos.shape, cam_rot.shape)
+
         self.madrona.render(
             geom_pos,
             geom_rot,
@@ -172,7 +175,9 @@ class MadronaBatchRendererAdapter:
         )
         rgb_torch = self.madrona.rgb_tensor().to_torch()
         depth_torch = self.madrona.depth_tensor().to_torch()
-        return rgb_torch, depth_torch
+        normal_torch = self.madrona.normal_tensor().to_torch()
+        segmentation_torch = self.madrona.segmentation_tensor().to_torch()
+        return rgb_torch, depth_torch, normal_torch, segmentation_torch
 
     def get_material_data(self, rigid):
         n_vgeom = rigid.n_vgeoms
