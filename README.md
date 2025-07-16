@@ -1,3 +1,72 @@
+# gs-madrona — A Fork of Madrona and Madrona-MJX for Genesis
+
+**gs-madrona** is a high-performance batch renderer module designed specifically for [Genesis](https://github.com/genesis-company/Genesis). It is based on a fork of [Madrona](https://github.com/shacklettbp/madrona) and [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx), created in 2025. Since the fork, substantial modifications have been made to adapt the codebase for Genesis, including:
+- Rewriting significant portions of the code
+- Removing unnecessary features
+- Adding new functionality required by Genesis
+
+Due to the extent of these changes, gs-madrona has diverged significantly from its origins and can no longer be synchronized or merged with the original Madrona or Madrona-MJX repositories. It is now a fully independent project with no intention of maintaining backward compatibility. Our focus is solely on evolving gs-madrona into a robust and efficient batch renderer for Genesis.
+
+## Scope and Objectives
+The primary goal of **gs-madrona** is to provide a **high-throughput batch renderer** tightly integrated with Genesis. It supports both rasterization and ray tracing pipelines.
+
+While Genesis already includes a rasterizer via [pyrender](https://github.com/mmatl/pyrender) and a ray tracer via [LuisaRender](https://github.com/LuisaGroup/LuisaRender), these renderers do not support batch processing. With gs-madrona, multiple environments and cameras can be rendered in parallel, significantly improving performance compared to sequential rendering with traditional engines.
+
+**gs-madrona** enables seamless data sharing between Genesis and the renderer, including:
+- Static assets (meshes, textures)
+- Dynamic runtime data (rigid body transforms, camera transforms)
+
+At present, batch rendering supports only basic materials, lighting, and shadows. However, we aim to expand its capabilities to include more advanced rendering features.
+
+## Features Added Since Fork
+- Batch rendering of multiple environments and cameras
+- Color and depth output integrated into Genesis
+- Support for non-square resolutions
+- Shadow rendering in the rasterizer pipeline
+- Anti-aliasing support for rasterizer output
+- Lighting support (rasterizer and ray tracer) using Genesis-defined light sources
+- Unified lighting model between rasterizer and ray tracer
+- Support for spot lights and directional lights with intensity and shadow-casting flags
+- Automatic mipmap generation for all textures
+- CUDA kernel caching with dirty-check rebuild
+- Fixed vertex normal computation in the ray tracer
+- Benchmark scripts comparing Madrona with other batch renderers, including IsaacLab and ManiSkill
+
+## Removed Features
+- Legacy depth-only rendering via color buffer
+- Batch rendering pipeline based on JAX
+
+## Known Limitations
+- Only color and depth outputs are currently supported
+- Shadows are only cast from the first light with `castshadow=true`
+- When rendering multiple cameras with different resolutions, the first camera’s resolution is used for the entire batch
+
+## Roadmap / Future Plans
+**gs-madrona** will continue evolving to support higher-quality rendering and broader functionality. Upcoming features include:
+- Batch rendering support for cameras with varying resolutions
+- Normal buffer and semantic/instance segmentation output
+- Per-camera dynamic FOV control
+- Camera-specific near/far plane configuration
+- Light color specification
+- Dynamic light parameters (position, direction, intensity, color, enable/disable)
+- Light attenuation based on distance and angle
+- Ambient lighting control (color and intensity)
+- PBR material and texture support
+- Output rendering results to video files
+
+## Performance
+FPS comparison of rendering franka arm (panda) with gs-madrona rasterizer and raytracer
+
+Resolution: 128x128
+
+<p align="center">
+  <img src="./scripts/perf_benchmark/example_report/panda_madrona rasterizer_ madrona raytracer_128x128_comparison_table.png" width="1024" alt="FPS of gs-madrona rasterizer vs raytracer" align="center"/>
+</p>
+
+<p align="center">
+  <img src="./scripts/perf_benchmark/example_report/panda_madrona rasterizer_ madrona raytracer_128x128_comparison_plot.png" width="1024" alt="FPS of gs-madrona rasterizer vs raytracer" align="center"/>
+</p>
+
 ##  Install
 
 ###  Setup Python
@@ -68,10 +137,6 @@ Images will be generated in `image_output`
         )
 ```
 
-### Training
-1. In `gs_render/Genesis`, run
-```
-python examples/rigid/batch_render_with_ppo.py
 ```
 ### Performance Benchmark
 For comprehensive performance benchmarking across multiple renderers (Madrona, Omniverse, PyRender, ManiSkill), please refer to the detailed documentation in `scripts/perf_benchmark/README.md`.

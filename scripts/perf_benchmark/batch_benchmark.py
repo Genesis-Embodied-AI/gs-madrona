@@ -123,7 +123,7 @@ class BatchBenchmarkArgs:
 
     def parse_batch_benchmark_args():
         parser = argparse.ArgumentParser()
-        parser.add_argument("-f", "--config_file", type=str, default="benchmark_config_smoke_test.yml")
+        parser.add_argument("-f", "--config_file", type=str, default="benchmark_config_madrona.yml")
         parser.add_argument("-c", "--continue_from", type=str, default=None)
         args = parser.parse_args()
         return BatchBenchmarkArgs(config_file=args.config_file, continue_from=args.continue_from)
