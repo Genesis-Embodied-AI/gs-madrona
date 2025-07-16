@@ -1,5 +1,7 @@
 mjcf_list:
   - xml/franka_emika_panda/panda.xml
+  - xml/unitree_g1/g1.xml
+  - xml/unitree_go2/go2.xml
 
 renderer_list:
   - renderer: madrona
@@ -55,7 +57,7 @@ raytracer:
 
 # Simulation configuration
 simulation:
-  n_steps: 200
+  n_steps: 1000
 
 # Camera configuration
 camera:

@@ -55,7 +55,7 @@ At present, batch rendering supports only basic materials, lighting, and shadows
 - Output rendering results to video files
 
 ## Performance
-FPS comparison of rendering franka arm (panda) with gs-madrona rasterizer and raytracer
+FPS comparison of rendering [Franka](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/genesis/assets/xml/franka_emika_panda/panda.xml) with gs-madrona rasterizer and raytracer
 
 Resolution: 128x128
 
@@ -153,3 +153,7 @@ Quick start:
 cd scripts/perf_benchmark
 python batch_benchmark.py -f benchmark_config_smoke_test.yml
 ```
+
+## Acknowledgments
+
+The development of gs-madrona is actively supported by [Genesis AI](https://genesis-ai.company/).
