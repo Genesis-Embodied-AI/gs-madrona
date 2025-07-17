@@ -8,7 +8,7 @@ It started as a fork of [Madrona](https://github.com/shacklettbp/madrona) for th
 Due to the extent of these changes, gs-madrona has diverged significantly from its origins. It is now a fully independent project with no intention of maintaining backward compatibility. Our focus is solely on evolving gs-madrona into a robust and efficient batch renderer for [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis).
 
 ## Scope and Objectives
-The primary goal of **gs-madrona** is to provide a **high-throughput batch renderer**.
+**gs-madrona** aims to provide a general-purpose **high-throughput batch renderer**.
 
 **gs-madrona** is the technology used in [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis) to provide native support of batched processing. With **gs-madrona**, multiple environments and cameras can be rendered offscreen in parallel, significantly improving performance compared to renderers doing sequential processing.
 
@@ -57,7 +57,7 @@ At present, batch rendering supports only basic materials, lighting, and shadows
 - Output rendering results to video files
 
 ## Supported Platforms and Environments
-**gs-madrona** should be compatible with any linux distribution and Python>=3.10, however, It has been tested only with Ubuntu 22.04 and Ubuntu 24.04 with python 3.10 and 3.12. The rendering pipeline also high depends on CUDA, so an NVIDIA graphics card with CUDA 12+ support is required for running it.
+**gs-madrona** should be compatible with any linux distribution and Python>=3.10. However, it has been tested only with Ubuntu 22.04 and Ubuntu 24.04 with python 3.10 and 3.12. The rendering pipeline also high depends on CUDA, so an NVIDIA graphics card with CUDA 12+ support is required for running it.
 There is no plan to extend supported platforms at the moment.
 
 ## Performance
