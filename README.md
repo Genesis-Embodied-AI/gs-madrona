@@ -8,15 +8,19 @@ It started as a fork of [Madrona](https://github.com/shacklettbp/madrona) for th
 Due to the extent of these changes, gs-madrona has diverged significantly from its origins. It is now a fully independent project with no intention of maintaining backward compatibility. Our focus is solely on evolving gs-madrona into a robust and efficient batch renderer for [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis).
 
 ## Scope and Objectives
-The primary goal of **gs-madrona** is to provide a **high-throughput batch renderer**. The renderer is connected with [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis) with a forked [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx), which is now a part of **gs-madrona**. **gs-madrona** supports both rasterization and single-bounce ray-tracing pipelines.
+The primary goal of **gs-madrona** is to provide a **high-throughput batch renderer**.
 
 **gs-madrona** is the technology used in [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis) to provide native support of batched processing. With **gs-madrona**, multiple environments and cameras can be rendered offscreen in parallel, significantly improving performance compared to renderers doing sequential processing.
 
-**gs-madrona** enables seamless data sharing between [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis) and the renderer, including:
+**gs-madrona** supports both rasterization and single-bounce ray-tracing pipelines.
+
+**gs-madrona** enables seamless data sharing between simulation platforms, e.g. [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis), and the renderer, including:
 - Static assets (meshes, textures, etc.)
 - Dynamic runtime data (rigid body transforms, camera transforms, etc.)
 
 At present, batch rendering supports only basic materials, lighting, and shadows. However, we aim to expand its capabilities to include more advanced rendering features.
+
+**gs-madrona** aims to be a general-purpose renderer, but there is still dependencies on [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis).  These dependencies are planned to be removed in the near future.
 
 ## Features Added Since Fork
 - Support for non-square resolutions
