@@ -8,7 +8,7 @@ It started as a fork of [Madrona](https://github.com/shacklettbp/madrona) for th
 Due to the extent of these changes, gs-madrona has diverged significantly from its origins. It is now a fully independent project with no intention of maintaining backward compatibility. Our focus is solely on evolving gs-madrona into a robust and efficient batch renderer for Genesis.
 
 ## Scope and Objectives
-The primary goal of **gs-madrona** is to provide a **high-throughput batch renderer**.  The renderer is tightly integrated with Genesis via a forked [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx), which is now a part of **gs-madrona**. **gs-madrona** supports both rasterization and single-bounce ray-tracing pipelines.
+The primary goal of **gs-madrona** is to provide a **high-throughput batch renderer**.  The renderer is connected with Genesis via a forked [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx), which is now a part of **gs-madrona**. **gs-madrona** supports both rasterization and single-bounce ray-tracing pipelines.
 
 **gs-madrona** is the technology used in Genesis to provide support of batched processing. With **gs-madrona**, multiple environments and cameras can be rendered in parallel, significantly improving performance compared to sequential rendering with other engines.
 
@@ -58,39 +58,32 @@ FPS comparison of rendering [Franka](https://github.com/Genesis-Embodied-AI/Gene
 Resolution: 128x128
 
 <p align="center">
-  <img src="./scripts/perf_benchmark/example_report/panda_madrona rasterizer_ madrona raytracer_128x128_comparison_table.png" width="1024" alt="FPS of gs-madrona rasterizer vs raytracer" align="center"/>
+  <img src="./scripts/perf_benchmark/example_report/panda_madrona rasterizer_ madrona raytracer_128x128_comparison_table.png" width="600" alt="FPS of gs-madrona rasterizer vs raytracer" align="center"/>
 </p>
 
 <p align="center">
-  <img src="./scripts/perf_benchmark/example_report/panda_madrona rasterizer_ madrona raytracer_128x128_comparison_plot.png" width="1024" alt="FPS of gs-madrona rasterizer vs raytracer" align="center"/>
+  <img src="./scripts/perf_benchmark/example_report/panda_madrona rasterizer_ madrona raytracer_128x128_comparison_plot.png" width="600" alt="FPS of gs-madrona rasterizer vs raytracer" align="center"/>
 </p>
 
 ##  Install
 
 ###  Setup Python
-1. Download and install [Anaconda](https://www.anaconda.com/download/success) to manage python environment. If you are using Linux, you can download it by
+1. Create a python virtual env 
 ```
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-```  
-
-Run `Miniconda3-latest-Linux-x86_64.sh` and install.
-
-2. Create a python 3.12 virtual env 
-```
-conda create -n madgs312 python=3.12
+python -m venv ~/.virtualenvs/madgs
 ```
 
-3. Activate this environment
+2. Activate this environment
 ```
-conda activate madgs312
+source ~/.virtualenvs/madgs/bin/activate
 ```
 
 ### Clone Madrona and Genesis
 ```
 mkdir gs_render
 cd gs_render
-git clone --recurse-submodules git@github.com:genesis-company/gs-madrona.git
-git clone git@github.com:genesis-company/Genesis.git
+git clone --recurse-submodules https://github.com/Genesis-Embodied-AI/gs-madrona.git
+git clone https://github.com/Genesis-Embodied-AI/Genesis.git
 ```
 
 ### Install Madrona
