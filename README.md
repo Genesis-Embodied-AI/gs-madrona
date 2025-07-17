@@ -20,7 +20,7 @@ The primary goal of **gs-madrona** is to provide a **high-throughput batch rende
 
 At present, batch rendering supports only basic materials, lighting, and shadows. However, we aim to expand its capabilities to include more advanced rendering features.
 
-**gs-madrona** aims to be a general-purpose renderer, but there is still dependencies on [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis).  These dependencies are planned to be removed in the near future.
+**gs-madrona** currently has dependencies on the [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis). These dependencies are planned to be removed in the near future in order to provide a more generic and decoupled interface.
 
 ## Features Added Since Fork
 - Support for non-square resolutions
