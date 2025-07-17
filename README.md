@@ -10,7 +10,7 @@ Due to the extent of these changes, gs-madrona has diverged significantly from i
 ## Scope and Objectives
 The primary goal of **gs-madrona** is to provide a **high-throughput batch renderer**. The renderer is connected with [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis) via a forked [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx), which is now a part of **gs-madrona**. **gs-madrona** supports both rasterization and single-bounce ray-tracing pipelines.
 
-**gs-madrona** is the technology used in [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis) to provide native support of batched processing. With **gs-madrona**, multiple environments and cameras can be rendered offscreen in parallel, significantly improving performance compared to renderers doing sequential rendering.
+**gs-madrona** is the technology used in [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis) to provide native support of batched processing. With **gs-madrona**, multiple environments and cameras can be rendered offscreen in parallel, significantly improving performance compared to renderers doing sequential processing.
 
 **gs-madrona** enables seamless data sharing between [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis) and the renderer, including:
 - Static assets (meshes, textures, etc.)
