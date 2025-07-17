@@ -19,52 +19,11 @@ namespace madrona::render {
 
 struct RenderContext;
 
-<<<<<<< HEAD
 enum class LatestOperation {
     None,
     RenderPrepare,
     RenderViews,
     Transition,
-=======
-struct LayeredTarget {
-    // Contains a uint for triangle ID and another for instance ID
-    render::vk::LocalImage vizBuffer;
-    VkImageView vizBufferView;
-
-    // Depth
-    render::vk::LocalImage depth;
-    VkImageView depthView;
-
-    // Normal
-    render::vk::LocalImage normal;
-    VkImageView normalView;
-
-    // Segmentation
-    render::vk::LocalImage segmentation;
-    VkImageView segmentationView;
-
-    // Shadow map
-    render::vk::LocalImage shadowMap;
-    VkImageView shadowMapView;
-
-    render::vk::LocalImage shadowDepth;
-    VkImageView shadowDepthView;
-
-    uint32_t numViews;
-
-    VkDescriptorSet lightingSet;
-
-    uint32_t pixelWidth;
-    uint32_t pixelHeight;
-
-    uint32_t viewWidth;
-    uint32_t viewHeight;
-
-    uint32_t shadowTextureWidth;
-    uint32_t shadowTextureHeight;
-
-    uint32_t shadowMapSize;
->>>>>>> fcd38a0 (caching)
 };
 
 enum ComponentNames {
