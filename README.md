@@ -1,16 +1,16 @@
 # gs-madrona — A Fork of Madrona and Madrona-MJX for Genesis
 
-**gs-madrona** is a high-performance batch renderer module designed specifically for [Genesis](https://github.com/genesis-company/Genesis). It is based on a fork of [Madrona](https://github.com/shacklettbp/madrona) and [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx), created in 2025. Since the fork, substantial modifications have been made to adapt the codebase for Genesis, including:
-- Rewriting significant portions of the code
-- Removing unnecessary features
-- Adding new functionality required by Genesis
+It started as a fork of [Madrona](https://github.com/shacklettbp/madrona) for the core C++ implementation, created in 2025. Since the fork, substantial modifications have been made to adapt the codebase for Genesis, including:
+- Integrating first-class Python interface based on [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx)
+- Rewriting significant portions of the renderer and adding new features required by Genesis.  For more details, please refer to [Features Added Since Fork](#features-added-since-fork)
+- Removing features not used by Genesis.  For more details, please refer to [Removed Features](#removed-features)
 
-Due to the extent of these changes, gs-madrona has diverged significantly from its origins and can no longer be synchronized or merged with the original Madrona or Madrona-MJX repositories. It is now a fully independent project with no intention of maintaining backward compatibility. Our focus is solely on evolving gs-madrona into a robust and efficient batch renderer for Genesis.
+Due to the extent of these changes, gs-madrona has diverged significantly from its origins. It is now a fully independent project with no intention of maintaining backward compatibility. Our focus is solely on evolving gs-madrona into a robust and efficient batch renderer for Genesis.
 
 ## Scope and Objectives
-The primary goal of **gs-madrona** is to provide a **high-throughput batch renderer** tightly integrated with Genesis. It supports both rasterization and ray tracing pipelines.
+The primary goal of **gs-madrona** is to provide a **high-throughput batch renderer** tightly integrated with Genesis.  The integration was done with the help of a forked [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx), which is now a part of **gs-madrona**. **gs-madrona** supports both rasterization and single-bounce ray-tracing pipelines.
 
-While Genesis already includes a rasterizer via [pyrender](https://github.com/mmatl/pyrender) and a ray tracer via [LuisaRender](https://github.com/LuisaGroup/LuisaRender), these renderers do not support batch processing. With gs-madrona, multiple environments and cameras can be rendered in parallel, significantly improving performance compared to sequential rendering with traditional engines.
+**gs-madrona** is the technology used in Genesis to provide support of batched processing. With **gs-madrona**, multiple environments and cameras can be rendered in parallel, significantly improving performance compared to sequential rendering with traditional engines.
 
 **gs-madrona** enables seamless data sharing between Genesis and the renderer, including:
 - Static assets (meshes, textures)
@@ -19,8 +19,6 @@ While Genesis already includes a rasterizer via [pyrender](https://github.com/mm
 At present, batch rendering supports only basic materials, lighting, and shadows. However, we aim to expand its capabilities to include more advanced rendering features.
 
 ## Features Added Since Fork
-- Batch rendering of multiple environments and cameras
-- Color and depth output integrated into Genesis
 - Support for non-square resolutions
 - Shadow rendering in the rasterizer pipeline
 - Anti-aliasing support for rasterizer output
