@@ -202,8 +202,7 @@ static vk::PipelineShaders makeDrawShaders(const vk::Device &dev,
                                            VkSampler repeat_sampler)
 {
     std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) / "shaders";
 
     auto shader_path = (shader_dir / "batch_draw_rgb.hlsl").string();
 
@@ -211,34 +210,39 @@ static vk::PipelineShaders makeDrawShaders(const vk::Device &dev,
     SPIRVShader vert_spirv = compiler.compileHLSLFileToSPV(
         shader_path.c_str(), {}, {},
         { "vert", ShaderStage::Vertex });
-
-    SPIRVShader frag_spirv = compiler.compileHLSLFileToSPV(
+    SPIRVShader rgb_frag_spirv = compiler.compileHLSLFileToSPV(
         shader_path.c_str(), {}, {},
         { "frag", ShaderStage::Fragment });
+    SPIRVShader normal_frag_spirv = compiler.compileHLSLFileToSPV(
+        shader_path.c_str(), {}, {},
+        { "normal_frag", ShaderStage::Fragment });
+    SPIRVShader segmentation_frag_spirv = compiler.compileHLSLFileToSPV(
+        shader_path.c_str(), {}, {},
+        { "segmentation_frag", ShaderStage::Fragment });
 
-    std::array<SPIRVShader, 2> shaders {
+    std::array<SPIRVShader, 4> shaders {
         std::move(vert_spirv),
-        std::move(frag_spirv),
+        std::move(rgb_frag_spirv),
+        std::move(normal_frag_spirv),
+        std::move(segmentation_frag_spirv),
     };
 
     StackAlloc tmp_alloc;
     return vk::PipelineShaders(dev, tmp_alloc, shaders,
         Span<const vk::BindingOverride>({
-                vk::BindingOverride {
-                    3, 0, VK_NULL_HANDLE,
-                    InternalConfig::maxTextures, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
-                },
-                vk::BindingOverride {
-                    4, 0, VK_NULL_HANDLE,
-                    InternalConfig::maxTextures, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
-                },
-                vk::BindingOverride {
-                    3, 1, repeat_sampler, 1, 0
-                }
+            vk::BindingOverride {
+                3, 0, VK_NULL_HANDLE,
+                InternalConfig::maxTextures, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+            },
+            vk::BindingOverride {
+                4, 0, VK_NULL_HANDLE,
+                InternalConfig::maxTextures, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+            },
+            vk::BindingOverride {3, 1, repeat_sampler, 1, 0}
         }));
 }
 
-static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
+static PipelineMP<4> makeDrawPipeline(const vk::Device &dev,
                                     VkPipelineCache pipeline_cache,
                                     VkRenderPass render_pass,
                                     uint32_t num_frames,
@@ -315,67 +319,28 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
     // Push constant range
     VkPushConstantRange push_const {
         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-        0,
-        sizeof(shader::BatchDrawPushConst),
+        0, sizeof(shader::BatchDrawPushConst),
     };
     gfx_layout_info.pushConstantRangeCount = 1;
     gfx_layout_info.pPushConstantRanges = &push_const;
 
     VkPipelineLayout draw_layout;
-    REQ_VK(dev.dt.createPipelineLayout(dev.hdl, &gfx_layout_info, nullptr,
-                                       &draw_layout));
+    REQ_VK(dev.dt.createPipelineLayout(dev.hdl, &gfx_layout_info, nullptr, &draw_layout));
 
     // RGB + depth pass
     std::array<VkPipelineShaderStageCreateInfo, 2> gfx_stages {{
         {
             VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            nullptr,
-            0,
-            VK_SHADER_STAGE_VERTEX_BIT,
-            shaders.getShader(0),
-            "vert",
-            nullptr,
+            nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT,
+            shaders.getShader(0), "vert", nullptr,
         },
         {
             VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            nullptr,
-            0,
-            VK_SHADER_STAGE_FRAGMENT_BIT,
-            shaders.getShader(1),
-            "frag",
-            nullptr,
+            nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT,
+            shaders.getShader(1), "frag", nullptr,
         },
     }};
-
     VkPipelineRenderingCreateInfo rendering_info = {};
-    rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    rendering_info.colorAttachmentCount = 1;
-    rendering_info.pColorAttachmentFormats = &InternalConfig::colorOnlyFormat;
-    rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
-
-    // normal + depth pass
-    std::array<VkPipelineShaderStageCreateInfo, 2> normal_gfx_stages {{
-        {
-            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            nullptr,
-            0,
-            VK_SHADER_STAGE_VERTEX_BIT,
-            shaders.getShader(0),
-            "vert",
-            nullptr,
-        },
-        {
-            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            nullptr,
-            0,
-            VK_SHADER_STAGE_FRAGMENT_BIT,
-            shaders.getShader(2),
-            "frag",
-            nullptr,
-        },
-    }};
-
-    VkPipelineRenderingCreateInfo normal_rendering_info = {};
     rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     rendering_info.colorAttachmentCount = 1;
     rendering_info.pColorAttachmentFormats = &InternalConfig::colorOnlyFormat;
@@ -385,22 +350,55 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
     std::array<VkPipelineShaderStageCreateInfo, 1> depth_gfx_stages {{
         {
             VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            nullptr,
-            0,
-            VK_SHADER_STAGE_VERTEX_BIT,
-            shaders.getShader(0),
-            "vert",
-            nullptr,
+            nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT,
+            shaders.getShader(0), "vert", nullptr,
         },
     }};
-
     VkPipelineRenderingCreateInfo depth_rendering_info = {};
     depth_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     depth_rendering_info.colorAttachmentCount = 0;
     depth_rendering_info.pColorAttachmentFormats = nullptr;
     depth_rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
 
-    std::array<VkGraphicsPipelineCreateInfo, 2> gfx_infos {{
+    // normal + depth pass
+    std::array<VkPipelineShaderStageCreateInfo, 2> normal_gfx_stages {{
+        {
+            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT,
+            shaders.getShader(0), "vert", nullptr,
+        },
+        {
+            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT,
+            shaders.getShader(2), "normal_frag", nullptr,
+        },
+    }};
+    VkPipelineRenderingCreateInfo normal_rendering_info = {};
+    normal_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    normal_rendering_info.colorAttachmentCount = 1;
+    normal_rendering_info.pColorAttachmentFormats = &InternalConfig::normalOnlyFormat;
+    normal_rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
+
+    // segmentation + depth pass
+    std::array<VkPipelineShaderStageCreateInfo, 2> segmentation_gfx_stages {{
+        {
+            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT,
+            shaders.getShader(0), "vert", nullptr,
+        },
+        {
+            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT,
+            shaders.getShader(3), "segmentation_frag", nullptr,
+        },
+    }};
+    VkPipelineRenderingCreateInfo segmentation_rendering_info = {};
+    segmentation_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    segmentation_rendering_info.colorAttachmentCount = 1;
+    segmentation_rendering_info.pColorAttachmentFormats = &InternalConfig::segmentationOnlyFormat;
+    segmentation_rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
+
+    std::array<VkGraphicsPipelineCreateInfo, 4> gfx_infos {{
         {
             .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
             .pNext = &rendering_info,
@@ -443,13 +441,54 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
             .basePipelineHandle = VK_NULL_HANDLE,
             .basePipelineIndex = -1,
         },
+        {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &normal_rendering_info,
+            .flags = 0,
+            .stageCount = normal_gfx_stages.size(),
+            .pStages = normal_gfx_stages.data(),
+            .pVertexInputState = &vert_info,
+            .pInputAssemblyState = &input_assembly_info,
+            .pTessellationState = nullptr,
+            .pViewportState = &viewport_info,
+            .pRasterizationState = &raster_info,
+            .pMultisampleState = &multisample_info,
+            .pDepthStencilState = &depth_info,
+            .pColorBlendState = &blend_info,
+            .pDynamicState = &dyn_info,
+            .layout = draw_layout,
+            .renderPass = render_pass,
+            .subpass = 0,
+            .basePipelineHandle = VK_NULL_HANDLE,
+            .basePipelineIndex = -1,
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &segmentation_rendering_info,
+            .flags = 0,
+            .stageCount = segmentation_gfx_stages.size(),
+            .pStages = segmentation_gfx_stages.data(),
+            .pVertexInputState = &vert_info,
+            .pInputAssemblyState = &input_assembly_info,
+            .pTessellationState = nullptr,
+            .pViewportState = &viewport_info,
+            .pRasterizationState = &raster_info,
+            .pMultisampleState = &multisample_info,
+            .pDepthStencilState = &depth_info,
+            .pColorBlendState = &blend_info,
+            .pDynamicState = &dyn_info,
+            .layout = draw_layout,
+            .renderPass = render_pass,
+            .subpass = 0,
+            .basePipelineHandle = VK_NULL_HANDLE,
+            .basePipelineIndex = -1,
+        },
     }};
     
 
-    std::array<VkPipeline, 2> pipelines;
-    REQ_VK(dev.dt.createGraphicsPipelines(dev.hdl, pipeline_cache, 2,
-                                          gfx_infos.data(), nullptr,
-                                          pipelines.data()));
+    std::array<VkPipeline, 4> pipelines;
+    REQ_VK(dev.dt.createGraphicsPipelines(
+        dev.hdl, pipeline_cache, 4, gfx_infos.data(), nullptr, pipelines.data()));
 
     DynArray<vk::FixedDescriptorPool> desc_pools(num_pools);
     for (int i = 0; i < (int)num_pools; ++i) {
@@ -855,7 +894,7 @@ struct BatchFrame {
 static DrawCommandPackage makeDrawCommandPackage(vk::Device& dev,
                           render::vk::MemoryAllocator &alloc,
                           PipelineMP<1> &prepare_views,
-                          PipelineMP<2> &draw_views,
+                          PipelineMP<4> &draw_views,
                           uint32_t max_views_per_target)
 {
     VkDescriptorSet prepare_set = prepare_views.descPools[1].makeSet();
@@ -917,7 +956,7 @@ static void makeBatchFrame(vk::Device& dev,
                            render::vk::MemoryAllocator &alloc,
                            const BatchRenderer::Config &cfg,
                            PipelineMP<1> &prepare_views,
-                           PipelineMP<2> &draw,
+                           PipelineMP<4> &draw,
                            PipelineMP<1> &lighting,
                            PipelineMP<1> &shadowGen,
                            PipelineMP<1> &shadowDraw,
@@ -1101,7 +1140,7 @@ static void makeBatchFrame(vk::Device& dev,
         // Update lighting_set to point to the layered vbuffer and 
         // output buffer
         HeapArray<VkWriteDescriptorSet> lighting_desc_updates(
-            2*layered_targets.size() + 2);
+            4 * layered_targets.size() + 4);
         HeapArray<VkWriteDescriptorSet> shadow_map_desc_updates(
             layered_targets.size());
         HeapArray<VkDescriptorImageInfo> vbuffer_infos(
@@ -1386,7 +1425,7 @@ static void issueComputeLayoutTransitions(vk::Device &dev,
 }
 
 static void issueRasterization(vk::Device &dev, 
-                               PipelineMP<2> &draw_pipeline, 
+                               PipelineMP<4> &draw_pipeline, 
                                LayeredTarget &target,
                                VkCommandBuffer &draw_cmd,
                                DrawCommandPackage &view_batch,
@@ -1860,7 +1899,7 @@ struct BatchRenderer::Impl {
 
     // Required whether we do batch rendering or not
     PipelineMP<1> prepareViews;
-    PipelineMP<2> batchDraw;
+    PipelineMP<4> batchDraw;
     PipelineMP<1> createVisualization;
     PipelineMP<1> lighting;
     PipelineMP<1> shadowGen;
@@ -2019,7 +2058,7 @@ BatchRenderer::~BatchRenderer()
     impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->shadowDraw.hdls[0], nullptr);
     impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->shadowDraw.layout, nullptr);
 
-    for(int i=0;i<impl->batchFrames.size();i++){
+    for(int i=0; i < impl->batchFrames.size(); i++) {
         impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].prepareCmdPool, nullptr);
         impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].renderCmdPool, nullptr);
         impl->dev.dt.destroySemaphore(impl->dev.hdl, impl->batchFrames[i].prepareFinished, nullptr);
@@ -2028,9 +2067,11 @@ BatchRenderer::~BatchRenderer()
         impl->dev.dt.destroyFence(impl->dev.hdl, impl->batchFrames[i].prepareFence, nullptr);
         impl->dev.dt.destroyFence(impl->dev.hdl, impl->batchFrames[i].renderFence, nullptr);
 
-        for(int j=0;j<impl->batchFrames[i].targets.size();j++){
+        for(int j=0; j < impl->batchFrames[i].targets.size(); j++){
             impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].vizBufferView, nullptr);
             impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].depthView, nullptr);
+            impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].normalView, nullptr);
+            impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].segmentationView, nullptr);
             impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].shadowMapView, nullptr);
             impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].shadowDepthView, nullptr);
         }
