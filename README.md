@@ -1,18 +1,18 @@
 # gs-madrona — A Fork of Madrona and Madrona-MJX for Genesis
 
 It started as a fork of [Madrona](https://github.com/shacklettbp/madrona) for the core C++ implementation, created in 2025. Since the fork, substantial modifications have been made to adapt the codebase for Genesis, including:
-- Integrating first-class Python interface based on [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx)
-- Rewriting significant portions of the renderer and adding new features required by Genesis.  For more details, please refer to [Features Added Since Fork](#features-added-since-fork)
-- Removing features not used by Genesis.  For more details, please refer to [Removed Features](#removed-features)
+- Integrating first-class Python interface based on [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx) and designed for [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis).
+- Adding new features to support the continuous development of [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis). For more details, please refer to [Features Added Since Fork](#features-added-since-fork)
+- Removing features not used by [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis). For more details, please refer to [Removed Features](#removed-features)
 
-Due to the extent of these changes, gs-madrona has diverged significantly from its origins. It is now a fully independent project with no intention of maintaining backward compatibility. Our focus is solely on evolving gs-madrona into a robust and efficient batch renderer for Genesis.
+Due to the extent of these changes, gs-madrona has diverged significantly from its origins. It is now a fully independent project with no intention of maintaining backward compatibility. Our focus is solely on evolving gs-madrona into a robust and efficient batch renderer for [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis).
 
 ## Scope and Objectives
-The primary goal of **gs-madrona** is to provide a **high-throughput batch renderer**.  The renderer is connected with Genesis via a forked [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx), which is now a part of **gs-madrona**. **gs-madrona** supports both rasterization and single-bounce ray-tracing pipelines.
+The primary goal of **gs-madrona** is to provide a **high-throughput batch renderer**. The renderer is connected with Genesis via a forked [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx), which is now a part of **gs-madrona**. **gs-madrona** supports both rasterization and single-bounce ray-tracing pipelines.
 
-**gs-madrona** is the technology used in Genesis to provide support of batched processing. With **gs-madrona**, multiple environments and cameras can be rendered in parallel, significantly improving performance compared to sequential rendering with other engines.
+**gs-madrona** is the technology used in [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis) to provide native support of batched processing. With **gs-madrona**, multiple environments and cameras can be rendered offscreen in parallel, significantly improving performance compared to renderers doing sequential rendering.
 
-**gs-madrona** enables seamless data sharing between Genesis and the renderer, including:
+**gs-madrona** enables seamless data sharing between [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis) and the renderer, including:
 - Static assets (meshes, textures, etc.)
 - Dynamic runtime data (rigid body transforms, camera transforms, etc.)
 
@@ -52,6 +52,10 @@ At present, batch rendering supports only basic materials, lighting, and shadows
 - PBR material and texture support
 - Output rendering results to video files
 
+## Supported Platforms and Environments
+**gs-madrona** has been tested only with Ubuntu 22.04 and Ubuntu 24.04 with python 3.10 and 3.12. The rendering pipeline also high depends on CUDA, so an NVIDIA graphics card with CUDA 12+ support is required for running it.
+It might also work with other platform and environments, but there is no guarantee right now.
+
 ## Performance
 FPS comparison of rendering [Franka](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/genesis/assets/xml/franka_emika_panda/panda.xml) with gs-madrona rasterizer and raytracer
 
@@ -65,9 +69,9 @@ Resolution: 128x128
   <img src="./scripts/perf_benchmark/example_report/panda_madrona rasterizer_ madrona raytracer_128x128_comparison_plot.png" width="600" alt="FPS of gs-madrona rasterizer vs raytracer" align="center"/>
 </p>
 
-##  Install
+## Install
 
-###  Setup Python
+### Setup Python
 1. Create a python virtual env 
 ```
 python -m venv ~/.virtualenvs/madgs
@@ -91,9 +95,9 @@ git clone https://github.com/Genesis-Embodied-AI/Genesis.git
 
 2. Install
 ```sh
-cd  gs-madrona
-mkdir  build
-cd  build
+cd gs-madrona
+mkdir build
+cd build
 cmake ..
 make -j
 cd ..
@@ -123,9 +127,9 @@ Images will be generated in `image_output`
 
 2. To use ray tracer, change the `use_rasterizer=False` in `single_franka_batch_render.py`
 ```
-        renderer = gs.options.renderers.BatchRenderer(
-            use_rasterizer=True,
-        )
+renderer = gs.options.renderers.BatchRenderer(
+    use_rasterizer=True,
+)
 ```
 
 ```
