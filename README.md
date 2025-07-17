@@ -8,13 +8,13 @@ It started as a fork of [Madrona](https://github.com/shacklettbp/madrona) for th
 Due to the extent of these changes, gs-madrona has diverged significantly from its origins. It is now a fully independent project with no intention of maintaining backward compatibility. Our focus is solely on evolving gs-madrona into a robust and efficient batch renderer for Genesis.
 
 ## Scope and Objectives
-The primary goal of **gs-madrona** is to provide a **high-throughput batch renderer** tightly integrated with Genesis.  The integration was done with the help of a forked [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx), which is now a part of **gs-madrona**. **gs-madrona** supports both rasterization and single-bounce ray-tracing pipelines.
+The primary goal of **gs-madrona** is to provide a **high-throughput batch renderer**.  The renderer is tightly integrated with Genesis via a forked [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx), which is now a part of **gs-madrona**. **gs-madrona** supports both rasterization and single-bounce ray-tracing pipelines.
 
-**gs-madrona** is the technology used in Genesis to provide support of batched processing. With **gs-madrona**, multiple environments and cameras can be rendered in parallel, significantly improving performance compared to sequential rendering with traditional engines.
+**gs-madrona** is the technology used in Genesis to provide support of batched processing. With **gs-madrona**, multiple environments and cameras can be rendered in parallel, significantly improving performance compared to sequential rendering with other engines.
 
 **gs-madrona** enables seamless data sharing between Genesis and the renderer, including:
-- Static assets (meshes, textures)
-- Dynamic runtime data (rigid body transforms, camera transforms)
+- Static assets (meshes, textures, etc.)
+- Dynamic runtime data (rigid body transforms, camera transforms, etc.)
 
 At present, batch rendering supports only basic materials, lighting, and shadows. However, we aim to expand its capabilities to include more advanced rendering features.
 
