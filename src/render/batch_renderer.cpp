@@ -95,21 +95,26 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
         uint32_t shadow_image_height = shadow_map_size * num_images_y;
 
         LayeredTarget target = {
-            .vizBuffer = alloc.makeColorAttachment(image_width, image_height,
-                                                   1,
-                                                   depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::colorOnlyFormat),
+            .vizBuffer = alloc.makeColorAttachment(
+                image_width, image_height, 1,
+                depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::colorOnlyFormat),
             .vizBufferView = {},
-            .depth = alloc.makeDepthAttachment(image_width, image_height,
-                                               1,
-                                               InternalConfig::depthFormat),
+            .depth = alloc.makeDepthAttachment(
+                image_width, image_height, 1, InternalConfig::depthFormat),
             .depthView = {},
-            .shadowMap = alloc.makeColorAttachment(shadow_image_width, shadow_image_height,
-                                                   1,
-                                                   InternalConfig::varianceFormat),
+            .normal = alloc.makeNormalAttachment(
+                image_width, image_height, 1,
+                depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::normalOnlyFormat),
+            .normalView = {},
+            .segmentation = alloc.makeDepthAttachment(
+                image_width, image_height, 1,
+                depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::segmentationOnlyFormat),
+            .segmentationView = {},
+            .shadowMap = alloc.makeColorAttachment(
+                shadow_image_width, shadow_image_height, 1, InternalConfig::varianceFormat),
             .shadowMapView = {},
-            .shadowDepth = alloc.makeDepthAttachment(shadow_image_width, shadow_image_height,
-                                                    1,
-                                                    InternalConfig::depthFormat),
+            .shadowDepth = alloc.makeDepthAttachment(
+                shadow_image_width, shadow_image_height, 1, InternalConfig::depthFormat),
             .shadowDepthView = {},
             .numViews = num_views_in_image,
             .lightingSet = {},
@@ -143,6 +148,16 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
         view_info.format = InternalConfig::depthFormat;
         view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.depthView));
+
+        view_info.image = target.normal.image;
+        view_info.format = depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::normalOnlyFormat;
+        view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.normalView));
+
+        view_info.image = target.segmentation.image;
+        view_info.format = depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::segmentationOnlyFormat;
+        view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.segmentationView));
 
         view_info.image = target.shadowMap.image;
         view_info.format = InternalConfig::varianceFormat;
@@ -265,11 +280,9 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
     }};
 
     VkPipelineColorBlendStateCreateInfo blend_info {};
-    blend_info.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    blend_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     blend_info.logicOpEnable = VK_FALSE;
-    blend_info.attachmentCount = 
-        static_cast<uint32_t>(blend_attachments.size());
+    blend_info.attachmentCount = static_cast<uint32_t>(blend_attachments.size());
     blend_info.pAttachments = blend_attachments.data();
 
     // Dynamic
@@ -335,6 +348,34 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
     }};
 
     VkPipelineRenderingCreateInfo rendering_info = {};
+    rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    rendering_info.colorAttachmentCount = 1;
+    rendering_info.pColorAttachmentFormats = &InternalConfig::colorOnlyFormat;
+    rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
+
+    // normal + depth pass
+    std::array<VkPipelineShaderStageCreateInfo, 2> normal_gfx_stages {{
+        {
+            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            nullptr,
+            0,
+            VK_SHADER_STAGE_VERTEX_BIT,
+            shaders.getShader(0),
+            "vert",
+            nullptr,
+        },
+        {
+            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            nullptr,
+            0,
+            VK_SHADER_STAGE_FRAGMENT_BIT,
+            shaders.getShader(2),
+            "frag",
+            nullptr,
+        },
+    }};
+
+    VkPipelineRenderingCreateInfo normal_rendering_info = {};
     rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     rendering_info.colorAttachmentCount = 1;
     rendering_info.pColorAttachmentFormats = &InternalConfig::colorOnlyFormat;
@@ -1027,6 +1068,8 @@ static void makeBatchFrame(vk::Device& dev,
 
     uint64_t num_rgb_bytes = total_num_pixels * sizeof(uint8_t) * 4_u64;
     uint64_t num_depth_bytes = total_num_pixels * sizeof(float);
+    uint64_t num_normal_bytes = total_num_pixels * sizeof(uint8_t) * 4_u64;
+    uint64_t num_segmentation_bytes = total_num_pixels * sizeof(int32_t);
 
     vk::DedicatedBuffer rgb_output_buffer = alloc.makeDedicatedBuffer(
         num_rgb_bytes, false, supports_cuda_export);
@@ -1034,12 +1077,24 @@ static void makeBatchFrame(vk::Device& dev,
     vk::DedicatedBuffer depth_output_buffer = alloc.makeDedicatedBuffer(
         num_depth_bytes, false, supports_cuda_export);
 
+    vk::DedicatedBuffer normal_output_buffer = alloc.makeDedicatedBuffer(
+        num_normal_bytes, false, supports_cuda_export);
+
+    vk::DedicatedBuffer segmentation_output_buffer = alloc.makeDedicatedBuffer(
+        num_segmentation_bytes, false, supports_cuda_export);
+
 #ifdef MADRONA_VK_CUDA_SUPPORT
     vk::CudaImportedBuffer rgb_output_cuda(
         dev, rgb_output_buffer.mem, num_rgb_bytes);
 
     vk::CudaImportedBuffer depth_output_cuda(
         dev, depth_output_buffer.mem, num_depth_bytes);
+
+    vk::CudaImportedBuffer normal_output_cuda(
+        dev, normal_output_buffer.mem, num_normal_bytes);
+
+    vk::CudaImportedBuffer segmentation_output_cuda(
+        dev, segmentation_output_buffer.mem, num_segmentation_bytes);
 #endif
 
     {
@@ -1052,6 +1107,10 @@ static void makeBatchFrame(vk::Device& dev,
         HeapArray<VkDescriptorImageInfo> vbuffer_infos(
             layered_targets.size());
         HeapArray<VkDescriptorImageInfo> depth_buffer_infos(
+            layered_targets.size());
+        HeapArray<VkDescriptorImageInfo> normal_buffer_infos(
+            layered_targets.size());
+        HeapArray<VkDescriptorImageInfo> segmentation_buffer_infos(
             layered_targets.size());
         HeapArray<VkDescriptorImageInfo> shadow_map_infos(
             layered_targets.size());
@@ -1069,28 +1128,50 @@ static void makeBatchFrame(vk::Device& dev,
                 .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
             };
 
+            normal_buffer_infos[i] = {
+                .sampler = VK_NULL_HANDLE,
+                .imageView = layered_targets[i].normalView,
+                .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+            };
+
+            segmentation_buffer_infos[i] = {
+                .sampler = VK_NULL_HANDLE,
+                .imageView = layered_targets[i].segmentationView,
+                .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+            };
+
             shadow_map_infos[i] = {
                 .sampler = VK_NULL_HANDLE,
                 .imageView = layered_targets[i].shadowMapView,
                 .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
             };
 
-            vk::DescHelper::storageImage(lighting_desc_updates[i*2],
+            vk::DescHelper::storageImage(lighting_desc_updates[i * 4],
                                          lighting_set, 
                                          &vbuffer_infos[i],
                                          0, i);
 
-            vk::DescHelper::textures(lighting_desc_updates[i*2 + 1],
-                                        lighting_set, 
-                                        &depth_buffer_infos[i],
-                                        1,
-                                        3, i);
+            vk::DescHelper::textures(lighting_desc_updates[i * 4 + 1],
+                                     lighting_set, 
+                                     &depth_buffer_infos[i],
+                                     1,
+                                     3, i);
+
+            vk::DescHelper::storageImage(lighting_desc_updates[i * 4 + 2],
+                                         lighting_set, 
+                                         &normal_buffer_infos[i],
+                                         4, i);     // ??
+
+            vk::DescHelper::storageImage(lighting_desc_updates[i * 4 + 3],
+                                         lighting_set, 
+                                         &segmentation_buffer_infos[i],
+                                         7, i);
 
             vk::DescHelper::textures(shadow_map_desc_updates[i], 
-                                        shadow_asset_set,
-                                        &shadow_map_infos[i],
-                                        1,
-                                        0, i);
+                                     shadow_asset_set,
+                                     &shadow_map_infos[i],
+                                     1,
+                                     0, i);
         }
 
         VkDescriptorBufferInfo rgb_buffer_info {
@@ -1100,7 +1181,7 @@ static void makeBatchFrame(vk::Device& dev,
         };
 
         vk::DescHelper::storage(
-            lighting_desc_updates[lighting_desc_updates.size() - 2], 
+            lighting_desc_updates[lighting_desc_updates.size() - 4], 
             lighting_set,
             &rgb_buffer_info,
             1);
@@ -1112,10 +1193,34 @@ static void makeBatchFrame(vk::Device& dev,
         };
 
         vk::DescHelper::storage(
-            lighting_desc_updates[lighting_desc_updates.size() - 1], 
+            lighting_desc_updates[lighting_desc_updates.size() - 3],
             lighting_set,
             &depth_buffer_info,
             2);
+
+        VkDescriptorBufferInfo normal_buffer_info {
+            .buffer = normal_output_buffer.buf.buffer,
+            .offset = 0,
+            .range = VK_WHOLE_SIZE,
+        };
+
+        vk::DescHelper::storage(
+            lighting_desc_updates[lighting_desc_updates.size() - 2],    // ?????
+            lighting_set,
+            &normal_buffer_info,
+            3);
+            
+        VkDescriptorBufferInfo segmentation_buffer_info {
+            .buffer = segmentation_output_buffer.buf.buffer,
+            .offset = 0,
+            .range = VK_WHOLE_SIZE,
+        };
+
+        vk::DescHelper::storage(
+            lighting_desc_updates[lighting_desc_updates.size() - 1],    // ?????
+            lighting_set,
+            &segmentation_buffer_info,
+            4);
 
         vk::DescHelper::update(dev, lighting_desc_updates.data(),
                                lighting_desc_updates.size());
@@ -1148,9 +1253,13 @@ static void makeBatchFrame(vk::Device& dev,
         std::move(layered_targets),
         std::move(rgb_output_buffer),
         std::move(depth_output_buffer),
+        std::move(normal_output_buffer),
+        std::move(segmentation_output_buffer),
 #ifdef MADRONA_VK_CUDA_SUPPORT
         std::move(rgb_output_cuda),
         std::move(depth_output_cuda),
+        std::move(normal_output_cuda),
+        std::move(segmentation_output_cuda),
 #endif
         std::move(draw_packages),
         lighting_set,

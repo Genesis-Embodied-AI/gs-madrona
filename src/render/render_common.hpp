@@ -34,6 +34,8 @@ inline constexpr VkFormat varianceFormat = VK_FORMAT_R32G32_SFLOAT;
 inline constexpr VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
 inline constexpr VkFormat colorOnlyFormat = VK_FORMAT_R8G8B8A8_UNORM;
 inline constexpr VkFormat depthOnlyFormat = VK_FORMAT_R32_SFLOAT;
+inline constexpr VkFormat normalOnlyFormat = VK_FORMAT_R8G8B8A8_UNORM;
+inline constexpr VkFormat segmentationOnlyFormat = VK_FORMAT_R32_SINT;
 inline constexpr VkFormat outputColorFormat = VK_FORMAT_R8G8B8A8_UNORM;
 
 }

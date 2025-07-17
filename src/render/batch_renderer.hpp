@@ -28,6 +28,14 @@ struct LayeredTarget {
     render::vk::LocalImage depth;
     VkImageView depthView;
 
+    // Normal
+    render::vk::LocalImage normal;
+    VkImageView normalView;
+
+    // Segmentation
+    render::vk::LocalImage segmentation;
+    VkImageView segmentationView;
+
     // Shadow map
     render::vk::LocalImage shadowMap;
     VkImageView shadowMapView;

@@ -311,3 +311,22 @@ PixelOutput frag(in V2F v2f,
 
     return output;
 }
+
+struct NormalPixelOutput {
+    float4 normalOut : SV_Target0;
+};
+
+[shader("pixel")]
+PixelOutput normal_frag(in V2F v2f,
+                        in uint prim_id : SV_PrimitiveID)
+{
+    PixelOutput output;
+
+    float3 normal = normalize(v2f.worldNormal);
+
+    // Map from [-1, 1] to [0, 1] for RGB
+    float3 encodedNormal = 0.5 * (normal + 1.0);
+    output.rgbOut = float4(encodedNormal, 1.0);
+
+    return output;
+}
