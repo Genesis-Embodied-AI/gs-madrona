@@ -191,7 +191,9 @@ struct RenderCameraArchetype : public Archetype<
 // This is an unsorted archetype with a runtime-sized component
 struct RaycastOutputArchetype : public Archetype<
     RGBOutputBuffer,
-    DepthOutputBuffer
+    DepthOutputBuffer,
+    NormalOutputBuffer,
+    SegmentationOutputBuffer
 > {};
 
 struct RenderECSBridge;

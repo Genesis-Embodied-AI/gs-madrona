@@ -251,6 +251,8 @@ float shadowFactorVSM(float3 world_pos, uint view_idx)
 
 struct PixelOutput {
     float4 rgbOut : SV_Target0;
+    float4 normalOut : SV_Target1;
+    int segmentionOut : SV_Target2;
 };
 
 [shader("pixel")]

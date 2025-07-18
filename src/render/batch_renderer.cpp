@@ -210,39 +210,40 @@ static vk::PipelineShaders makeDrawShaders(const vk::Device &dev,
     SPIRVShader vert_spirv = compiler.compileHLSLFileToSPV(
         shader_path.c_str(), {}, {},
         { "vert", ShaderStage::Vertex });
-    SPIRVShader rgb_frag_spirv = compiler.compileHLSLFileToSPV(
+    SPIRVShader frag_spirv = compiler.compileHLSLFileToSPV(
         shader_path.c_str(), {}, {},
         { "frag", ShaderStage::Fragment });
-    SPIRVShader normal_frag_spirv = compiler.compileHLSLFileToSPV(
-        shader_path.c_str(), {}, {},
-        { "normal_frag", ShaderStage::Fragment });
-    SPIRVShader segmentation_frag_spirv = compiler.compileHLSLFileToSPV(
-        shader_path.c_str(), {}, {},
-        { "segmentation_frag", ShaderStage::Fragment });
-
-    std::array<SPIRVShader, 4> shaders {
+    // SPIRVShader normal_frag_spirv = compiler.compileHLSLFileToSPV(
+    //     shader_path.c_str(), {}, {},
+    //     { "normal_frag", ShaderStage::Fragment });
+    // SPIRVShader segmentation_frag_spirv = compiler.compileHLSLFileToSPV(
+    //     shader_path.c_str(), {}, {},
+    //     { "segmentation_frag", ShaderStage::Fragment });
+    std::array<SPIRVShader, 2> shaders {
         std::move(vert_spirv),
-        std::move(rgb_frag_spirv),
-        std::move(normal_frag_spirv),
-        std::move(segmentation_frag_spirv),
+        std::move(frag_spirv),
+        // std::move(normal_frag_spirv),
+        // std::move(segmentation_frag_spirv),
     };
 
     StackAlloc tmp_alloc;
     return vk::PipelineShaders(dev, tmp_alloc, shaders,
         Span<const vk::BindingOverride>({
             vk::BindingOverride {
-                3, 0, VK_NULL_HANDLE,
-                InternalConfig::maxTextures, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+                3, 0, VK_NULL_HANDLE, InternalConfig::maxTextures,
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
             },
             vk::BindingOverride {
-                4, 0, VK_NULL_HANDLE,
-                InternalConfig::maxTextures, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+                4, 0, VK_NULL_HANDLE, InternalConfig::maxTextures,
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
             },
-            vk::BindingOverride {3, 1, repeat_sampler, 1, 0}
+            vk::BindingOverride {
+                3, 1, repeat_sampler, 1, 0
+            }
         }));
 }
 
-static PipelineMP<4> makeDrawPipeline(const vk::Device &dev,
+static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
                                     VkPipelineCache pipeline_cache,
                                     VkRenderPass render_pass,
                                     uint32_t num_frames,
@@ -300,11 +301,12 @@ static PipelineMP<4> makeDrawPipeline(const vk::Device &dev,
     dyn_info.dynamicStateCount = dyn_enable.size();
     dyn_info.pDynamicStates = dyn_enable.data();
 
-    VkPipelineLayoutCreateInfo gfx_layout_info;
-    gfx_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    gfx_layout_info.pNext = nullptr;
-    gfx_layout_info.flags = 0;
-    
+    // Push constant range
+    VkPushConstantRange push_const {
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+        0, sizeof(shader::BatchDrawPushConst),
+    };
+
     // Descriptor set layouts
     std::array<VkDescriptorSetLayout, 5> draw_desc_layouts {{
         shaders.getLayout(0),
@@ -313,21 +315,20 @@ static PipelineMP<4> makeDrawPipeline(const vk::Device &dev,
         shaders.getLayout(3),
         shaders.getLayout(4)
     }};
+
+    VkPipelineLayoutCreateInfo gfx_layout_info;
+    gfx_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    gfx_layout_info.pNext = nullptr;
+    gfx_layout_info.flags = 0;
     gfx_layout_info.setLayoutCount = static_cast<uint32_t>(draw_desc_layouts.size());
     gfx_layout_info.pSetLayouts = draw_desc_layouts.data();
-
-    // Push constant range
-    VkPushConstantRange push_const {
-        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-        0, sizeof(shader::BatchDrawPushConst),
-    };
     gfx_layout_info.pushConstantRangeCount = 1;
     gfx_layout_info.pPushConstantRanges = &push_const;
 
     VkPipelineLayout draw_layout;
     REQ_VK(dev.dt.createPipelineLayout(dev.hdl, &gfx_layout_info, nullptr, &draw_layout));
 
-    // RGB + depth pass
+    // color + depth pass
     std::array<VkPipelineShaderStageCreateInfo, 2> gfx_stages {{
         {
             VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -340,10 +341,15 @@ static PipelineMP<4> makeDrawPipeline(const vk::Device &dev,
             shaders.getShader(1), "frag", nullptr,
         },
     }};
+    std::array<VkFormat, 3> colorFormats = {
+        InternalConfig::colorOnlyFormat,
+        InternalConfig::normalOnlyFormat,
+        InternalConfig::segmentationOnlyFormat
+    };
     VkPipelineRenderingCreateInfo rendering_info = {};
     rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    rendering_info.colorAttachmentCount = 1;
-    rendering_info.pColorAttachmentFormats = &InternalConfig::colorOnlyFormat;
+    rendering_info.colorAttachmentCount = 3;
+    rendering_info.pColorAttachmentFormats = colorFormats.data();
     rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
 
     // Depth pass
@@ -360,43 +366,43 @@ static PipelineMP<4> makeDrawPipeline(const vk::Device &dev,
     depth_rendering_info.pColorAttachmentFormats = nullptr;
     depth_rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
 
-    // normal + depth pass
-    std::array<VkPipelineShaderStageCreateInfo, 2> normal_gfx_stages {{
-        {
-            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT,
-            shaders.getShader(0), "vert", nullptr,
-        },
-        {
-            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT,
-            shaders.getShader(2), "normal_frag", nullptr,
-        },
-    }};
-    VkPipelineRenderingCreateInfo normal_rendering_info = {};
-    normal_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    normal_rendering_info.colorAttachmentCount = 1;
-    normal_rendering_info.pColorAttachmentFormats = &InternalConfig::normalOnlyFormat;
-    normal_rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
+    // // normal + depth pass
+    // std::array<VkPipelineShaderStageCreateInfo, 2> normal_gfx_stages {{
+    //     {
+    //         VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+    //         nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT,
+    //         shaders.getShader(0), "vert", nullptr,
+    //     },
+    //     {
+    //         VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+    //         nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT,
+    //         shaders.getShader(2), "normal_frag", nullptr,
+    //     },
+    // }};
+    // VkPipelineRenderingCreateInfo normal_rendering_info = {};
+    // normal_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    // normal_rendering_info.colorAttachmentCount = 1;
+    // normal_rendering_info.pColorAttachmentFormats = &InternalConfig::normalOnlyFormat;
+    // normal_rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
 
-    // segmentation + depth pass
-    std::array<VkPipelineShaderStageCreateInfo, 2> segmentation_gfx_stages {{
-        {
-            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT,
-            shaders.getShader(0), "vert", nullptr,
-        },
-        {
-            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT,
-            shaders.getShader(3), "segmentation_frag", nullptr,
-        },
-    }};
-    VkPipelineRenderingCreateInfo segmentation_rendering_info = {};
-    segmentation_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    segmentation_rendering_info.colorAttachmentCount = 1;
-    segmentation_rendering_info.pColorAttachmentFormats = &InternalConfig::segmentationOnlyFormat;
-    segmentation_rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
+    // // segmentation + depth pass
+    // std::array<VkPipelineShaderStageCreateInfo, 2> segmentation_gfx_stages {{
+    //     {
+    //         VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+    //         nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT,
+    //         shaders.getShader(0), "vert", nullptr,
+    //     },
+    //     {
+    //         VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+    //         nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT,
+    //         shaders.getShader(3), "segmentation_frag", nullptr,
+    //     },
+    // }};
+    // VkPipelineRenderingCreateInfo segmentation_rendering_info = {};
+    // segmentation_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    // segmentation_rendering_info.colorAttachmentCount = 1;
+    // segmentation_rendering_info.pColorAttachmentFormats = &InternalConfig::segmentationOnlyFormat;
+    // segmentation_rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
 
     std::array<VkGraphicsPipelineCreateInfo, 4> gfx_infos {{
         {
@@ -440,55 +446,13 @@ static PipelineMP<4> makeDrawPipeline(const vk::Device &dev,
             .subpass = 0,
             .basePipelineHandle = VK_NULL_HANDLE,
             .basePipelineIndex = -1,
-        },
-        {
-            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .pNext = &normal_rendering_info,
-            .flags = 0,
-            .stageCount = normal_gfx_stages.size(),
-            .pStages = normal_gfx_stages.data(),
-            .pVertexInputState = &vert_info,
-            .pInputAssemblyState = &input_assembly_info,
-            .pTessellationState = nullptr,
-            .pViewportState = &viewport_info,
-            .pRasterizationState = &raster_info,
-            .pMultisampleState = &multisample_info,
-            .pDepthStencilState = &depth_info,
-            .pColorBlendState = &blend_info,
-            .pDynamicState = &dyn_info,
-            .layout = draw_layout,
-            .renderPass = render_pass,
-            .subpass = 0,
-            .basePipelineHandle = VK_NULL_HANDLE,
-            .basePipelineIndex = -1,
-        },
-        {
-            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .pNext = &segmentation_rendering_info,
-            .flags = 0,
-            .stageCount = segmentation_gfx_stages.size(),
-            .pStages = segmentation_gfx_stages.data(),
-            .pVertexInputState = &vert_info,
-            .pInputAssemblyState = &input_assembly_info,
-            .pTessellationState = nullptr,
-            .pViewportState = &viewport_info,
-            .pRasterizationState = &raster_info,
-            .pMultisampleState = &multisample_info,
-            .pDepthStencilState = &depth_info,
-            .pColorBlendState = &blend_info,
-            .pDynamicState = &dyn_info,
-            .layout = draw_layout,
-            .renderPass = render_pass,
-            .subpass = 0,
-            .basePipelineHandle = VK_NULL_HANDLE,
-            .basePipelineIndex = -1,
-        },
+        }
     }};
     
 
-    std::array<VkPipeline, 4> pipelines;
+    std::array<VkPipeline, 2> pipelines;
     REQ_VK(dev.dt.createGraphicsPipelines(
-        dev.hdl, pipeline_cache, 4, gfx_infos.data(), nullptr, pipelines.data()));
+        dev.hdl, pipeline_cache, 2, gfx_infos.data(), nullptr, pipelines.data()));
 
     DynArray<vk::FixedDescriptorPool> desc_pools(num_pools);
     for (int i = 0; i < (int)num_pools; ++i) {
@@ -698,8 +662,7 @@ static vk::PipelineShaders makeShaders(const vk::Device &dev,
     (void)sampler;
 
     std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) / "shaders";
 
     ShaderCompiler compiler;
     SPIRVShader spirv = compiler.compileHLSLFileToSPV(
@@ -707,8 +670,7 @@ static vk::PipelineShaders makeShaders(const vk::Device &dev,
         {}, {func_name, ShaderStage::Compute });
     
     StackAlloc tmp_alloc;
-    return vk::PipelineShaders(dev, tmp_alloc,
-                               Span<const SPIRVShader>(&spirv, 1), {});
+    return vk::PipelineShaders(dev, tmp_alloc, Span<const SPIRVShader>(&spirv, 1), {});
 }
 
 static vk::PipelineShaders makeShadersLighting(const vk::Device &dev,
@@ -717,8 +679,7 @@ static vk::PipelineShaders makeShadersLighting(const vk::Device &dev,
                                        VkSampler repeat_sampler = VK_NULL_HANDLE)
 {
     std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) / "shaders";
 
     ShaderCompiler compiler;
     SPIRVShader spirv = compiler.compileHLSLFileToSPV(
@@ -726,21 +687,30 @@ static vk::PipelineShaders makeShadersLighting(const vk::Device &dev,
         {}, {func_name, ShaderStage::Compute });
     
     StackAlloc tmp_alloc;
-    return vk::PipelineShaders(dev, tmp_alloc,
-                               Span<const SPIRVShader>(&spirv, 1), 
-                               Span<const vk::BindingOverride>({
-                                   vk::BindingOverride {
-                                       0, 0, VK_NULL_HANDLE, 
-                                       100, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT 
-                                   },
-                                   vk::BindingOverride {
-                                       0, 3, VK_NULL_HANDLE,
-                                       100, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
-                                   },
-                                   vk::BindingOverride {
-                                       0, 4, repeat_sampler, 1, 0
-                                   },
-                                }));
+    return vk::PipelineShaders(
+        dev, tmp_alloc,
+        Span<const SPIRVShader>(&spirv, 1), 
+        Span<const vk::BindingOverride>({
+            vk::BindingOverride {
+                0, 0, VK_NULL_HANDLE,  100,
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT 
+            },
+            vk::BindingOverride {
+                0, 1, VK_NULL_HANDLE, 100,
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+            },
+            vk::BindingOverride {
+                0, 2, VK_NULL_HANDLE, 100,
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+            },
+            vk::BindingOverride {
+                0, 3, VK_NULL_HANDLE, 100,
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+            },
+            vk::BindingOverride {
+                0, 8, repeat_sampler, 1, 0
+            },
+        }));
 }
 
 template <typename T>
@@ -894,7 +864,7 @@ struct BatchFrame {
 static DrawCommandPackage makeDrawCommandPackage(vk::Device& dev,
                           render::vk::MemoryAllocator &alloc,
                           PipelineMP<1> &prepare_views,
-                          PipelineMP<4> &draw_views,
+                          PipelineMP<2> &draw_views,
                           uint32_t max_views_per_target)
 {
     VkDescriptorSet prepare_set = prepare_views.descPools[1].makeSet();
@@ -956,7 +926,7 @@ static void makeBatchFrame(vk::Device& dev,
                            render::vk::MemoryAllocator &alloc,
                            const BatchRenderer::Config &cfg,
                            PipelineMP<1> &prepare_views,
-                           PipelineMP<4> &draw,
+                           PipelineMP<2> &draw,
                            PipelineMP<1> &lighting,
                            PipelineMP<1> &shadowGen,
                            PipelineMP<1> &shadowDraw,
@@ -1192,28 +1162,26 @@ static void makeBatchFrame(vk::Device& dev,
 
             vk::DescHelper::textures(lighting_desc_updates[i * 4 + 1],
                                      lighting_set, 
-                                     &depth_buffer_infos[i],
-                                     1,
+                                     &depth_buffer_infos[i], 1,
+                                     1, i);
+
+            vk::DescHelper::textures(lighting_desc_updates[i * 4 + 2],
+                                     lighting_set, 
+                                     &normal_buffer_infos[i], 1,
+                                     2, i);
+
+            vk::DescHelper::textures(lighting_desc_updates[i * 4 + 3],
+                                     lighting_set, 
+                                     &segmentation_buffer_infos[i], 1,
                                      3, i);
-
-            vk::DescHelper::storageImage(lighting_desc_updates[i * 4 + 2],
-                                         lighting_set, 
-                                         &normal_buffer_infos[i],
-                                         4, i);     // ??
-
-            vk::DescHelper::storageImage(lighting_desc_updates[i * 4 + 3],
-                                         lighting_set, 
-                                         &segmentation_buffer_infos[i],
-                                         7, i);
 
             vk::DescHelper::textures(shadow_map_desc_updates[i], 
                                      shadow_asset_set,
-                                     &shadow_map_infos[i],
-                                     1,
+                                     &shadow_map_infos[i], 1,
                                      0, i);
         }
 
-        VkDescriptorBufferInfo rgb_buffer_info {
+        VkDescriptorBufferInfo rgb_output_buffer_info {
             .buffer = rgb_output_buffer.buf.buffer,
             .offset = 0,
             .range = VK_WHOLE_SIZE,
@@ -1222,10 +1190,9 @@ static void makeBatchFrame(vk::Device& dev,
         vk::DescHelper::storage(
             lighting_desc_updates[lighting_desc_updates.size() - 4], 
             lighting_set,
-            &rgb_buffer_info,
-            1);
+            &rgb_output_buffer_info, 4);
 
-        VkDescriptorBufferInfo depth_buffer_info {
+        VkDescriptorBufferInfo depth_output_buffer_info {
             .buffer = depth_output_buffer.buf.buffer,
             .offset = 0,
             .range = VK_WHOLE_SIZE,
@@ -1234,32 +1201,29 @@ static void makeBatchFrame(vk::Device& dev,
         vk::DescHelper::storage(
             lighting_desc_updates[lighting_desc_updates.size() - 3],
             lighting_set,
-            &depth_buffer_info,
-            2);
+            &depth_output_buffer_info, 5);
 
-        VkDescriptorBufferInfo normal_buffer_info {
+        VkDescriptorBufferInfo normal_output_buffer_info {
             .buffer = normal_output_buffer.buf.buffer,
             .offset = 0,
             .range = VK_WHOLE_SIZE,
         };
 
         vk::DescHelper::storage(
-            lighting_desc_updates[lighting_desc_updates.size() - 2],    // ?????
+            lighting_desc_updates[lighting_desc_updates.size() - 2],
             lighting_set,
-            &normal_buffer_info,
-            3);
+            &normal_output_buffer_info, 6);
             
-        VkDescriptorBufferInfo segmentation_buffer_info {
+        VkDescriptorBufferInfo segmentation_output_buffer_info {
             .buffer = segmentation_output_buffer.buf.buffer,
             .offset = 0,
             .range = VK_WHOLE_SIZE,
         };
 
         vk::DescHelper::storage(
-            lighting_desc_updates[lighting_desc_updates.size() - 1],    // ?????
+            lighting_desc_updates[lighting_desc_updates.size() - 1],
             lighting_set,
-            &segmentation_buffer_info,
-            4);
+            &segmentation_output_buffer_info, 7);
 
         vk::DescHelper::update(dev, lighting_desc_updates.data(),
                                lighting_desc_updates.size());
@@ -1361,6 +1325,42 @@ static void issueRasterLayoutTransitions(vk::Device &dev,
                 .layerCount = 1
             }
         },
+        VkImageMemoryBarrier{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .pNext = nullptr,
+            .srcAccessMask = VK_ACCESS_NONE,
+            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = target.normal.image,
+            .subresourceRange = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            }
+        },
+        VkImageMemoryBarrier{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .pNext = nullptr,
+            .srcAccessMask = VK_ACCESS_NONE,
+            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = target.segmentation.image,
+            .subresourceRange = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            }
+        },
     };
 
     dev.dt.cmdPipelineBarrier(draw_cmd,
@@ -1395,7 +1395,6 @@ static void issueComputeLayoutTransitions(vk::Device &dev,
                 .layerCount = 1
             }
         },
-
         VkImageMemoryBarrier{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             .pNext = nullptr,
@@ -1414,6 +1413,42 @@ static void issueComputeLayoutTransitions(vk::Device &dev,
                 .layerCount = 1
             }
         },
+        VkImageMemoryBarrier{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .pNext = nullptr,
+            .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = target.normal.image,
+            .subresourceRange = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            }
+        },
+        VkImageMemoryBarrier{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .pNext = nullptr,
+            .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = target.segmentation.image,
+            .subresourceRange = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            }
+        },
     };
 
     dev.dt.cmdPipelineBarrier(draw_cmd,
@@ -1425,7 +1460,7 @@ static void issueComputeLayoutTransitions(vk::Device &dev,
 }
 
 static void issueRasterization(vk::Device &dev, 
-                               PipelineMP<4> &draw_pipeline, 
+                               PipelineMP<2> &draw_pipeline, 
                                LayeredTarget &target,
                                VkCommandBuffer &draw_cmd,
                                DrawCommandPackage &view_batch,
@@ -1439,19 +1474,33 @@ static void issueRasterization(vk::Device &dev,
 {
     (void)render_extent;
 
-    VkRenderingAttachmentInfoKHR color_attach = {};
-    color_attach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
-    color_attach.imageView = target.vizBufferView;
-    color_attach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    color_attach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    color_attach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    VkRenderingAttachmentInfoKHR color_attach[2] = {{
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+        .imageView = target.vizBufferView,
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+    }, {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+        .imageView = target.normalView,
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+    }, {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+        .imageView = target.segmentationView,
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+    }};
 
-    VkRenderingAttachmentInfoKHR depth_attach = {};
-    depth_attach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
-    depth_attach.imageView = target.depthView;
-    depth_attach.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
-    depth_attach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depth_attach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    VkRenderingAttachmentInfoKHR depth_attach = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+        .imageView = target.depthView,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+    };
 
     VkRect2D total_rect = {
         .offset = {},
@@ -1462,8 +1511,8 @@ static void issueRasterization(vk::Device &dev,
     rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
     rendering_info.renderArea = total_rect;
     rendering_info.layerCount = 1;
-    rendering_info.colorAttachmentCount = depth_only ? 0 : 1;
-    rendering_info.pColorAttachments = depth_only ? nullptr : &color_attach;
+    rendering_info.colorAttachmentCount = depth_only ? 0 : 3;
+    rendering_info.pColorAttachments = depth_only ? nullptr : color_attach;
     rendering_info.pDepthAttachment = &depth_attach;
 
     dev.dt.cmdBeginRenderingKHR(draw_cmd, &rendering_info);
@@ -1493,7 +1542,6 @@ static void issueRasterization(vk::Device &dev,
 
     uint32_t max_image_dim_x = std::min(consts::maxTextureDim, consts::maxNumImagesX * target.viewWidth);
     uint32_t max_num_image_x = max_image_dim_x / target.viewWidth;
-
     uint32_t max_shadow_map_dim_x = std::min(consts::maxTextureDim, consts::maxNumImagesX * target.shadowMapSize);
     uint32_t max_shadow_map_dim_y = std::min(consts::maxTextureDim, consts::maxNumImagesY * target.shadowMapSize);
     uint32_t max_shadow_map_x = max_shadow_map_dim_x / target.shadowMapSize;
@@ -1534,19 +1582,17 @@ static void issueRasterization(vk::Device &dev,
             .shadowMapHeight = target.shadowMapSize
         };
 
-        dev.dt.cmdPushConstants(draw_cmd, draw_pipeline.layout,
-                                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-                                sizeof(push_const),
-                                &push_const);
+        dev.dt.cmdPushConstants(
+            draw_cmd, draw_pipeline.layout,
+            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+            sizeof(push_const), &push_const);
 
-        dev.dt.cmdDrawIndexedIndirectCount(draw_cmd, 
-                                           view_batch.drawBuffer.buffer,
-                                           view_batch.drawCmdOffset + (i * consts::maxDrawsPerView) * 
-                                               sizeof(shader::DrawCmd),
-                                           view_batch.drawBuffer.buffer,
-                                           count_offset, 
-                                           consts::maxDrawsPerView,
-                                           sizeof(shader::DrawCmd));
+        dev.dt.cmdDrawIndexedIndirectCount(
+            draw_cmd,
+            view_batch.drawBuffer.buffer,
+            view_batch.drawCmdOffset + (i * consts::maxDrawsPerView) * sizeof(shader::DrawCmd),
+            view_batch.drawBuffer.buffer,
+            count_offset, consts::maxDrawsPerView, sizeof(shader::DrawCmd));
     }
 
     dev.dt.cmdEndRenderingKHR(draw_cmd);
@@ -1899,7 +1945,7 @@ struct BatchRenderer::Impl {
 
     // Required whether we do batch rendering or not
     PipelineMP<1> prepareViews;
-    PipelineMP<4> batchDraw;
+    PipelineMP<2> batchDraw;
     PipelineMP<1> createVisualization;
     PipelineMP<1> lighting;
     PipelineMP<1> shadowGen;
@@ -1943,51 +1989,57 @@ static const char *getDrawDeferredPath(bool render_rgb)
 }
 
 BatchRenderer::Impl::Impl(const Config &cfg,
-                          RenderContext &rctx)
-    : dev(rctx.dev),
-      depthOnly(cfg.renderMode == RenderManager::Config::RenderMode::Depth),
-      mem(rctx.alloc),
-      maxNumViews(cfg.numWorlds * cfg.maxViewsPerWorld),
-      numWorlds(cfg.numWorlds),
-      // This is required whether we want the batch renderer or not
-      prepareViews(makeComputePipeline(dev, rctx.pipelineCache, 4,
-          sizeof(shader::PrepareViewPushConstant),
-          4 + consts::numDrawCmdBuffers, rctx.repeatSampler,
-          "prepare_views.hlsl", false, "main", makeShaders)),
-      batchDraw(makeDrawPipeline(dev, rctx.pipelineCache, VK_NULL_HANDLE, 
-                           consts::numDrawCmdBuffers * cfg.numFrames, 5, rctx.repeatSampler)),
-      createVisualization(makeComputePipeline(
-              dev, rctx.pipelineCache, 1,
-              sizeof(uint32_t) * 2,
-              cfg.numFrames * consts::numDrawCmdBuffers, rctx.repeatSampler,
-              "visualize_tris.hlsl", false, "visualize", makeShaders)),
-      lighting(makeComputePipeline(dev, rctx.pipelineCache, 3,
-              sizeof(shader::DeferredLightingPushConstBR),
-              consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler, 
-              getDrawDeferredPath(!depthOnly), depthOnly, "lighting", makeShadersLighting)),
-      shadowGen(makeComputePipeline(dev, rctx.pipelineCache, 1,
-              sizeof(shader::ShadowGenPushConst),
-              consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
-              "batch_shadow_gen.hlsl", false, "shadowGen", makeShaders)),
-      shadowDraw(makeShadowDrawPipeline(dev, rctx.pipelineCache, VK_NULL_HANDLE, 
-                           consts::numDrawCmdBuffers * cfg.numFrames, 3)),
-      postProcess(cfg.enableBatchRenderer ?
-          makeComputePipeline(dev, rctx.pipelineCache, 1,
-              sizeof(uint32_t) * 4, // push constants for width, height, view count, etc.
-              consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
-              "post_process.hlsl", false, "main", makeShaders) :
-          Optional<PipelineMP<1>>::none()),
-      batchFrames(cfg.numFrames),
-      assetSetPrepare(rctx.asset_set_cull_),
-      assetSetDraw(rctx.asset_set_draw_),
-      assetSetTextureMat(rctx.asset_set_tex_compute_),
-      assetSetLighting(rctx.asset_batch_lighting_set_),
-      renderExtent { cfg.renderWidth, cfg.renderHeight },
-      selectedView(0),
-      currentFrame(0),
-      renderQueue(rctx.renderQueue),
-      rects(dev.maxViewports),
-      viewports(dev.maxViewports)
+                          RenderContext &rctx):
+    dev(rctx.dev),
+    depthOnly(cfg.renderMode == RenderManager::Config::RenderMode::Depth),
+    mem(rctx.alloc),
+    maxNumViews(cfg.numWorlds * cfg.maxViewsPerWorld),
+    numWorlds(cfg.numWorlds),
+    // This is required whether we want the batch renderer or not
+    prepareViews(
+        makeComputePipeline(
+            dev, rctx.pipelineCache, 4, sizeof(shader::PrepareViewPushConstant),
+            4 + consts::numDrawCmdBuffers, rctx.repeatSampler,
+            "prepare_views.hlsl", false, "main", makeShaders)),
+    batchDraw(
+        makeDrawPipeline(
+            dev, rctx.pipelineCache, VK_NULL_HANDLE, 
+            consts::numDrawCmdBuffers * cfg.numFrames, 5, rctx.repeatSampler)),
+    createVisualization(
+        makeComputePipeline(
+            dev, rctx.pipelineCache, 1, sizeof(uint32_t) * 2,
+            cfg.numFrames * consts::numDrawCmdBuffers, rctx.repeatSampler,
+            "visualize_tris.hlsl", false, "visualize", makeShaders)),
+    lighting(
+        makeComputePipeline(
+            dev, rctx.pipelineCache, 3, sizeof(shader::DeferredLightingPushConstBR),
+            consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler, 
+            getDrawDeferredPath(!depthOnly), depthOnly, "lighting", makeShadersLighting)),
+    shadowGen(
+        makeComputePipeline(
+            dev, rctx.pipelineCache, 1, sizeof(shader::ShadowGenPushConst),
+            consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
+            "batch_shadow_gen.hlsl", false, "shadowGen", makeShaders)),
+    shadowDraw(
+        makeShadowDrawPipeline(
+            dev, rctx.pipelineCache, VK_NULL_HANDLE, 
+            consts::numDrawCmdBuffers * cfg.numFrames, 3)),
+    postProcess(cfg.enableBatchRenderer ?
+        makeComputePipeline(
+            dev, rctx.pipelineCache, 1, sizeof(uint32_t) * 4, // push constants for width, height, view count, etc.
+            consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
+            "post_process.hlsl", false, "main", makeShaders) :Optional<PipelineMP<1>>::none()),
+    batchFrames(cfg.numFrames),
+    assetSetPrepare(rctx.asset_set_cull_),
+    assetSetDraw(rctx.asset_set_draw_),
+    assetSetTextureMat(rctx.asset_set_tex_compute_),
+    assetSetLighting(rctx.asset_batch_lighting_set_),
+    renderExtent { cfg.renderWidth, cfg.renderHeight },
+    selectedView(0),
+    currentFrame(0),
+    renderQueue(rctx.renderQueue),
+    rects(dev.maxViewports),
+    viewports(dev.maxViewports)
 {
     for (uint32_t i = 0; i < cfg.numFrames; i++) {
         makeBatchFrame(dev,
@@ -2943,7 +2995,7 @@ const float * BatchRenderer::getDepthCUDAPtr() const
 #endif
 }
 
-const float * BatchRenderer::getNormalCUDAPtr() const
+const uint8_t * BatchRenderer::getNormalCUDAPtr() const
 {
 #ifndef MADRONA_VK_CUDA_SUPPORT
     return nullptr;
@@ -2951,7 +3003,7 @@ const float * BatchRenderer::getNormalCUDAPtr() const
     if(this->renderOptions.outputNormal == 0) {
         return nullptr;
     }
-    return (float *)impl->batchFrames[0].normalOutputCUDA.getDevicePointer();
+    return (uint8_t *)impl->batchFrames[0].normalOutputCUDA.getDevicePointer();
 #endif
 }
 

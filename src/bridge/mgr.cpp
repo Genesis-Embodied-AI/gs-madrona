@@ -328,7 +328,7 @@ struct Manager::Impl {
         }
     }
 
-    inline const float * getNormalOut() const
+    inline const uint8_t * getNormalOut() const
     {
         if (cfg.useRT) {
             return (float *)gpuExec.getExported((uint32_t)ExportID::RaycastNormal);

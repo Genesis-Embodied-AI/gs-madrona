@@ -61,10 +61,14 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     }
 
     if (cfg.useRT) {
+        registry.exportColumn<render::RaycastOutputArchetype,
+            render::RGBOutputBuffer>((uint32_t)ExportID::RaycastRGB);
         registry.exportColumn<render::RaycastOutputArchetype, 
             render::DepthOutputBuffer>((uint32_t)ExportID::RaycastDepth);
         registry.exportColumn<render::RaycastOutputArchetype,
-            render::RGBOutputBuffer>((uint32_t)ExportID::RaycastRGB);
+            render::NormalOutputBuffer>((uint32_t)ExportID::RaycastNormal);
+        registry.exportColumn<render::RaycastOutputArchetype,
+            render::SegmentationOutputBuffer>((uint32_t)ExportID::RaycastSegmentation);
     }
 }
 
