@@ -136,7 +136,6 @@ renderer = gs.options.renderers.BatchRenderer(
 )
 ```
 
-```
 ### Performance Benchmark
 For comprehensive performance benchmarking across multiple renderers (Madrona, Omniverse, PyRender, ManiSkill), please refer to the detailed documentation in `scripts/perf_benchmark/README.md`.
 
