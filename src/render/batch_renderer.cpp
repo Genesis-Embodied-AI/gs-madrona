@@ -616,8 +616,7 @@ static vk::PipelineShaders makeShaders(const vk::Device &dev,
         {}, {func_name, ShaderStage::Compute });
     
     StackAlloc tmp_alloc;
-    return vk::PipelineShaders(dev, tmp_alloc,
-                               Span<const SPIRVShader>(&spirv, 1), {});
+    return vk::PipelineShaders(dev, tmp_alloc, Span<const SPIRVShader>(&spirv, 1), {});
 }
 
 static vk::PipelineShaders makeShadersLighting(const vk::Device &dev,
@@ -2577,7 +2576,7 @@ const void *BatchRenderer::getComponentCUDAPtr(uint32_t frame_id, uint32_t compo
 #endif
 }
 
-const float * BatchRenderer::getNormalCUDAPtr() const
+const uint8_t * BatchRenderer::getNormalCUDAPtr() const
 {
 #ifndef MADRONA_VK_CUDA_SUPPORT
     return nullptr;
@@ -2585,7 +2584,7 @@ const float * BatchRenderer::getNormalCUDAPtr() const
     if(this->renderOptions.outputNormal == 0) {
         return nullptr;
     }
-    return (float *)impl->batchFrames[0].normalOutputCUDA.getDevicePointer();
+    return (uint8_t *)impl->batchFrames[0].normalOutputCUDA.getDevicePointer();
 #endif
 }
 
