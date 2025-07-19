@@ -75,7 +75,7 @@ const int32_t *RenderManager::batchRendererSegmentationOut() const
         0, ComponentNames::Segmentation);
 }
 
-const float * RenderManager::batchRendererNormalOut() const
+const uint8_t * RenderManager::batchRendererNormalOut() const
 {
     return rctx_->batchRenderer->getNormalCUDAPtr();
 }
