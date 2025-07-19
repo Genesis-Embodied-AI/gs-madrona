@@ -331,31 +331,3 @@ PixelOutput frag(in V2F v2f, in uint prim_id : SV_PrimitiveID)
 
     return output;
 }
-
-struct NormalPixelOutput {
-    float4 normalOut : SV_Target0;
-};
-
-[shader("pixel")]
-NormalPixelOutput normal_frag(in V2F v2f,
-                              in uint prim_id : SV_PrimitiveID)
-{
-    NormalPixelOutput output;
-    float3 normal = normalize(v2f.worldNormal);
-    float3 encodedNormal = 0.5 * (normal + 1.0);
-    output.normalOutput = float4(encodedNormal, 1.0);
-    return output;
-}
-
-struct SegementationPixelOutput {
-    int segIndex : SV_Target0;
-};
-
-[shader("pixel")]
-SegementationPixelOutput segmentation_frag(in V2F v2f,
-                                           in uint prim_id : SV_PrimitiveID)
-{
-    SegementationPixelOutput output;
-    output.segIndex = v2f.materialIdx;
-    return output;
-}

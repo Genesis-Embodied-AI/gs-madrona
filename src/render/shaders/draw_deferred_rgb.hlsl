@@ -16,7 +16,7 @@ Texture2D<float> depthInBuffer[];
 Texture2D<float4> normalInBuffer[];
 
 [[vk::binding(3, 0)]]
-Texture2D<int> segmentationInBuffer[];
+RWTexture2DArray<int> segmentationInBuffer[];
 
 
 [[vk::binding(4, 0)]]
