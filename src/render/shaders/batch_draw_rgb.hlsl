@@ -252,7 +252,7 @@ float shadowFactorVSM(float3 world_pos, uint view_idx)
 struct PixelOutput {
     float4 rgbOut : SV_Target0;
     float4 normalOut : SV_Target1;
-    int segmentionOut : SV_Target2;
+    int segmentationOut : SV_Target2;
 };
 
 [shader("pixel")]
@@ -264,6 +264,14 @@ PixelOutput frag(in V2F v2f,
     RenderOptions renderOptions = renderOptionsBuffer[0];
 
     float3 normal = normalize(v2f.worldNormal);
+
+    if (renderOptions.outputNormal) {
+        output.normalOut = float4(0.5 * (normal + 1.0), 1.0);
+    }
+
+    if (renderOptions.outputSegmentation) {
+        output.segmentationOut = v2f.materialIdx;
+    }
 
     if (!renderOptions.outputRGB) {
         output.rgbOut = float4(0.0, 0.0, 0.0, 1.0);
@@ -311,33 +319,5 @@ PixelOutput frag(in V2F v2f,
         }
     }
 
-    return output;
-}
-
-struct NormalPixelOutput {
-    float4 normalOut : SV_Target0;
-};
-
-[shader("pixel")]
-NormalPixelOutput normal_frag(in V2F v2f,
-                              in uint prim_id : SV_PrimitiveID)
-{
-    NormalPixelOutput output;
-    float3 normal = normalize(v2f.worldNormal);
-    float3 encodedNormal = 0.5 * (normal + 1.0);
-    output.normalOutput = float4(encodedNormal, 1.0);
-    return output;
-}
-
-struct SegementationPixelOutput {
-    int segIndex : SV_Target0;
-};
-
-[shader("pixel")]
-SegementationPixelOutput segmentation_frag(in V2F v2f,
-                                           in uint prim_id : SV_PrimitiveID)
-{
-    SegementationPixelOutput output;
-    output.segIndex = v2f.materialIdx;
     return output;
 }

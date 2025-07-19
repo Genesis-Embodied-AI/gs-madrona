@@ -16,7 +16,7 @@ Texture2D<float> depthInBuffer[];
 Texture2D<float4> normalInBuffer[];
 
 [[vk::binding(3, 0)]]
-Texture2D<int> segmentationInBuffer[];
+RWTexture2DArray<int> segmentationInBuffer[];
 
 
 [[vk::binding(4, 0)]]
@@ -158,16 +158,20 @@ void lighting(uint3 idx : SV_DispatchThreadID)
     }
 
     if (renderOptionsBuffer[0].outputNormal) {
-        float3 out_normal = normalInBuffer[target_idx][
-            vbuffer_pixel + uint3(pixel_offset.xy, 0)
-        ].rgb;
-        normalOutputBuffer[out_pixel_idx] = float3ToUint32(out_normal);
+        uint2 normal_dim;
+        normalInBuffer[target_idx].GetDimensions(normal_dim.x, normal_dim.y);
+
+        float2 normal_uv = (float2(vbuffer_pixel.xy) + float2(pixel_offset.xy) + 0.5) /
+                            float2(normal_dim.xy);
+        float3 normal_in = normalInBuffer[target_idx].SampleLevel(
+                           linearSampler, normal_uv, 0).xyz;
+        normalOutputBuffer[out_pixel_idx] = float3ToUint32(normal_in);
     }
     
     if (renderOptionsBuffer[0].outputSegmentation) {
         int out_segmentation = segmentationInBuffer[target_idx][
             vbuffer_pixel + uint3(pixel_offset.xy, 0)
-        ].rgb;
+        ];
         segmentationOutputBuffer[out_pixel_idx] = out_segmentation;
     }
 }

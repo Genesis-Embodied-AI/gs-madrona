@@ -21,8 +21,8 @@ struct RenderContext;
 
 struct LayeredTarget {
     // Contains a uint for triangle ID and another for instance ID
-    render::vk::LocalImage vizBuffer;
-    VkImageView vizBufferView;
+    render::vk::LocalImage rgb;
+    VkImageView rgbView;
 
     // Depth
     render::vk::LocalImage depth;
@@ -130,7 +130,7 @@ struct BatchRenderer {
 
     const uint8_t * getRGBCUDAPtr() const;
     const float * getDepthCUDAPtr() const;
-    const float * getNormalCUDAPtr() const;
+    const uint8_t * getNormalCUDAPtr() const;
     const int32_t * getSegmentationCUDAPtr() const;
 };
 

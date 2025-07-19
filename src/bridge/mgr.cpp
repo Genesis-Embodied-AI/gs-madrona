@@ -331,7 +331,7 @@ struct Manager::Impl {
     inline const uint8_t * getNormalOut() const
     {
         if (cfg.useRT) {
-            return (float *)gpuExec.getExported((uint32_t)ExportID::RaycastNormal);
+            return (uint8_t *)gpuExec.getExported((uint32_t)ExportID::RaycastNormal);
         } else {
             return renderMgr->batchRendererNormalOut();
         }
@@ -827,17 +827,17 @@ Tensor Manager::depthTensor() const
 
 Tensor Manager::normalTensor() const
 {
-    const float *normal_ptr = impl_->getNormalOut();
+    const uint8_t *normal_ptr = impl_->getNormalOut();
     if(normal_ptr == nullptr) {
         return Tensor::none();
     }
 
-    return Tensor((void *)normal_ptr, TensorElementType::Float32, {
+    return Tensor((void *)normal_ptr, TensorElementType::UInt8, {
         impl_->cfg.numWorlds,
         impl_->numCams,
         impl_->cfg.batchRenderViewHeight,
         impl_->cfg.batchRenderViewWidth,
-        3,
+        4,
     }, impl_->cfg.gpuID);
 }
 

@@ -64,7 +64,7 @@ const float * RenderManager::batchRendererDepthOut() const
     return rctx_->batchRenderer->getDepthCUDAPtr();
 }
 
-const float * RenderManager::batchRendererNormalOut() const
+const uint8_t * RenderManager::batchRendererNormalOut() const
 {
     return rctx_->batchRenderer->getNormalCUDAPtr();
 }

@@ -95,10 +95,10 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
         uint32_t shadow_image_height = shadow_map_size * num_images_y;
 
         LayeredTarget target = {
-            .vizBuffer = alloc.makeColorAttachment(
+            .rgb = alloc.makeColorAttachment(
                 image_width, image_height, 1,
                 depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::colorOnlyFormat),
-            .vizBufferView = {},
+            .rgbView = {},
             .depth = alloc.makeDepthAttachment(
                 image_width, image_height, 1, InternalConfig::depthFormat),
             .depthView = {},
@@ -106,7 +106,7 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
                 image_width, image_height, 1,
                 depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::normalOnlyFormat),
             .normalView = {},
-            .segmentation = alloc.makeDepthAttachment(
+            .segmentation = alloc.makeSegmentationAttachment(
                 image_width, image_height, 1,
                 depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::segmentationOnlyFormat),
             .segmentationView = {},
@@ -139,10 +139,10 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
                 .layerCount = 1,
         };
 
-        view_info.image = target.vizBuffer.image;
+        view_info.image = target.rgb.image;
         view_info.format = depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::colorOnlyFormat;
         view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.vizBufferView));
+        REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.rgbView));
 
         view_info.image = target.depth.image;
         view_info.format = InternalConfig::depthFormat;
@@ -1127,7 +1127,7 @@ static void makeBatchFrame(vk::Device& dev,
         for (CountT i = 0; i < layered_targets.size(); ++i) {
             vbuffer_infos[i] = {
                 .sampler = VK_NULL_HANDLE,
-                .imageView = layered_targets[i].vizBufferView,
+                .imageView = layered_targets[i].rgbView,
                 .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
             };
 
@@ -1170,10 +1170,10 @@ static void makeBatchFrame(vk::Device& dev,
                                      &normal_buffer_infos[i], 1,
                                      2, i);
 
-            vk::DescHelper::textures(lighting_desc_updates[i * 4 + 3],
-                                     lighting_set, 
-                                     &segmentation_buffer_infos[i], 1,
-                                     3, i);
+            vk::DescHelper::storageImage(lighting_desc_updates[i * 4 + 3],
+                                         lighting_set, 
+                                         &segmentation_buffer_infos[i], 1,
+                                         3, i);
 
             vk::DescHelper::textures(shadow_map_desc_updates[i], 
                                      shadow_asset_set,
@@ -1298,7 +1298,7 @@ static void issueRasterLayoutTransitions(vk::Device &dev,
             .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = target.vizBuffer.image,
+            .image = target.rgb.image,
             .subresourceRange = {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                 .baseMipLevel = 0,
@@ -1386,7 +1386,7 @@ static void issueComputeLayoutTransitions(vk::Device &dev,
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = target.vizBuffer.image,
+            .image = target.rgb.image,
             .subresourceRange = {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                 .baseMipLevel = 0,
@@ -1474,33 +1474,27 @@ static void issueRasterization(vk::Device &dev,
 {
     (void)render_extent;
 
-    VkRenderingAttachmentInfoKHR color_attach[2] = {{
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView = target.vizBufferView,
-        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-    }, {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView = target.normalView,
-        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-    }, {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView = target.segmentationView,
-        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-    }};
+    VkRenderingAttachmentInfoKHR rgb_attach = {};
+    rgb_attach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+    rgb_attach.imageView = target.rgbView;
+    rgb_attach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    rgb_attach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    rgb_attach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
-    VkRenderingAttachmentInfoKHR depth_attach = {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView = target.depthView,
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-    };
+    VkRenderingAttachmentInfoKHR normal_attach = rgb_attach;
+    normal_attach.imageView = target.normalView;
+
+    VkRenderingAttachmentInfoKHR segmentation_attach = rgb_attach;
+    segmentation_attach.imageView = target.segmentationView;
+
+    std::array color_attach = {rgb_attach, normal_attach, segmentation_attach};
+
+    VkRenderingAttachmentInfoKHR depth_attach = {};
+    depth_attach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+    depth_attach.imageView = target.depthView;
+    depth_attach.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    depth_attach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth_attach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
     VkRect2D total_rect = {
         .offset = {},
@@ -1512,7 +1506,7 @@ static void issueRasterization(vk::Device &dev,
     rendering_info.renderArea = total_rect;
     rendering_info.layerCount = 1;
     rendering_info.colorAttachmentCount = depth_only ? 0 : 3;
-    rendering_info.pColorAttachments = depth_only ? nullptr : color_attach;
+    rendering_info.pColorAttachments = depth_only ? nullptr : color_attach.data();
     rendering_info.pDepthAttachment = &depth_attach;
 
     dev.dt.cmdBeginRenderingKHR(draw_cmd, &rendering_info);
@@ -2120,7 +2114,7 @@ BatchRenderer::~BatchRenderer()
         impl->dev.dt.destroyFence(impl->dev.hdl, impl->batchFrames[i].renderFence, nullptr);
 
         for(int j=0; j < impl->batchFrames[i].targets.size(); j++){
-            impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].vizBufferView, nullptr);
+            impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].rgbView, nullptr);
             impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].depthView, nullptr);
             impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].normalView, nullptr);
             impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].segmentationView, nullptr);

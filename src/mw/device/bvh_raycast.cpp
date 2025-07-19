@@ -874,7 +874,7 @@ static __device__ void writeNormal(uint32_t pixel_byte_offset, const Vector3 &no
 
 static __device__ void writeSegmentaion(uint32_t pixel_byte_offset, int32_t segmentaion)
 {
-    int32_t *segmentaion_out = (int32_t *)((uint8_t *)bvhParams.segmentaionOutput + pixel_byte_offset);
+    int32_t *segmentaion_out = (int32_t *)((uint8_t *)bvhParams.segmentationOutput + pixel_byte_offset);
     *segmentaion_out = segmentaion;
 }
 
