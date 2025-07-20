@@ -92,6 +92,7 @@ struct TraceResult {
     bool hit;
     Vector3 color;
     Vector3 normal;
+    int segmentation;
     float metalness;
     float roughness;
     float depth;
@@ -642,8 +643,7 @@ static __device__ TraceResult traceRay(
                     instance_data->rotation.inv().rotateVec(
                             (ray_o - instance_data->position));
                 ray_d = instance_data->scale.inv() *
-                    instance_data->rotation.inv().rotateVec(
-                            ray_d);
+                    instance_data->rotation.inv().rotateVec(ray_d);
                 t_scale = ray_d.length();
                 t_max *= t_scale;
 
@@ -838,6 +838,7 @@ static __device__ TraceResult traceRay(
 
             result.color = color;
             result.normal = instance->rotation.rotateVec(tri_hit.normal);
+            result.segmentation = material_idx;
         }
         
         result.depth = tri_hit.tHit;
@@ -865,17 +866,18 @@ static __device__ void writeDepth(uint32_t pixel_byte_offset, float depth)
 
 static __device__ void writeNormal(uint32_t pixel_byte_offset, const Vector3 &normal)
 {
-    float *normal_out = (float *)((uint8_t *)bvhParams.normalOutput + pixel_byte_offset);
+    uint8_t *normal_out = (uint8_t *)bvhParams.normalOutput + pixel_byte_offset;
 
-    *(normal_out + 0) = normal.x;
-    *(normal_out + 1) = normal.y;
-    *(normal_out + 2) = normal.z;
+    *(normal_out + 0) = (normal.x) * 255;
+    *(normal_out + 1) = (normal.y) * 255;
+    *(normal_out + 2) = (normal.z) * 255;
+    *(normal_out + 3) = 255;
 }
 
-static __device__ void writeSegmentaion(uint32_t pixel_byte_offset, int32_t segmentaion)
+static __device__ void writeSegmentation(uint32_t pixel_byte_offset, int32_t segmentation)
 {
-    int32_t *segmentaion_out = (int32_t *)((uint8_t *)bvhParams.segmentationOutput + pixel_byte_offset);
-    *segmentaion_out = segmentaion;
+    int32_t *segmentation_out = (int32_t *)((uint8_t *)bvhParams.segmentationOutput + pixel_byte_offset);
+    *segmentation_out = segmentation;
 }
 
 static __device__ float linearToSRGB(float color) {
@@ -898,6 +900,7 @@ struct FragmentResult {
     bool hit;
     Vector3 color;
     Vector3 normal;
+    int segmentation;
     float depth;
 };
 
@@ -984,6 +987,7 @@ static __device__ FragmentResult computeFragment(
             .hit = true,
             .color = finalColor,
             .normal = first_hit.normal,
+            .segmentation = first_hit.segmentation,
             .depth = first_hit.depth
         };
     }
@@ -1063,9 +1067,13 @@ extern "C" __global__ void bvhRaycastEntry()
             if (result.hit) {
                 writeRGB(global_pixel_byte_off, result.color);
                 writeDepth(global_pixel_byte_off, result.depth);
+                writeNormal(global_pixel_byte_off, result.normal);
+                writeSegmentation(global_pixel_byte_off, result.segmentation);
             } else {
                 writeRGB(global_pixel_byte_off, { 0.f, 0.f, 0.f });
                 writeDepth(global_pixel_byte_off, INFINITY);
+                writeNormal(global_pixel_byte_off, { 0.f, 0.f, 0.f });
+                writeSegmentation(global_pixel_byte_off, -1);
             }
         } else {
             // Only write depth information

@@ -262,6 +262,7 @@ inline void instanceTransformUpdateWithMat(Context &ctx,
 
     data.worldIDX = ctx.worldID().idx;
     data.objectID = obj_id.idx;
+    // TODO: Add entity ID here.
 
     // Get the root AABB from the model and translate it to store
     // it in the TLBVHNode structure.
@@ -445,6 +446,8 @@ void registerTypes(ECSRegistry &registry,
 
     registry.registerComponent<RGBOutputBuffer>(rgb_output_bytes);
     registry.registerComponent<DepthOutputBuffer>(depth_output_bytes);
+    registry.registerComponent<NormalOutputBuffer>(rgb_output_bytes);
+    registry.registerComponent<SegmentationOutputBuffer>(depth_output_bytes);
 
     registry.registerComponent<RenderOutputIndex>();
 

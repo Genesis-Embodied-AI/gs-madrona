@@ -148,6 +148,8 @@ ArchetypeID StateManager::registerArchetype(
     
     uint32_t id = TypeTracker::typeID<ArchetypeT>();
 
+    printf("????1%d\n", id);
+
     registerArchetype(id,
                       archetype_flags,
                       max_num_entities_per_world,

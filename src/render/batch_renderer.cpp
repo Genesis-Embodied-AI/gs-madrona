@@ -1172,7 +1172,7 @@ static void makeBatchFrame(vk::Device& dev,
 
             vk::DescHelper::storageImage(lighting_desc_updates[i * 4 + 3],
                                          lighting_set, 
-                                         &segmentation_buffer_infos[i], 1,
+                                         &segmentation_buffer_infos[i],
                                          3, i);
 
             vk::DescHelper::textures(shadow_map_desc_updates[i], 
