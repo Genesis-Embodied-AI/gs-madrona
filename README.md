@@ -86,6 +86,19 @@ python -m venv ~/.virtualenvs/madgs
 source ~/.virtualenvs/madgs/bin/activate
 ```
 
+### Cmake Version
+
+Make sure that you have CMake version 3.24 or higher installed. You can check your CMake version with:
+```sh
+cmake --version
+```
+
+If you need to install or update CMake, you can do so by following the instructions on the [CMake website](https://cmake.org/download/).
+Or, for Python users, you can install it via pip:
+```sh
+pip install --upgrade cmake 
+```
+
 ### Clone Madrona and Genesis
 ```
 mkdir gs_render
@@ -100,13 +113,10 @@ git clone https://github.com/Genesis-Embodied-AI/Genesis.git
 2. Install
 ```sh
 cd gs-madrona
-mkdir build
-cd build
-cmake ..
-make -j
-cd ..
-pip install -e .
-cd ..
+mkdir -p build && cd build
+cmake .. && make -j
+cd .. && pip install -e .
+
 ```
 
 ### Install Genesis
