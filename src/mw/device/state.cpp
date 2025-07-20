@@ -288,6 +288,14 @@ void StateManager::registerArchetype(uint32_t id,
     *type_ptr = *components_[1];
     type_ptr++;
 
+    printf("id: %d\n", id);
+    printf("archetype_flags: %d\n", archetype_flags);
+    printf("num_user_components: %d\n", num_user_components);
+    printf("max_num_entities_per_world: %d\n", max_num_entities_per_world);
+    for (int i = 0; i < (int)num_user_components; i++) {
+        printf("component_id: %d\n", components[i].id);
+    }
+
     uint32_t flattened_user_component_start = archetype_component_offset_;
     uint32_t flag_offset = 0;
     for (int i = 0; i < (int)num_user_components; i++) {
