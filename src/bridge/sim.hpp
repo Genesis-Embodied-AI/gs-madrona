@@ -6,7 +6,7 @@
 
 #include "types.hpp"
 
-namespace madMJX {
+namespace madGS {
 
 class Engine;
 

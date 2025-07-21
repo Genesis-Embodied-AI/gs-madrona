@@ -1,4 +1,4 @@
-namespace madMJX {
+namespace madGS {
 
 template <typename ArchetypeT>
 madrona::Entity Engine::makeRenderableEntity()

@@ -2,11 +2,11 @@ set(SIMULATOR_SRCS
     types.hpp sim.hpp sim.inl sim.cpp geometry.hpp
 )
 
-add_library(madmjx_cpu_impl STATIC
+add_library(madgs_cpu_impl STATIC
     ${SIMULATOR_SRCS}
 )
 
-target_link_libraries(madmjx_cpu_impl
+target_link_libraries(madgs_cpu_impl
     PUBLIC
         madrona_mw_core
     PRIVATE
@@ -17,23 +17,23 @@ target_link_libraries(madmjx_cpu_impl
 
 option(LOAD_VULKAN "Load Vulkan libraries" ON)
 
-add_library(madmjx_mgr SHARED
+add_library(madgs_mgr SHARED
     mgr.hpp mgr.cpp
 )
 
 if (NOT LOAD_VULKAN)
     message(INFO "Disabling vulkan!")
-    target_compile_definitions(madmjx_mgr
+    target_compile_definitions(madgs_mgr
         PRIVATE
             -DMGR_DISABLE_VULKAN)
 else ()
     message(INFO "Vulkan was enabled")
 endif ()
 
-target_link_libraries(madmjx_mgr 
+target_link_libraries(madgs_mgr
     PRIVATE
         madrona_python_utils
-        madmjx_cpu_impl
+        madgs_cpu_impl
         madrona_mw_cpu
         madrona_common
         madrona_importer
@@ -45,7 +45,7 @@ target_link_libraries(madmjx_mgr
 if (TARGET madrona_mw_gpu)
     madrona_build_compile_defns(
         OUT_TARGET
-            madmjx_gpu_srcs
+            madgs_gpu_srcs
         SOURCES_DEFN
             GPU_HIDESEEK_SRC_LIST
         FLAGS_DEFN
@@ -54,14 +54,14 @@ if (TARGET madrona_mw_gpu)
             ${SIMULATOR_SRCS}
     )
 
-    target_link_libraries(madmjx_mgr PRIVATE
-        madmjx_gpu_srcs
+    target_link_libraries(madgs_mgr PRIVATE
+        madgs_gpu_srcs
         madrona_mw_gpu
         madrona_cuda
     )
 endif ()
 
-target_compile_definitions(madmjx_mgr PRIVATE
+target_compile_definitions(madgs_mgr PRIVATE
     -DDATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data/"
 )
 
@@ -70,7 +70,7 @@ madrona_python_module(_gs_madrona_batch_renderer
 )
 
 target_link_libraries(_gs_madrona_batch_renderer PRIVATE
-    madmjx_mgr
+    madgs_mgr
 )
 
 if (TARGET madrona_viz)
@@ -79,7 +79,7 @@ if (TARGET madrona_viz)
     )
 
     target_link_libraries(_gs_madrona_visualizer PRIVATE 
-        madrona_viz madmjx_mgr
+        madrona_viz madgs_mgr
     )
 
     if (TARGET madrona_cuda)
