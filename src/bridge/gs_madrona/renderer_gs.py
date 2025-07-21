@@ -1,10 +1,10 @@
 import numpy as np
 import torch
-
-from gs_madrona._gs_madrona_batch_renderer import MadronaBatchRenderer
 from trimesh.visual.texture import TextureVisuals
 from trimesh.visual.color import ColorVisuals
 from PIL import Image
+
+from gs_madrona._gs_madrona_batch_renderer import MadronaBatchRenderer
 
 
 class MadronaBatchRendererAdapter:
