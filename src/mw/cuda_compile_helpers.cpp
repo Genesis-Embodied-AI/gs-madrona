@@ -1,5 +1,6 @@
 #include "cuda_compile_helpers.hpp"
 
+#include <madrona/cuda_utils.hpp>
 #include <madrona/crash.hpp>
 
 namespace madrona::cu {
@@ -8,7 +9,7 @@ namespace madrona::cu {
         nvrtcResult err, const char *file,
         int line, const char *funcname) noexcept
 {
-    fatal(file, line, funcname, "%s", nvrtcGetErrorString(err));
+    fatal(file, line, funcname, "%s", CudaDynamicLoader::nvrtcGetErrorString(err));
 }
 
 [[noreturn]] void nvJitLinkError(

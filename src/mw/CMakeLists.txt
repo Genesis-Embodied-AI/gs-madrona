@@ -28,12 +28,8 @@ target_link_libraries(madrona_mw_gpu
         madrona_hdrs madrona_cuda
     PRIVATE
         madrona_mw_core madrona_json
-        CUDA::nvrtc CUDA::cuda_driver
-        ${CUDA_NVJITLINK_LIBRARY}
+        CUDA::nvJitLink_static
 )
-
-
-file(GLOB CUDA_DEVICE_RUNTIME "${CUDAToolkit_LIBRARY_DIR}/*cudadevrt*")
 
 set(MADRONA_MW_GPU_COMPILE_FLAGS
     -std=c++20
@@ -119,16 +115,6 @@ foreach(f ${MADRONA_MW_GPU_COMPILE_FLAGS})
 endforeach()
 set(NVRTC_OPTIONS "${NVRTC_OPTIONS}")
 
-
-target_compile_definitions(madrona_mw_gpu PRIVATE
-    MADRONA_NVRTC_OPTIONS=${NVRTC_OPTIONS}
-    MADRONA_MW_GPU_JOB_SYS_INTERNAL_CPP=${JOB_SYS_INTERNAL_SRC_LIST}
-    MADRONA_MW_GPU_TASK_GRAPH_INTERNAL_CPP=${TASK_GRAPH_INTERNAL_SRC_LIST}
-    MADRONA_MW_GPU_BVH_INTERNAL_CPP=${BVH_INTERNAL_SRC_LIST}
-    MADRONA_CUDADEVRT_PATH=\"${CUDA_DEVICE_RUNTIME}\"
-    MADRONA_MW_GPU_DEVICE_SRC_DIR=\"${DEVICE_SRC_DIR}\"
-)
-
 target_compile_definitions(madrona_mw_gpu
     PUBLIC
         MADRONA_MWGPU_SUPPORT=1
@@ -136,7 +122,7 @@ target_compile_definitions(madrona_mw_gpu
         MADRONA_NVRTC_OPTIONS=${NVRTC_OPTIONS}
         MADRONA_MW_GPU_JOB_SYS_INTERNAL_CPP=${JOB_SYS_INTERNAL_SRC_LIST}
         MADRONA_MW_GPU_TASK_GRAPH_INTERNAL_CPP=${TASK_GRAPH_INTERNAL_SRC_LIST}
-        MADRONA_CUDADEVRT_PATH=\"${CUDA_DEVICE_RUNTIME}\"
+        MADRONA_MW_GPU_BVH_INTERNAL_CPP=${BVH_INTERNAL_SRC_LIST}
         MADRONA_MW_GPU_DEVICE_SRC_DIR=\"${DEVICE_SRC_DIR}\"
 )
 

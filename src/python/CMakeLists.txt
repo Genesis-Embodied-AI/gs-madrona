@@ -22,7 +22,7 @@ endif()
 if (TARGET madrona_cuda)
     target_link_libraries(madrona_python_utils
         PUBLIC
-            CUDA::cudart
+            CUDA::cudart_static
         PRIVATE
             madrona_cuda
     )
