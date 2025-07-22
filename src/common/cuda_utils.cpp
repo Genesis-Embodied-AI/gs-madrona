@@ -19,12 +19,17 @@ void CudaDynamicLoader::ensureLoaded() {
   std::call_once(flag, [] {
     cuda_handle_ = dlopen("libcuda.so", RTLD_LAZY | RTLD_LOCAL);
     if (!cuda_handle_) {
-        fprintf(stderr, "Failed to load 'libcuda.so': %s\n", dlerror());
+        fprintf(stderr, "Failed to load Nvidia CUDA driver library: %s\n", dlerror());
         std::abort();
     }
-    nvrtc_handle_ = dlopen("libnvrtc.so", RTLD_LAZY | RTLD_LOCAL);
+    for (const char* name : std::array{"libnvrtc.so.13", "libnvrtc.so.12", "libnvrtc.so"}) {
+        nvrtc_handle_ = dlopen(name, RTLD_LAZY | RTLD_LOCAL);
+        if (nvrtc_handle_) {
+            break;
+        }
+    }
     if (!nvrtc_handle_) {
-        fprintf(stderr, "Failed to load 'libnvrtc.so': %s\n", dlerror());
+        fprintf(stderr, "Failed to load Nvidia  runtime compilation library: %s\n", dlerror());
         std::abort();
     }
 

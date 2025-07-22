@@ -349,10 +349,10 @@ static RTAssets loadRenderObjects(
 {
     StackAlloc tmp_alloc;
 
-    std::array<std::string, 1> 
-        render_asset_paths;
-    render_asset_paths[(size_t)RenderPrimObjectIDs::DebugCam] =
-        (std::filesystem::path(DATA_DIR) / "debugcam.obj").string();
+    std::array<std::string, 1> render_asset_paths;
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path data_dir = py_root_env ? (std::string(py_root_env) + "/data") : DATA_DIR;
+    render_asset_paths[(size_t)RenderPrimObjectIDs::DebugCam] = (data_dir / "debugcam.obj").string();
 
     std::array<const char *, render_asset_paths.size()> render_asset_cstrs;
     for (size_t i = 0; i < render_asset_paths.size(); i++) {
@@ -662,6 +662,22 @@ Manager::Impl * Manager::Impl::make(
         };
     }
 
+    std::vector<std::string> hideseek_srcs = {
+            GPU_HIDESEEK_SRC_LIST
+        };
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? py_root_env : std::filesystem::current_path();
+    std::for_each(
+        hideseek_srcs.begin(), hideseek_srcs.end(),
+        [&root_dir](std::string &src) {
+            src = std::filesystem::weakly_canonical(root_dir / src).string();
+        }
+    );
+    std::vector<const char*> hideseek_srcs_cstr{};
+    for (std::string const & src : hideseek_srcs) {
+        hideseek_srcs_cstr.push_back(src.c_str());
+    }
+
     MWCudaExecutor gpu_exec({
         .worldInitPtr = world_inits.data(),
         .numWorldInitBytes = sizeof(Sim::WorldInit),
@@ -673,7 +689,7 @@ Manager::Impl * Manager::Impl::make(
         .numTaskGraphs = (uint32_t)TaskGraphID::NumGraphs,
         .numExportedBuffers = (uint32_t)ExportID::NumExports, 
     }, {
-        { GPU_HIDESEEK_SRC_LIST },
+        hideseek_srcs_cstr,
         { GPU_HIDESEEK_COMPILE_FLAGS },
         CompileConfig::OptMode::LTO,
     }, cu_ctx, render_cfg);

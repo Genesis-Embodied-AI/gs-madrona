@@ -186,9 +186,9 @@ struct DrawCommandPackage {
 static vk::PipelineShaders makeDrawShaders(const vk::Device &dev, 
                                            VkSampler repeat_sampler)
 {
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     auto shader_path = (shader_dir / "batch_draw_rgb.hlsl").string();
 
@@ -425,9 +425,9 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
 
 static vk::PipelineShaders makeShadowDrawShaders(const vk::Device &dev)
 {
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     auto shader_path = (shader_dir / "batch_shadow_draw.hlsl").string();
 
@@ -617,9 +617,9 @@ static vk::PipelineShaders makeShaders(const vk::Device &dev,
 {
     (void)sampler;
 
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     ShaderCompiler compiler;
     SPIRVShader spirv = compiler.compileHLSLFileToSPV(
@@ -636,9 +636,9 @@ static vk::PipelineShaders makeShadersLighting(const vk::Device &dev,
                                        const char *func_name = "main",
                                        VkSampler repeat_sampler = VK_NULL_HANDLE)
 {
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     ShaderCompiler compiler;
     SPIRVShader spirv = compiler.compileHLSLFileToSPV(

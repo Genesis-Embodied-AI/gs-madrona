@@ -95,7 +95,7 @@ function(madrona_python_disable_nanobind_warnings module_name)
         target_compile_options(${nanobind_target_name} PRIVATE
             "-Wno-everything")
     endif()
-    
+
     if (NOT WIN32) #FIX
         target_link_libraries(${nanobind_target_name} PRIVATE
             madrona_libcxx
@@ -108,9 +108,10 @@ function(madrona_python_disable_nanobind_warnings module_name)
 endfunction()
 
 function(madrona_python_module module_name)
-    nanobind_add_module(${module_name} NB_STATIC
+    nanobind_add_module(${module_name} NB_STATIC STABLE_ABI
         ${ARGN}
     )
+    install(TARGETS ${module_name} LIBRARY DESTINATION gs_madrona)
 
     madrona_python_get_nanobind_target(${module_name} nanobind_target_name)
     madrona_python_disable_nanobind_warnings(${nanobind_target_name})
@@ -127,4 +128,17 @@ function(madrona_python_module module_name)
             madrona_libcxx
         )
     endif()
+
+    nanobind_add_stub(
+        "${module_name}_stub"
+        MODULE ${module_name}
+        MARKER_FILE py.typed
+        OUTPUT ${module_name}.pyi
+        PYTHON_PATH $<TARGET_FILE_DIR:${module_name}>
+        DEPENDS ${module_name}
+    )
+    install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/py.typed"
+        "${CMAKE_CURRENT_BINARY_DIR}/${module_name}.pyi"
+        DESTINATION gs_madrona)
 endfunction()

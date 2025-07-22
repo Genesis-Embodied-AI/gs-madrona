@@ -1,3 +1,7 @@
+import os
+import ctypes
+from pathlib import Path
+
 import numpy as np
 import torch
 from trimesh.visual.texture import TextureVisuals
@@ -5,6 +9,9 @@ from trimesh.visual.color import ColorVisuals
 from PIL import Image
 
 from gs_madrona._gs_madrona_batch_renderer import MadronaBatchRenderer
+
+
+os.environ['MADRONA_ROOT_PATH'] = os.path.dirname(os.path.abspath(__file__))
 
 
 class MadronaBatchRendererAdapter:
@@ -69,6 +76,15 @@ class MadronaBatchRendererAdapter:
 
         # TODO: Support mutable camera fov
         cam_fovy = cam_fovs_tensor.cpu().numpy()
+
+        # Preload Nvidia compiler runtime if available (i.e. torch is not built from source)
+        try:
+            import nvidia.cuda_nvrtc
+            nvrtc_dir = Path(nvidia.cuda_nvrtc.__file__).parent.absolute()
+            libnvrtc_path, *_ = filter(Path.is_file, (nvrtc_dir / "lib").glob("libnvrtc.so.1*"))
+            ctypes.CDLL(libnvrtc_path, ctypes.RTLD_LOCAL)
+        except ImportError:
+            pass
 
         self.madrona = MadronaBatchRenderer(
             gpu_id=gpu_id,

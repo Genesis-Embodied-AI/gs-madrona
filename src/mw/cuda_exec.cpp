@@ -663,7 +663,13 @@ static GPUCompileResults compileCode(
     ExecutorMode exec_mode, bool verbose_compile)
 {
     const std::string cache_path = getenv("MADRONA_MWGPU_KERNEL_CACHE");
-    std::vector<std::string> src_paths(sources, sources + num_sources);
+
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? py_root_env : std::filesystem::current_path();
+    std::vector<std::string> src_paths;
+    for (int64_t i = 0; i < num_sources; ++i) {
+        src_paths.push_back(std::filesystem::weakly_canonical(root_dir / sources[i]).string());
+    }
 
     bool need_recompile = kernelCacheNeedsRecompile(cache_path, src_paths);
     if (!need_recompile) {
@@ -896,15 +902,15 @@ static __attribute__((always_inline)) inline void dispatch(
     }
     for (int64_t i = 0; i < num_sources; i++) {
         if (verbose_compile) {
-            printf("%s\n", sources[i]);
+            printf("%s\n", src_paths[i].c_str());
         }
-        auto [ptx, bytecode] = cu::jitCompileCPPFile(sources[i],
+        auto [ptx, bytecode] = cu::jitCompileCPPFile(src_paths[i].c_str(),
             compile_flags, num_compile_flags,
             fast_compile_flags, num_fast_compile_flags,
             opt_mode == CompileConfig::OptMode::LTO);
 
         processPTXSymbols(std::string_view(ptx.data(), ptx.size()));
-        addToLinker(bytecode, sources[i]);
+        addToLinker(bytecode, src_paths[i].c_str());
 
         source_bytecodes.emplace_back(std::move(bytecode));
     }
@@ -973,8 +979,8 @@ static __attribute__((always_inline)) inline void dispatch(
 
         std::string megakernel_file = "megakernel_" + megakernel_cfg_suffix +
             ".cpp";
-        std::string fake_megakernel_cpp_path =
-            std::string(MADRONA_MW_GPU_DEVICE_SRC_DIR) + "/" + megakernel_file;
+        std::string fake_megakernel_cpp_path = std::filesystem::weakly_canonical(
+            root_dir / MADRONA_MW_GPU_DEVICE_SRC_DIR / megakernel_file).string();
 
         uint32_t max_registers =
             65536 / megakernel_cfg.numThreads / megakernel_cfg.numBlocksPerSM;
@@ -1082,9 +1088,18 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
     using namespace std;
 
     const std::string cache_path = getenv("MADRONA_BVH_KERNEL_CACHE");
-    const std::vector<std::string> bvh_srcs = {
+
+    std::vector<std::string> bvh_srcs = {
             MADRONA_MW_GPU_BVH_INTERNAL_CPP
         };
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? py_root_env : std::filesystem::current_path();
+    std::for_each(
+        bvh_srcs.begin(), bvh_srcs.end(),
+        [&root_dir](std::string &src) {
+            src = std::filesystem::weakly_canonical(root_dir / src).string();
+        }
+    );
 
     char *verbose_compile_env = getenv("MADRONA_MWGPU_VERBOSE_COMPILE");
     bool verbose_compile = verbose_compile_env && verbose_compile_env[0] == '1';
@@ -1111,11 +1126,11 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
         string gpu_arch_str = "sm_" + to_string(cuda_arch.first) +
             to_string(cuda_arch.second);
 
-        std::string linker_arch_str =
+        std::string gpu_arch_flag =
             std::string("-arch=") + gpu_arch_str;
 
         DynArray<const char *> linker_flags {
-            linker_arch_str.c_str(),
+            gpu_arch_flag.c_str(),
             "-ftz=1",
             "-prec-div=0",
             "-prec-sqrt=0",
@@ -1178,16 +1193,26 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
                 (char *)cubin.data(), cubin.size(), name));
         };
 
-        string gpu_arch_flag = std::string("-arch=") + gpu_arch_str;
-
         std::vector<const char *> common_compile_flags {
             MADRONA_NVRTC_OPTIONS
             "-dlto",
             "-DMADRONA_MWGPU_BVH_MODULE",
-            "-arch", gpu_arch_str.c_str(),
+            gpu_arch_flag.c_str(),
             "-lineinfo",
             "-maxrregcount=96"
         };
+        std::vector<std::string> nvrtc_incl_defs = {
+            MADRONA_NVRTC_INCLUDE_DIRS
+        };
+        std::for_each(
+            nvrtc_incl_defs.begin(), nvrtc_incl_defs.end(),
+            [&root_dir](std::string &def) {
+                def = "-I" + std::filesystem::weakly_canonical(root_dir / def).string();
+            }
+        );
+        for (std::string const & def : nvrtc_incl_defs) {
+            common_compile_flags.push_back(def.c_str());
+        }
 
         if (shadow_enable_env && shadow_enable_env[0] == '1') {
             common_compile_flags.push_back("-DMADRONA_RT_SHADOWS");
@@ -1385,6 +1410,8 @@ static GPUKernels buildKernels(const CompileConfig &cfg,
     string gpu_arch_str = "sm_" + to_string(cuda_arch.first) +
         to_string(cuda_arch.second);
 
+    string gpu_arch_flag = std::string("-arch=") + gpu_arch_str;
+
     string num_sms_str =
         "-DMADRONA_MWGPU_NUM_SMS=(" + to_string(num_sms) + "_i32)";
 
@@ -1400,13 +1427,27 @@ static GPUKernels buildKernels(const CompileConfig &cfg,
 
     DynArray<const char *> common_compile_flags {
         MADRONA_NVRTC_OPTIONS
-        "-arch", gpu_arch_str.c_str(),
+        gpu_arch_flag.c_str(),
         num_sms_str.c_str(),
         max_blocks_str.c_str(),
 #ifdef MADRONA_TRACING
         "-DMADRONA_TRACING=1",
 #endif
     };
+    std::vector<std::string> nvrtc_incl_defs = {
+        MADRONA_NVRTC_INCLUDE_DIRS
+    };
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? py_root_env : std::filesystem::current_path();
+    std::for_each(
+        nvrtc_incl_defs.begin(), nvrtc_incl_defs.end(),
+        [&root_dir](std::string &def) {
+            def = "-I" + std::filesystem::weakly_canonical(root_dir / def).string();
+        }
+    );
+    for (std::string const & def : nvrtc_incl_defs) {
+        common_compile_flags.push_back(def.c_str());
+    }
 
     for (const char *user_flag : cfg.userCompileFlags) {
         common_compile_flags.push_back(user_flag);
@@ -1441,11 +1482,8 @@ static GPUKernels buildKernels(const CompileConfig &cfg,
         compile_flags.push_back("-DMADRONA_MWGPU_TASKGRAPH=1");
     }
 
-    std::string linker_arch_str =
-        std::string("-arch=") + gpu_arch_str;
-
     DynArray<const char *> linker_flags {
-        linker_arch_str.c_str(),
+        gpu_arch_flag.c_str(),
         "-ftz=1",
         "-prec-div=0",
         "-prec-sqrt=0",

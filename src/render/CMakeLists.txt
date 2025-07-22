@@ -29,6 +29,7 @@ add_library(madrona_render_core STATIC
     render_common.hpp
     image_util.cpp
 )
+
 target_compile_definitions(madrona_render_core PUBLIC
     "-DMADRONA_RENDER_DATA_DIR=${CMAKE_CURRENT_SOURCE_DIR}/"
 )

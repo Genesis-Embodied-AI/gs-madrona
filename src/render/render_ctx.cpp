@@ -277,9 +277,9 @@ static PipelineShaders makeDrawShaders(
     (void)repeat_sampler;
     (void)clamp_sampler;
 
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     auto shader_path = (shader_dir / "viewer_draw.hlsl").string();
 
@@ -328,9 +328,9 @@ static PipelineShaders makeDrawShaders(
 
 static PipelineShaders makeCullShader(const Device &dev)
 {
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     ShaderCompiler compiler;
     SPIRVShader spirv = compiler.compileHLSLFileToSPV(
@@ -987,9 +987,9 @@ inline constexpr size_t SHADOW_OFFSET_FILTER_SIZE = 8;
 
 static Sky loadSky(const vk::Device &dev, MemoryAllocator &alloc, VkQueue queue)
 {
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "sky";
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "sky");
 
     auto [transmittance, transmittance_reqs] = alloc.makeTexture2D(
         TRANSMITTANCE_WIDTH, TRANSMITTANCE_HEIGHT, 1, InternalConfig::skyFormatHighp);

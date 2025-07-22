@@ -34,3 +34,6 @@
 [submodule "external/stb"]
 	path = external/stb
 	url = https://github.com/nothings/stb.git
+[submodule "external/cccl"]
+	path = external/cccl
+	url = https://github.com/NVIDIA/cccl.git
