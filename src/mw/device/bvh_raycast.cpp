@@ -771,8 +771,7 @@ static __device__ TraceResult traceRay(
             int32_t material_idx = override_mat_id;
 
             if (override_mat_id == MaterialOverride::UseDefaultMaterial) {
-                material_idx = tri_hit.bvh->getMaterialIDX(
-                        tri_hit.leafMaterialIndex);
+                material_idx = tri_hit.bvh->getMaterialIDX(tri_hit.leafMaterialIndex);
             }
 
             Vector3 color = { 1.f, 1.f, 1.f };
@@ -802,12 +801,8 @@ static __device__ TraceResult traceRay(
                     // Clamp LOD to [0, 8]
                     lod = fminf(fmaxf(lod, 0.0f), 8.0f);
 
-                    float4 sampled_color = tex2DLod<float4>(*tex,
-                            tri_hit.uv.x, tri_hit.uv.y, lod);
-
-                    Vector3 tex_color = { sampled_color.x,
-                        sampled_color.y,
-                        sampled_color.z };
+                    float4 sampled_color = tex2DLod<float4>(*tex, tri_hit.uv.x, tri_hit.uv.y, lod);
+                    Vector3 tex_color = { sampled_color.x, sampled_color.y, sampled_color.z };
 
                     color.x = tex_color.x * mat->color.x;
                     color.y = tex_color.y * mat->color.y;
