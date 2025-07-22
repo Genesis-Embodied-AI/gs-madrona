@@ -134,15 +134,12 @@ void lighting(uint3 idx : SV_DispatchThreadID)
         idx.y * pushConst.viewWidth + idx.x;
 
     if (renderOptionsBuffer[0].outputRGB) {
-
         float4 color = rgbInBuffer[target_idx][vbuffer_pixel + uint3(pixel_offset.xy, 0)];
         float3 out_color = color.rgb;
-
         rgbOutputBuffer[out_pixel_idx] = linearToSRGB8(out_color); 
     }
 
-    if (renderOptionsBuffer[0].outputDepth) 
-    {
+    if (renderOptionsBuffer[0].outputDepth) {
         uint2 depth_dim;
         depthInBuffer[target_idx].GetDimensions(depth_dim.x, depth_dim.y);
         float2 depth_uv = float2(vbuffer_pixel.x + pixel_offset.x + 0.5, 

@@ -65,6 +65,7 @@ struct V2F {
     [[vk::location(5)]] float3 worldNormal : TEXCOORD4;
     [[vk::location(6)]] uint worldIdx : TEXCOORD5;
     [[vk::location(7)]] uint viewIdx : TEXCOORD6;
+    [[vk::location(8)]] uint objectIdx : TEXCOORD7;
 };
 
 
@@ -117,6 +118,7 @@ void vert(in uint vid : SV_VertexID,
     v2f.worldNormal = rotateVec(instance_data.rotation, vert.normal);
     v2f.worldIdx = instance_data.worldID;
     v2f.viewIdx = draw_data.viewID;
+    v2f.objectIdx = instance_data.objectID;
 
     if (instance_data.matID == -2) {
         v2f.materialIdx = -2;
@@ -265,14 +267,6 @@ PixelOutput frag(in V2F v2f,
 
     float3 normal = normalize(v2f.worldNormal);
 
-    if (renderOptions.outputNormal) {
-        output.normalOut = float4(0.5 * (normal + 1.0), 1.0);
-    }
-
-    if (renderOptions.outputSegmentation) {
-        output.segmentationOut = v2f.materialIdx;
-    }
-
     if (!renderOptions.outputRGB) {
         output.rgbOut = float4(0.0, 0.0, 0.0, 1.0);
     }
@@ -317,6 +311,14 @@ PixelOutput frag(in V2F v2f,
             color.rgb = (totalLighting + ambient) * color.rgb;
             output.rgbOut = color;
         }
+    }
+
+    if (renderOptions.outputNormal) {
+        output.normalOut = float4(0.5 * (normal + 1.0), 1.0);
+    }
+
+    if (renderOptions.outputSegmentation) {
+        output.segmentationOut = v2f.objectIdx;
     }
 
     return output;

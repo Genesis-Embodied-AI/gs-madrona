@@ -15,9 +15,7 @@ ComponentID StateManager::registerComponent(uint32_t num_bytes)
 
     registerComponent(id, alignof(ComponentT), component_size);
 
-    return ComponentID {
-        id,
-    };
+    return ComponentID {id,};
 }
 
 template <typename ArchetypeT, typename... MetadataComponentTs>
@@ -79,15 +77,6 @@ ArchetypeID StateManager::registerArchetype(
 
         return std::make_pair(components, component_flags);
     });
-
-    printf("archetype_id: %d\n", archetype_id);
-    printf("archetype_flags: %d\n", archetype_flags);
-    printf("archetype_components: %d\n", archetype_components.size());
-    printf("max_num_entities_per_world: %d\n", max_num_entities_per_world);
-    for (int i = 0; i < (int)archetype_components.size(); i++) {
-        printf("component_id: %d\n", archetype_components[i].id);
-    }
-    puts("!!!!");
 
     registerArchetype(archetype_id,
                       archetype_flags,

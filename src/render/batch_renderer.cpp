@@ -280,8 +280,8 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
                                     VK_COLOR_COMPONENT_B_BIT |
                                     VK_COLOR_COMPONENT_A_BIT;
 
-    std::array<VkPipelineColorBlendAttachmentState, 1> blend_attachments {{
-        blend_attach
+    std::array<VkPipelineColorBlendAttachmentState, 3> blend_attachments {{
+        blend_attach, blend_attach, blend_attach
     }};
 
     VkPipelineColorBlendStateCreateInfo blend_info {};
@@ -404,7 +404,7 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
     // segmentation_rendering_info.pColorAttachmentFormats = &InternalConfig::segmentationOnlyFormat;
     // segmentation_rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
 
-    std::array<VkGraphicsPipelineCreateInfo, 4> gfx_infos {{
+    std::array<VkGraphicsPipelineCreateInfo, 2> gfx_infos {{
         {
             .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
             .pNext = &rendering_info,
@@ -1480,12 +1480,15 @@ static void issueRasterization(vk::Device &dev,
     rgb_attach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     rgb_attach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     rgb_attach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    rgb_attach.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
 
     VkRenderingAttachmentInfoKHR normal_attach = rgb_attach;
     normal_attach.imageView = target.normalView;
+    normal_attach.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
 
     VkRenderingAttachmentInfoKHR segmentation_attach = rgb_attach;
     segmentation_attach.imageView = target.segmentationView;
+    segmentation_attach.clearValue.color = {.int32 = {-1, 0, 0, 0}};
 
     std::array color_attach = {rgb_attach, normal_attach, segmentation_attach};
 
@@ -1501,8 +1504,8 @@ static void issueRasterization(vk::Device &dev,
         .extent = { target.pixelWidth, target.pixelHeight }
     };
 
-    VkRenderingInfo rendering_info = {};
-    rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    VkRenderingInfoKHR rendering_info = {};
+    rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR;
     rendering_info.renderArea = total_rect;
     rendering_info.layerCount = 1;
     rendering_info.colorAttachmentCount = depth_only ? 0 : 3;
@@ -2458,8 +2461,8 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
             .size = num_instances_bytes
         };
 
-        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->instancesHdl,
-                             batch_buffers.instances.buffer,
+        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->instancesHdl, // src
+                             batch_buffers.instances.buffer,        // dst
                              1, &instance_data_copy);
     }
 
