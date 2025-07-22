@@ -73,9 +73,7 @@ ComponentID StateManager::registerComponent(uint32_t num_bytes)
     registerComponent(id, std::alignment_of_v<ComponentT>,
                       component_size);
 
-    return ComponentID {
-        id,
-    };
+    return ComponentID {id,};
 }
 
 template <typename ArchetypeT, typename... MetadataComponentTs>
@@ -148,8 +146,6 @@ ArchetypeID StateManager::registerArchetype(
     
     uint32_t id = TypeTracker::typeID<ArchetypeT>();
 
-    printf("????1%d\n", id);
-
     registerArchetype(id,
                       archetype_flags,
                       max_num_entities_per_world,
@@ -157,9 +153,7 @@ ArchetypeID StateManager::registerArchetype(
                       archetype_components.data(),
                       archetype_component_flags.data());
 
-    return ArchetypeID {
-        id,
-    };
+    return ArchetypeID {id,};
 }
 
 template <typename SingletonT>
