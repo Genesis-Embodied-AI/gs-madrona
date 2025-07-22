@@ -163,9 +163,6 @@ class MadronaBatchRendererAdapter:
         geom_pos, geom_rot = self.get_geom_pos_rot_torch(rigid)
         cam_pos, cam_rot = self.get_camera_pos_rot_torch(cam_pos_tensor, cam_rot_tensor)
 
-        print("Geom shape:", geom_pos.shape, geom_rot.shape)
-        print("Camera shape:", cam_pos.shape, cam_rot.shape)
-
         self.madrona.render(
             geom_pos,
             geom_rot,

@@ -140,7 +140,6 @@ inline void instanceTransformUpdate(Context &ctx,
 
     data.worldIDX = ctx.worldID().idx;
     data.objectID = obj_id.idx;
-    printf("worldID=%d, objID=%d\n", data.worldIDX, data.objectID);
 
     // Get the root AABB from the model and translate it to store
     // it in the TLBVHNode structure.
@@ -264,10 +263,6 @@ inline void instanceTransformUpdateWithMat(Context &ctx,
 
     data.worldIDX = ctx.worldID().idx;
     data.objectID = obj_id.idx;
-
-    printf("matID=%d, worldID=%d, objID=%d\n", data.matID, data.worldIDX, data.objectID);
-    // TODO: Add entity ID here.
-
     // Get the root AABB from the model and translate it to store
     // it in the TLBVHNode structure.
 
