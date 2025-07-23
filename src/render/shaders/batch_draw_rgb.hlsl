@@ -258,13 +258,10 @@ struct PixelOutput {
 };
 
 [shader("pixel")]
-PixelOutput frag(in V2F v2f,
-                 in uint prim_id : SV_PrimitiveID)
+PixelOutput frag(in V2F v2f, in uint prim_id : SV_PrimitiveID)
 {
     PixelOutput output;
-
     RenderOptions renderOptions = renderOptionsBuffer[0];
-
     float3 normal = normalize(v2f.worldNormal);
 
     if (!renderOptions.outputRGB) {

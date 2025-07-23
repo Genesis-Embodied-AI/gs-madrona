@@ -850,53 +850,50 @@ optional<VkDeviceMemory> MemoryAllocator::alloc(VkDeviceSize num_bytes)
     return mem;
 }
 
-LocalImage MemoryAllocator::makeColorAttachment(uint32_t width,
-                                                uint32_t height,
-                                                uint32_t layers,
-                                                VkFormat format)
+LocalImage MemoryAllocator::makeAttachment(
+    uint32_t width, uint32_t height, uint32_t layers, VkFormat format, bool isDepth)
 {
-    return makeDedicatedImage(width, height, 1, layers,
-                              format,
-                              ImageFlags::colorAttachmentUsage,
-                              type_indices_.local);
+    return makeDedicatedImage(
+        width, height, 1, layers, format,
+        isDepth ? ImageFlags::depthAttachmentUsage : ImageFlags::colorAttachmentUsage,
+        type_indices_.local
+    );
 }
 
-LocalImage MemoryAllocator::makeDepthAttachment(uint32_t width,
-                                                uint32_t height,
-                                                uint32_t layers,
-                                                VkFormat format)
-{
-    return makeDedicatedImage(width, height, 1, layers,
-                              format,
-                              ImageFlags::depthAttachmentUsage,
-                              type_indices_.local);
-}
+// LocalImage MemoryAllocator::makeDepthAttachment(uint32_t width,
+//                                                 uint32_t height,
+//                                                 uint32_t layers,
+//                                                 VkFormat format)
+// {
+//     return makeDedicatedImage(width, height, 1, layers,
+//                               format,
+//                               ImageFlags::depthAttachmentUsage,
+//                               type_indices_.local);
+// }
 
-LocalImage MemoryAllocator::makeNormalAttachment(uint32_t width,
-                                                 uint32_t height,
-                                                 uint32_t layers,
-                                                 VkFormat format)
-{
-    return makeDedicatedImage(width, height, 1, layers,
-                              format,
-                              ImageFlags::normalAttachmentUsage,
-                              type_indices_.local);
-}
+// LocalImage MemoryAllocator::makeNormalAttachment(uint32_t width,
+//                                                  uint32_t height,
+//                                                  uint32_t layers,
+//                                                  VkFormat format)
+// {
+//     return makeDedicatedImage(width, height, 1, layers,
+//                               format,
+//                               ImageFlags::normalAttachmentUsage,
+//                               type_indices_.local);
+// }
 
-LocalImage MemoryAllocator::makeSegmentationAttachment(uint32_t width,
-                                                       uint32_t height,
-                                                       uint32_t layers,
-                                                       VkFormat format)
-{
-    return makeDedicatedImage(width, height, 1, layers,
-                              format,
-                              ImageFlags::segmentationAttachmentUsage,
-                              type_indices_.local);
-}
+// LocalImage MemoryAllocator::makeSegmentationAttachment(uint32_t width,
+//                                                        uint32_t height,
+//                                                        uint32_t layers,
+//                                                        VkFormat format)
+// {
+//     return makeDedicatedImage(width, height, 1, layers,
+//                               format,
+//                               ImageFlags::segmentationAttachmentUsage,
+//                               type_indices_.local);
+// }
 
-LocalImage MemoryAllocator::makeConversionImage(uint32_t width,
-                                                uint32_t height,
-                                                VkFormat fmt)
+LocalImage MemoryAllocator::makeConversionImage(uint32_t width, uint32_t height, VkFormat fmt)
 {
     return makeDedicatedImage(width, height, 1, 1,
                               fmt,

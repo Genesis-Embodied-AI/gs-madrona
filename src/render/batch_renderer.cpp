@@ -41,6 +41,36 @@ inline constexpr uint32_t numDrawCmdBuffers = 4; // Triple buffering
 inline constexpr uint32_t maxBatchShadowMapSize = 1024;
 }
 
+const VkImageView &LayeredTarget::getImageView(uint32_t component)
+{
+    if (this->components[component]) { return this->componentsView[component]; }
+    
+    this->components[component] = std::make_unique<vk::LocalImage>(
+        alloc.makeAttachment(
+            this->pixelWidth, this->pixelHeight, 1,
+            InternalConfig::componentFormats[component],
+            InternalConfig::isDepth[component],
+        ));
+    
+    VkImageViewCreateInfo view_info = {};
+    view_info.image = this->components[component]->image;
+    view_info.format = InternalConfig::componentFormats[component];
+    view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    view_info.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    view_info.subresourceRange = {
+        .aspectMask = InternalConfig::isDepth[component] ? 
+                      VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+    };
+    REQ_VK(dev.dt.createImageView(
+        dev.hdl, &view_info, nullptr, &this->componentsView[component]));
+    
+    return this->componentsView[component];
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // LAYERED OUTPUT CREATION                                                    //
 ////////////////////////////////////////////////////////////////////////////////
@@ -58,6 +88,7 @@ static uint32_t getShadowMapSize(uint32_t width, uint32_t height)
     }
     return std::min(shadow_map_size, consts::maxBatchShadowMapSize);
 }
+
 
 static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
                                                    uint32_t height,
@@ -93,26 +124,26 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
         uint32_t shadow_image_height = shadow_map_size * num_images_y;
 
         LayeredTarget target = {
-            .rgb = alloc.makeColorAttachment(
-                image_width, image_height, 1,
-                depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::colorOnlyFormat),
-            .rgbView = {},
-            .depth = alloc.makeDepthAttachment(
-                image_width, image_height, 1, InternalConfig::depthFormat),
-            .depthView = {},
-            .normal = alloc.makeNormalAttachment(
-                image_width, image_height, 1,
-                depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::normalOnlyFormat),
-            .normalView = {},
-            .segmentation = alloc.makeSegmentationAttachment(
-                image_width, image_height, 1,
-                depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::segmentationOnlyFormat),
-            .segmentationView = {},
-            .shadowMap = alloc.makeColorAttachment(
-                shadow_image_width, shadow_image_height, 1, InternalConfig::varianceFormat),
+            // .depth = alloc.makeDepthAttachment(
+            //     image_width, image_height, 1, InternalConfig::depthFormat),
+            // .depthView = {},
+            // .normal = alloc.makeNormalAttachment(
+            //     image_width, image_height, 1,
+            //     depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::normalOnlyFormat),
+            // .normalView = {},
+            // .segmentation = alloc.makeSegmentationAttachment(
+            //     image_width, image_height, 1,
+            //     depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::segmentationOnlyFormat),
+            // .segmentationView = {},
+            .components = std::vector(maxComponents),
+            .componentsView = std::vector(maxComponents),
+            .shadowMap = alloc.makeAttachment(
+                shadow_image_width, shadow_image_height, 1,
+                InternalConfig::varianceFormat, false),
             .shadowMapView = {},
-            .shadowDepth = alloc.makeDepthAttachment(
-                shadow_image_width, shadow_image_height, 1, InternalConfig::depthFormat),
+            .shadowDepth = alloc.makeAttachment(
+                shadow_image_width, shadow_image_height, 1,
+                InternalConfig::depthFormat, true),
             .shadowDepthView = {},
             .numViews = num_views_in_image,
             .lightingSet = {},
@@ -130,32 +161,32 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
         view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         view_info.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
         view_info.subresourceRange = {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
         };
 
-        view_info.image = target.rgb.image;
-        view_info.format = depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::colorOnlyFormat;
-        view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.rgbView));
+        // view_info.image = target.rgb.image;
+        // view_info.format = depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::colorOnlyFormat;
+        // view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        // REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.rgbView));
 
-        view_info.image = target.depth.image;
-        view_info.format = InternalConfig::depthFormat;
-        view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.depthView));
+        // view_info.image = target.depth.image;
+        // view_info.format = InternalConfig::depthFormat;
+        // view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        // REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.depthView));
 
-        view_info.image = target.normal.image;
-        view_info.format = depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::normalOnlyFormat;
-        view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.normalView));
+        // view_info.image = target.normal.image;
+        // view_info.format = depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::normalOnlyFormat;
+        // view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        // REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.normalView));
 
-        view_info.image = target.segmentation.image;
-        view_info.format = depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::segmentationOnlyFormat;
-        view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.segmentationView));
+        // view_info.image = target.segmentation.image;
+        // view_info.format = depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::segmentationOnlyFormat;
+        // view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        // REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &target.segmentationView));
 
         view_info.image = target.shadowMap.image;
         view_info.format = InternalConfig::varianceFormat;
@@ -206,11 +237,9 @@ static vk::PipelineShaders makeDrawShaders(const vk::Device &dev,
 
     ShaderCompiler compiler;
     SPIRVShader vert_spirv = compiler.compileHLSLFileToSPV(
-        shader_path.c_str(), {}, {},
-        { "vert", ShaderStage::Vertex });
+        shader_path.c_str(), {}, {}, { "vert", ShaderStage::Vertex });
     SPIRVShader frag_spirv = compiler.compileHLSLFileToSPV(
-        shader_path.c_str(), {}, {},
-        { "frag", ShaderStage::Fragment });
+        shader_path.c_str(), {}, {}, { "frag", ShaderStage::Fragment });
     std::array<SPIRVShader, 2> shaders {
         std::move(vert_spirv),
         std::move(frag_spirv),
@@ -886,8 +915,6 @@ static void makeBatchFrame(vk::Device& dev,
                            PipelineMP<1> &lighting,
                            PipelineMP<1> &shadowGen,
                            PipelineMP<1> &shadowDraw,
-                           uint32_t view_width,
-                           uint32_t view_height,
                            bool depth_only)
 {
     VkDeviceSize sky_input_size = sizeof(render::shader::SkyData);
@@ -1004,15 +1031,16 @@ static void makeBatchFrame(vk::Device& dev,
     assert(desc_index <= num_desc_updates);
     vk::DescHelper::update(dev, desc_updates.data(), desc_index);
 
+    // cfg.renderWidth, cfg.renderHeight, depthOnly;
     HeapArray<DrawCommandPackage> draw_packages(consts::numDrawCmdBuffers);
     for (int i = 0; i < (int)consts::numDrawCmdBuffers; ++i) {
-        uint32_t max_image_dim_x = std::min(consts::maxTextureDim, consts::maxNumImagesX * view_width);
-        uint32_t max_image_dim_y = std::min(consts::maxTextureDim, consts::maxNumImagesY * view_height);
+        uint32_t max_image_dim_x = std::min(consts::maxTextureDim, consts::maxNumImagesX * cfg.renderWidth);
+        uint32_t max_image_dim_y = std::min(consts::maxTextureDim, consts::maxNumImagesY * cfg.renderHeight);
 
         // Each view is going to be stored in one section of the layer (one viewport of
         // the layer). Each image, will have as many layers as possible.
-        uint32_t max_images_x = max_image_dim_x / view_width;
-        uint32_t max_images_y = max_image_dim_y / view_height;
+        uint32_t max_images_x = max_image_dim_x / cfg.renderWidth;
+        uint32_t max_images_y = max_image_dim_y / cfg.renderHeight;
         uint32_t max_views_per_target = max_images_x * max_images_y;
 
         draw_packages.emplace(i, makeDrawCommandPackage(

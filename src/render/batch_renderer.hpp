@@ -21,20 +21,19 @@ struct RenderContext;
 
 struct LayeredTarget {
     // Contains a uint for triangle ID and another for instance ID
-    render::vk::LocalImage rgb;
-    VkImageView rgbView;
-
-    // Depth
-    render::vk::LocalImage depth;
-    VkImageView depthView;
-
-    // Normal
-    render::vk::LocalImage normal;
-    VkImageView normalView;
-
-    // Segmentation
-    render::vk::LocalImage segmentation;
-    VkImageView segmentationView;
+    std::vector<std::unique_ptr<vk::LocalImage> > components;
+    std::vector<std::unique_ptr<VkImageView> > componentsView;
+    // render::vk::LocalImage rgb;
+    // VkImageView rgbView;
+    // // Depth
+    // render::vk::LocalImage depth;
+    // VkImageView depthView;
+    // // Normal
+    // render::vk::LocalImage normal;
+    // VkImageView normalView;
+    // // Segmentation
+    // render::vk::LocalImage segmentation;
+    // VkImageView segmentationView;
 
     // Shadow map
     render::vk::LocalImage shadowMap;
@@ -57,6 +56,8 @@ struct LayeredTarget {
     uint32_t shadowTextureHeight;
 
     uint32_t shadowMapSize;
+    
+    const VkImageView &getImageView(uint32_t component) const;
 };
 
 struct BatchRenderInfo {

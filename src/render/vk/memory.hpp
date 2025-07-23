@@ -243,14 +243,14 @@ public:
     VkDeviceSize alignUniformBufferOffset(VkDeviceSize offset) const;
     VkDeviceSize alignStorageBufferOffset(VkDeviceSize offset) const;
 
-    LocalImage makeColorAttachment(
-        uint32_t width, uint32_t height, uint32_t layers, VkFormat format);
-    LocalImage makeDepthAttachment(
-        uint32_t width, uint32_t height, uint32_t layers, VkFormat format);
-    LocalImage makeNormalAttachment(
-        uint32_t width, uint32_t height, uint32_t layers, VkFormat format);
-    LocalImage makeSegmentationAttachment(
-        uint32_t width, uint32_t height, uint32_t layers, VkFormat format);
+    LocalImage makeAttachment(
+        uint32_t width, uint32_t height, uint32_t layers, VkFormat format, bool isDepth);
+    // LocalImage makeDepthAttachment(
+    //     uint32_t width, uint32_t height, uint32_t layers, VkFormat format);
+    // LocalImage makeNormalAttachment(
+    //     uint32_t width, uint32_t height, uint32_t layers, VkFormat format);
+    // LocalImage makeSegmentationAttachment(
+    //     uint32_t width, uint32_t height, uint32_t layers, VkFormat format);
 
     LocalImage makeConversionImage(
         uint32_t width, uint32_t height, VkFormat fmt);
