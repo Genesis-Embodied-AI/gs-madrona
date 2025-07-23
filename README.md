@@ -1,26 +1,24 @@
 # gs-madrona — A Fork of Madrona and Madrona-MJX for Genesis
 
 It started as a fork of [Madrona](https://github.com/shacklettbp/madrona) for the core C++ implementation, created in 2025. Since the fork, substantial modifications have been made to adapt the codebase for [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis), including:
-- Integrating first-class Python interface based on [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx) and designed for [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis).
-- Adding new features to support the continuous development of [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis). For more details, please refer to [Features Added Since Fork](#features-added-since-fork)
-- Removing features not used by [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis). For more details, please refer to [Removed Features](#removed-features)
+- Integrating Python interface based on [Madrona-MJX](https://github.com/shacklettbp/madrona_mjx) and designed for Genesis.
+- Adding new features to support the continuous development. For more details, please refer to [Features Added Since Fork](#features-added-since-fork)
+- Removing features not used by Genesis. For more details, please refer to [Removed Features](#removed-features)
 
-Due to the extent of these changes, gs-madrona has diverged significantly from its origins. It is now a fully independent project with no intention of maintaining backward compatibility. Our focus is solely on evolving gs-madrona into a robust and efficient batch renderer for [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis).
+Due to the extent of these changes, gs-madrona has diverged significantly from its origins. It is now a fully independent project with no intention of maintaining backward compatibility. Our focus is solely on evolving gs-madrona into a robust and efficient batch renderer for Genesis.
 
 ## Scope and Objectives
-**gs-madrona** aims to provide a general-purpose **high-throughput batch renderer**.
+**gs-madrona** aims to provide a general-purpose **high-throughput batch renderer** that supports both rasterization and single-bounce ray-tracing pipelines.
 
-**gs-madrona** is the technology used in [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis) to provide native support of batched processing. With **gs-madrona**, multiple environments and cameras can be rendered offscreen in parallel, significantly improving performance compared to renderers doing sequential processing.
+It is a renderer used in Genesis to provide native support of batched processing. With gs-madrona, multiple environments and cameras can be rendered offscreen in parallel, significantly improving performance compared to renderers doing sequential processing.
 
-**gs-madrona** supports both rasterization and single-bounce ray-tracing pipelines.
-
-**gs-madrona** enables seamless data sharing between simulation platforms, e.g. [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis), and the renderer, including:
+**gs-madrona** enables seamless data sharing between Genesis and the renderer, including:
 - Static assets (meshes, textures, etc.)
 - Dynamic runtime data (rigid body transforms, camera transforms, etc.)
 
 At present, batch rendering supports only basic materials, lighting, and shadows. However, we aim to expand its capabilities to include more advanced rendering features.
 
-**gs-madrona** currently has dependencies on the [Genesis simulator](https://github.com/Genesis-Embodied-AI/Genesis). These dependencies are planned to be removed in the near future in order to provide a more generic and decoupled interface.
+While gs-madrona currently relies on Genesis-specific dependencies, we plan to decouple it in the near future to support broader use cases through a more generic interface.
 
 ## Features Added Since Fork
 - Support for non-square resolutions
