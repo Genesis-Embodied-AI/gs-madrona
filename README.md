@@ -12,10 +12,6 @@ Due to the extent of these changes, gs-madrona has diverged significantly from i
 
 It is a renderer used in Genesis to provide native support of batched processing. With gs-madrona, multiple environments and cameras can be rendered offscreen in parallel, significantly improving performance compared to renderers doing sequential processing.
 
-**gs-madrona** enables seamless data sharing between Genesis and the renderer, including:
-- Static assets (meshes, textures, etc.)
-- Dynamic runtime data (rigid body transforms, camera transforms, etc.)
-
 At present, batch rendering supports only basic materials, lighting, and shadows. However, we aim to expand its capabilities to include more advanced rendering features.
 
 While gs-madrona currently relies on Genesis-specific dependencies, we plan to decouple it in the near future to support broader use cases through a more generic interface.
