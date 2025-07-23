@@ -413,10 +413,8 @@ void registerTypes(ECSRegistry &registry,
                    const RenderECSBridge *bridge)
 {
 #ifdef MADRONA_GPU_MODE
-    uint32_t render_output_width = 
-        mwGPU::GPUImplConsts::get().raycastOutputWidth;
-    uint32_t render_output_height = 
-        mwGPU::GPUImplConsts::get().raycastOutputHeight;
+    uint32_t render_output_width = mwGPU::GPUImplConsts::get().raycastOutputWidth;
+    uint32_t render_output_height = mwGPU::GPUImplConsts::get().raycastOutputHeight;
 
     uint32_t rgb_output_bytes = render_output_width * render_output_height * 4;
     uint32_t depth_output_bytes = render_output_width * render_output_height * 4;
