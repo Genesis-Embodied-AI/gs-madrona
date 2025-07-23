@@ -742,7 +742,7 @@ static PipelineMP<1> makeComputePipeline(const vk::Device &dev,
     };
 }
 
-class BatchFrame {
+struct BatchFrame {
     BatchImportedBuffers buffers;
 
     vk::LocalBuffer skyInput;
