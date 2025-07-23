@@ -84,9 +84,7 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
     uint32_t views_left = max_num_views;
 
     for (int i = 0; i < (int)num_targets; ++i) {
-        uint32_t num_views_in_image = std::min((uint32_t)views_left,
-                                               max_views_per_target);
-
+        uint32_t num_views_in_image = std::min((uint32_t)views_left, max_views_per_target);
         uint32_t num_images_x = std::min(num_views_in_image, max_images_x);
         uint32_t num_images_y = utils::divideRoundUp(num_views_in_image, max_images_x);
         uint32_t image_width = width * num_images_x;
@@ -213,17 +211,9 @@ static vk::PipelineShaders makeDrawShaders(const vk::Device &dev,
     SPIRVShader frag_spirv = compiler.compileHLSLFileToSPV(
         shader_path.c_str(), {}, {},
         { "frag", ShaderStage::Fragment });
-    // SPIRVShader normal_frag_spirv = compiler.compileHLSLFileToSPV(
-    //     shader_path.c_str(), {}, {},
-    //     { "normal_frag", ShaderStage::Fragment });
-    // SPIRVShader segmentation_frag_spirv = compiler.compileHLSLFileToSPV(
-    //     shader_path.c_str(), {}, {},
-    //     { "segmentation_frag", ShaderStage::Fragment });
     std::array<SPIRVShader, 2> shaders {
         std::move(vert_spirv),
         std::move(frag_spirv),
-        // std::move(normal_frag_spirv),
-        // std::move(segmentation_frag_spirv),
     };
 
     StackAlloc tmp_alloc;
@@ -365,44 +355,6 @@ static PipelineMP<2> makeDrawPipeline(const vk::Device &dev,
     depth_rendering_info.colorAttachmentCount = 0;
     depth_rendering_info.pColorAttachmentFormats = nullptr;
     depth_rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
-
-    // // normal + depth pass
-    // std::array<VkPipelineShaderStageCreateInfo, 2> normal_gfx_stages {{
-    //     {
-    //         VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-    //         nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT,
-    //         shaders.getShader(0), "vert", nullptr,
-    //     },
-    //     {
-    //         VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-    //         nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT,
-    //         shaders.getShader(2), "normal_frag", nullptr,
-    //     },
-    // }};
-    // VkPipelineRenderingCreateInfo normal_rendering_info = {};
-    // normal_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    // normal_rendering_info.colorAttachmentCount = 1;
-    // normal_rendering_info.pColorAttachmentFormats = &InternalConfig::normalOnlyFormat;
-    // normal_rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
-
-    // // segmentation + depth pass
-    // std::array<VkPipelineShaderStageCreateInfo, 2> segmentation_gfx_stages {{
-    //     {
-    //         VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-    //         nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT,
-    //         shaders.getShader(0), "vert", nullptr,
-    //     },
-    //     {
-    //         VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-    //         nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT,
-    //         shaders.getShader(3), "segmentation_frag", nullptr,
-    //     },
-    // }};
-    // VkPipelineRenderingCreateInfo segmentation_rendering_info = {};
-    // segmentation_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    // segmentation_rendering_info.colorAttachmentCount = 1;
-    // segmentation_rendering_info.pColorAttachmentFormats = &InternalConfig::segmentationOnlyFormat;
-    // segmentation_rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
 
     std::array<VkGraphicsPipelineCreateInfo, 2> gfx_infos {{
         {
@@ -790,7 +742,7 @@ static PipelineMP<1> makeComputePipeline(const vk::Device &dev,
     };
 }
 
-struct BatchFrame {
+class BatchFrame {
     BatchImportedBuffers buffers;
 
     vk::LocalBuffer skyInput;
@@ -834,18 +786,10 @@ struct BatchFrame {
 
     VkCommandPool renderCmdPool;
     VkCommandBuffer renderCmdbuf;
-
-    // Waited for by the viewer or the batch renderer
-    VkSemaphore prepareFinished;
-
-    // Waited for by the viewer to render stuff to the window
-    VkSemaphore renderFinished;
-
-    // Waited for if that latest thing was a transition
-    VkSemaphore layoutTransitionFinished;
-
-    // Waited for at the beginning of each renderViews call
-    VkFence prepareFence;
+    VkSemaphore prepareFinished;    // Waited for by the viewer or the batch renderer
+    VkSemaphore renderFinished;     // Waited for by the viewer to render stuff to the window
+    VkSemaphore layoutTransitionFinished;   // Waited for if that latest thing was a transition
+    VkFence prepareFence;   // Waited for at the beginning of each renderViews call
     VkFence renderFence;
 
     // Keep track of which semaphore to wait on
@@ -1057,72 +1001,51 @@ static void makeBatchFrame(vk::Device& dev,
         // the layer). Each image, will have as many layers as possible.
         uint32_t max_images_x = max_image_dim_x / view_width;
         uint32_t max_images_y = max_image_dim_y / view_height;
-
         uint32_t max_views_per_target = max_images_x * max_images_y;
 
         draw_packages.emplace(i, makeDrawCommandPackage(
-                    dev, alloc, prepare_views, draw,
-                    max_views_per_target));
+            dev, alloc, prepare_views, draw, max_views_per_target));
     }
 
     HeapArray<LayeredTarget> layered_targets = makeLayeredTargets(
         cfg.renderWidth, cfg.renderHeight, 
         cfg.numWorlds * cfg.maxViewsPerWorld,
-        dev, alloc,
-        depth_only);
+        dev, alloc, depth_only);
 
     uint64_t total_num_pixels = 
         (uint64_t)cfg.renderWidth * (uint64_t)cfg.renderHeight * 
         (uint64_t)cfg.numWorlds * (uint64_t)cfg.maxViewsPerWorld;
-
     uint64_t num_rgb_bytes = total_num_pixels * sizeof(uint8_t) * 4_u64;
     uint64_t num_depth_bytes = total_num_pixels * sizeof(float);
     uint64_t num_normal_bytes = total_num_pixels * sizeof(uint8_t) * 4_u64;
     uint64_t num_segmentation_bytes = total_num_pixels * sizeof(int32_t);
+    // render_options
 
     vk::DedicatedBuffer rgb_output_buffer = alloc.makeDedicatedBuffer(
         num_rgb_bytes, false, supports_cuda_export);
-
     vk::DedicatedBuffer depth_output_buffer = alloc.makeDedicatedBuffer(
         num_depth_bytes, false, supports_cuda_export);
-
     vk::DedicatedBuffer normal_output_buffer = alloc.makeDedicatedBuffer(
         num_normal_bytes, false, supports_cuda_export);
-
     vk::DedicatedBuffer segmentation_output_buffer = alloc.makeDedicatedBuffer(
         num_segmentation_bytes, false, supports_cuda_export);
 
 #ifdef MADRONA_VK_CUDA_SUPPORT
-    vk::CudaImportedBuffer rgb_output_cuda(
-        dev, rgb_output_buffer.mem, num_rgb_bytes);
-
-    vk::CudaImportedBuffer depth_output_cuda(
-        dev, depth_output_buffer.mem, num_depth_bytes);
-
-    vk::CudaImportedBuffer normal_output_cuda(
-        dev, normal_output_buffer.mem, num_normal_bytes);
-
-    vk::CudaImportedBuffer segmentation_output_cuda(
-        dev, segmentation_output_buffer.mem, num_segmentation_bytes);
+    vk::CudaImportedBuffer rgb_output_cuda(dev, rgb_output_buffer.mem, num_rgb_bytes);
+    vk::CudaImportedBuffer depth_output_cuda(dev, depth_output_buffer.mem, num_depth_bytes);
+    vk::CudaImportedBuffer normal_output_cuda(dev, normal_output_buffer.mem, num_normal_bytes);
+    vk::CudaImportedBuffer segmentation_output_cuda(dev, segmentation_output_buffer.mem, num_segmentation_bytes);
 #endif
 
     {
-        // Update lighting_set to point to the layered vbuffer and 
-        // output buffer
-        HeapArray<VkWriteDescriptorSet> lighting_desc_updates(
-            4 * layered_targets.size() + 4);
-        HeapArray<VkWriteDescriptorSet> shadow_map_desc_updates(
-            layered_targets.size());
-        HeapArray<VkDescriptorImageInfo> vbuffer_infos(
-            layered_targets.size());
-        HeapArray<VkDescriptorImageInfo> depth_buffer_infos(
-            layered_targets.size());
-        HeapArray<VkDescriptorImageInfo> normal_buffer_infos(
-            layered_targets.size());
-        HeapArray<VkDescriptorImageInfo> segmentation_buffer_infos(
-            layered_targets.size());
-        HeapArray<VkDescriptorImageInfo> shadow_map_infos(
-            layered_targets.size());
+        // Update lighting_set to point to the layered vbuffer and output buffer
+        HeapArray<VkWriteDescriptorSet> lighting_desc_updates(4 * layered_targets.size() + 4);
+        HeapArray<VkWriteDescriptorSet> shadow_map_desc_updates(layered_targets.size());
+        HeapArray<VkDescriptorImageInfo> vbuffer_infos(layered_targets.size());
+        HeapArray<VkDescriptorImageInfo> depth_buffer_infos(layered_targets.size());
+        HeapArray<VkDescriptorImageInfo> normal_buffer_infos(layered_targets.size());
+        HeapArray<VkDescriptorImageInfo> segmentation_buffer_infos(layered_targets.size());
+        HeapArray<VkDescriptorImageInfo> shadow_map_infos(layered_targets.size());
 
         for (CountT i = 0; i < layered_targets.size(); ++i) {
             vbuffer_infos[i] = {
@@ -1157,28 +1080,23 @@ static void makeBatchFrame(vk::Device& dev,
 
             vk::DescHelper::storageImage(lighting_desc_updates[i * 4],
                                          lighting_set, 
-                                         &vbuffer_infos[i],
-                                         0, i);
+                                         &vbuffer_infos[i], 0, i);
 
             vk::DescHelper::textures(lighting_desc_updates[i * 4 + 1],
                                      lighting_set, 
-                                     &depth_buffer_infos[i], 1,
-                                     1, i);
+                                     &depth_buffer_infos[i], 1, 1, i);
 
             vk::DescHelper::textures(lighting_desc_updates[i * 4 + 2],
                                      lighting_set, 
-                                     &normal_buffer_infos[i], 1,
-                                     2, i);
+                                     &normal_buffer_infos[i], 1, 2, i);
 
             vk::DescHelper::storageImage(lighting_desc_updates[i * 4 + 3],
                                          lighting_set, 
-                                         &segmentation_buffer_infos[i],
-                                         3, i);
+                                         &segmentation_buffer_infos[i], 3, i);
 
             vk::DescHelper::textures(shadow_map_desc_updates[i], 
                                      shadow_asset_set,
-                                     &shadow_map_infos[i], 1,
-                                     0, i);
+                                     &shadow_map_infos[i], 1, 0, i);
         }
 
         VkDescriptorBufferInfo rgb_output_buffer_info {
@@ -1225,11 +1143,8 @@ static void makeBatchFrame(vk::Device& dev,
             lighting_set,
             &segmentation_output_buffer_info, 7);
 
-        vk::DescHelper::update(dev, lighting_desc_updates.data(),
-                               lighting_desc_updates.size());
-
-        vk::DescHelper::update(dev, shadow_map_desc_updates.data(),
-                               shadow_map_desc_updates.size());
+        vk::DescHelper::update(dev, lighting_desc_updates.data(), lighting_desc_updates.size());
+        vk::DescHelper::update(dev, shadow_map_desc_updates.data(), shadow_map_desc_updates.size());
     }
 
     new (frame) BatchFrame{
@@ -1985,8 +1900,7 @@ static const char *getDrawDeferredPath(bool render_rgb)
     }
 }
 
-BatchRenderer::Impl::Impl(const Config &cfg,
-                          RenderContext &rctx):
+BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
     dev(rctx.dev),
     depthOnly(cfg.renderMode == RenderManager::Config::RenderMode::Depth),
     mem(rctx.alloc),
@@ -2005,7 +1919,7 @@ BatchRenderer::Impl::Impl(const Config &cfg,
     createVisualization(
         makeComputePipeline(
             dev, rctx.pipelineCache, 1, sizeof(uint32_t) * 2,
-            cfg.numFrames * consts::numDrawCmdBuffers, rctx.repeatSampler,
+            consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
             "visualize_tris.hlsl", false, "visualize", makeShaders)),
     lighting(
         makeComputePipeline(
@@ -2021,11 +1935,14 @@ BatchRenderer::Impl::Impl(const Config &cfg,
         makeShadowDrawPipeline(
             dev, rctx.pipelineCache, VK_NULL_HANDLE, 
             consts::numDrawCmdBuffers * cfg.numFrames, 3)),
-    postProcess(cfg.enableBatchRenderer ?
+    postProcess(
+        cfg.enableBatchRenderer ?
         makeComputePipeline(
             dev, rctx.pipelineCache, 1, sizeof(uint32_t) * 4, // push constants for width, height, view count, etc.
             consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
-            "post_process.hlsl", false, "main", makeShaders) :Optional<PipelineMP<1>>::none()),
+            "post_process.hlsl", false, "main", makeShaders) :
+        Optional<PipelineMP<1>>::none()
+    ),
     batchFrames(cfg.numFrames),
     assetSetPrepare(rctx.asset_set_cull_),
     assetSetDraw(rctx.asset_set_draw_),
@@ -2039,17 +1956,10 @@ BatchRenderer::Impl::Impl(const Config &cfg,
     viewports(dev.maxViewports)
 {
     for (uint32_t i = 0; i < cfg.numFrames; i++) {
-        makeBatchFrame(dev,
-                       &batchFrames[i], 
-                       mem, 
-                       cfg,
-                       prepareViews,
-                       batchDraw,
-                       lighting,
-                       shadowGen,
-                       shadowDraw,
-                       cfg.renderWidth, cfg.renderHeight,
-                       depthOnly);
+        makeBatchFrame(
+            dev, &batchFrames[i], mem, cfg,
+            prepareViews, batchDraw, lighting, shadowGen, shadowDraw,
+            cfg.renderWidth, cfg.renderHeight, depthOnly);
     }
 
     VkQueryPoolCreateInfo pool_create_info = {};
@@ -2057,8 +1967,7 @@ BatchRenderer::Impl::Impl(const Config &cfg,
     pool_create_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
     pool_create_info.queryCount = 2;
 
-    REQ_VK(dev.dt.createQueryPool(dev.hdl, &pool_create_info, 
-                                  nullptr, &timeQueryPool));
+    REQ_VK(dev.dt.createQueryPool(dev.hdl, &pool_create_info, nullptr, &timeQueryPool));
 
     for (uint32_t i = 0; i < dev.maxViewports; ++i) {
         uint32_t x_start = i * cfg.renderWidth;
@@ -2079,11 +1988,8 @@ BatchRenderer::Impl::Impl(const Config &cfg,
     }
 }
 
-BatchRenderer::BatchRenderer(const Config &cfg,
-                             RenderContext &rctx)
-    : impl(std::make_unique<Impl>(cfg, rctx)),
-      didRender(false)
-{}
+BatchRenderer::BatchRenderer(const Config &cfg, RenderContext &rctx)
+    : impl(std::make_unique<Impl>(cfg, rctx)), didRender(false) {}
 
 BatchRenderer::~BatchRenderer()
 {
@@ -2213,10 +2119,8 @@ static void issuePrepareViewsPipeline(vk::Device& dev,
 
         dev.dt.cmdPipelineBarrier(
             draw_cmd,
-           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-           VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-               VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
-               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
             0, 0, nullptr, 1, &draw_pckg_barrier,
             0, nullptr);
     }
@@ -2291,11 +2195,12 @@ static void sortLightsCPU(EngineInterop *interop)
         interop->iotaArrayLightOffsetsCPU[i] = i;
     }
 
-    std::sort(interop->iotaArrayLightOffsetsCPU,
-                interop->iotaArrayLightOffsetsCPU + *interop->bridge.totalNumLights,
-                [&interop] (uint32_t a, uint32_t b) {
-                    return interop->bridge.lightOffsets[a] < interop->bridge.lightOffsets[b];
-                });
+    std::sort(
+        interop->iotaArrayLightOffsetsCPU,
+        interop->iotaArrayLightOffsetsCPU + *interop->bridge.totalNumLights,
+        [&interop] (uint32_t a, uint32_t b) {
+            return interop->bridge.lightOffsets[a] < interop->bridge.lightOffsets[b];
+        });
 
     LightDesc *lights = (LightDesc *)interop->lightsCPU->ptr;
 
@@ -2366,8 +2271,7 @@ void BatchRenderer::setRenderOptions(const render::RenderOptions &render_options
     this->renderOptions = render_options;
 }
 
-void BatchRenderer::prepareForRendering(BatchRenderInfo info,
-                                        EngineInterop *interop)
+void BatchRenderer::prepareForRendering(BatchRenderInfo info, EngineInterop *interop)
 {
     // Circles between 0 to number of frames (not anymore, there is only one frame now)
     uint32_t frame_index = impl->currentFrame;
@@ -2439,23 +2343,19 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
     }
 
     { // Import the views
-        VkDeviceSize num_views_bytes = info.numViews *
-            sizeof(shader::PackedViewData);
-
+        VkDeviceSize num_views_bytes = info.numViews * sizeof(shader::PackedViewData);
         VkBufferCopy view_data_copy = {
             .srcOffset = 0, .dstOffset = 0,
             .size = num_views_bytes
         };
 
-       impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->viewsHdl,
-                             batch_buffers.views.buffer,
-                             1, &view_data_copy);
+        impl->dev.dt.cmdCopyBuffer(
+            draw_cmd, interop->viewsHdl,
+            batch_buffers.views.buffer, 1, &view_data_copy);
     }
 
     { // Import the instances
-        VkDeviceSize num_instances_bytes = info.numInstances *
-            sizeof(shader::PackedInstanceData);
-
+        VkDeviceSize num_instances_bytes = info.numInstances * sizeof(shader::PackedInstanceData);
         VkBufferCopy instance_data_copy = {
             .srcOffset = 0, .dstOffset = 0,
             .size = num_instances_bytes
@@ -2467,47 +2367,42 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
     }
 
     { // Import the offsets for instances
-        VkDeviceSize num_offsets_bytes = info.numWorlds *
-            sizeof(int32_t);
-
+        VkDeviceSize num_offsets_bytes = info.numWorlds * sizeof(int32_t);
         VkBufferCopy offsets_data_copy = {
             .srcOffset = 0, .dstOffset = 0,
             .size = num_offsets_bytes
         };
 
-        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->instanceOffsetsHdl,
-                             batch_buffers.instanceOffsets.buffer,
-                             1, &offsets_data_copy);
+        impl->dev.dt.cmdCopyBuffer(
+            draw_cmd, interop->instanceOffsetsHdl,
+            batch_buffers.instanceOffsets.buffer, 1, &offsets_data_copy);
     }
 
 #if 0
     { // Import the aabbs for instances
-        VkDeviceSize num_aabbs_bytes = info.numInstances *
-            sizeof(shader::AABB);
+        VkDeviceSize num_aabbs_bytes = info.numInstances * sizeof(shader::AABB);
 
         VkBufferCopy aabb_data_copy = {
             .srcOffset = 0, .dstOffset = 0,
             .size = num_aabbs_bytes
         };
 
-        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->aabbHdl,
-                             batch_buffers.aabbs.buffer,
-                             1, &aabb_data_copy);
+        impl->dev.dt.cmdCopyBuffer(
+            draw_cmd, interop->aabbHdl, batch_buffers.aabbs.buffer, 1, &aabb_data_copy);
     }
 #endif
 
     { // Import the offsets for views
-        VkDeviceSize num_offsets_bytes = info.numWorlds *
-            sizeof(int32_t);
+        VkDeviceSize num_offsets_bytes = info.numWorlds * sizeof(int32_t);
 
         VkBufferCopy offsets_data_copy = {
             .srcOffset = 0, .dstOffset = 0,
             .size = num_offsets_bytes
         };
 
-        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->viewOffsetsHdl,
-                             batch_buffers.viewOffsets.buffer,
-                             1, &offsets_data_copy);
+        impl->dev.dt.cmdCopyBuffer(
+            draw_cmd, interop->viewOffsetsHdl,
+            batch_buffers.viewOffsets.buffer, 1, &offsets_data_copy);
     }
 
     REQ_VK(impl->dev.dt.endCommandBuffer(draw_cmd));
@@ -2560,17 +2455,12 @@ static void packSky( const vk::Device &dev,
     data->bottomRadius = 6360.0f / 2.0f;
     data->topRadius = 6420.0f / 2.0f;
 
-    data->rayleighDensity.layers[0] =
-        render::shader::DensityLayer { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, {} };
-    data->rayleighDensity.layers[1] =
-        render::shader::DensityLayer { 0.0f, 1.0f, -0.125f, 0.0f, 0.0f, {} };
-    data->rayleighScatteringCoef =
-        math::Vector4{0.005802f, 0.013558f, 0.033100f, 0.0f};
+    data->rayleighDensity.layers[0] = render::shader::DensityLayer { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, {} };
+    data->rayleighDensity.layers[1] = render::shader::DensityLayer { 0.0f, 1.0f, -0.125f, 0.0f, 0.0f, {} };
+    data->rayleighScatteringCoef = math::Vector4{0.005802f, 0.013558f, 0.033100f, 0.0f};
 
-    data->mieDensity.layers[0] =
-        render::shader::DensityLayer { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, {} };
-    data->mieDensity.layers[1] =
-        render::shader::DensityLayer { 0.0f, 1.0f, -0.833333f, 0.0f, 0.0f, {} };
+    data->mieDensity.layers[0] = render::shader::DensityLayer { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, {} };
+    data->mieDensity.layers[1] = render::shader::DensityLayer { 0.0f, 1.0f, -0.833333f, 0.0f, 0.0f, {} };
     data->mieScatteringCoef = math::Vector4{0.003996f, 0.003996f, 0.003996f, 0.0f};
     data->mieExtinctionCoef = math::Vector4{0.004440f, 0.004440f, 0.004440f, 0.0f};
 
@@ -2580,14 +2470,11 @@ static void packSky( const vk::Device &dev,
         render::shader::DensityLayer { 25.000000f, 0.000000f, 0.000000f, 0.066667f, -0.666667f, {} };
     data->absorptionDensity.layers[1] =
         render::shader::DensityLayer { 0.000000f, 0.000000f, 0.000000f, -0.066667f, 2.666667f, {} };
-    data->absorptionExtinctionCoef =
-        math::Vector4{0.000650f, 0.001881f, 0.000085f, 0.0f};
+    data->absorptionExtinctionCoef = math::Vector4{0.000650f, 0.001881f, 0.000085f, 0.0f};
     data->groundAlbedo = math::Vector4{0.050000f, 0.050000f, 0.050000f, 0.0f};
     data->muSunMin = -0.207912f;
-    data->wPlanetCenter =
-      math::Vector4{0.0f, 0.0f, -data->bottomRadius, 0.0f};
-    data->sunSize = math::Vector4{
-            0.0046750340586467079f, 0.99998907220740285f, 0.0f, 0.0f};
+    data->wPlanetCenter = math::Vector4{0.0f, 0.0f, -data->bottomRadius, 0.0f};
+    data->sunSize = math::Vector4{0.0046750340586467079f, 0.99998907220740285f, 0.0f, 0.0f};
 
     staging.flush(dev);
 }
@@ -2648,9 +2535,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
     }
 
     impl->dev.dt.cmdResetQueryPool(draw_cmd, impl->timeQueryPool, 0, 2);
-
-    impl->dev.dt.cmdWriteTimestamp(draw_cmd, 
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, impl->timeQueryPool, 0);
+    impl->dev.dt.cmdWriteTimestamp(draw_cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, impl->timeQueryPool, 0);
 
     ////////////////////////////////////////////////////////////////
     { // Import the lights
@@ -2661,9 +2546,9 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
             .dstOffset = 0,
             .size = num_lights_bytes
         };
-        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->lightsHdl,
-                             frame_data.buffers.lights.buffer,
-                             1, &lights_data_copy);
+        impl->dev.dt.cmdCopyBuffer(
+            draw_cmd, interop->lightsHdl,
+            frame_data.buffers.lights.buffer, 1, &lights_data_copy);
     }
 
     { // Import the light offsets
@@ -2674,9 +2559,9 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
             .dstOffset = 0,
             .size = num_offsets_bytes
         };
-        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->lightOffsetsHdl,
-                             frame_data.buffers.lightOffsets.buffer,
-                             1, &offsets_data_copy);
+        impl->dev.dt.cmdCopyBuffer(
+            draw_cmd, interop->lightOffsetsHdl,
+            frame_data.buffers.lightOffsets.buffer, 1, &offsets_data_copy);
     }
 
     { // Import sky information first
@@ -2686,9 +2571,9 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
             .dstOffset = 0,
             .size = sizeof(render::shader::SkyData)
         };
-        impl->dev.dt.cmdCopyBuffer(draw_cmd, frame_data.skyInputStaging.buffer,
-                             frame_data.skyInput.buffer,
-                             1, &sky_copy);
+        impl->dev.dt.cmdCopyBuffer(
+            draw_cmd, frame_data.skyInputStaging.buffer,
+            frame_data.skyInput.buffer, 1, &sky_copy);
     }
     
     {
@@ -2698,9 +2583,9 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
             .dstOffset = 0,
             .size = sizeof(render::shader::RenderOptions)
         };
-        impl->dev.dt.cmdCopyBuffer(draw_cmd, frame_data.renderOptionsStagingBuffer.buffer,
-                             frame_data.renderOptionsBuffer.buffer,
-                             1, &render_options_copy);
+        impl->dev.dt.cmdCopyBuffer(
+            draw_cmd, frame_data.renderOptionsStagingBuffer.buffer,
+            frame_data.renderOptionsBuffer.buffer, 1, &render_options_copy);
     }
 
     { // Prepare memory written to by ECS with barrier
@@ -2771,7 +2656,6 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
 
         for (int i = 0; i < (int)consts::numDrawCmdBuffers; ++i) {
             auto &draw_pckg = frame_data.drawPackageSwapchain[i];
-
             impl->dev.dt.cmdFillBuffer(draw_cmd, draw_pckg.drawBuffer.buffer, 
                 0, sizeof(uint32_t) * draw_pckg.numDrawCounts, 0);
         }
@@ -2787,12 +2671,9 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-    issueShadowGen(impl->dev,
-                    impl->shadowGen,
-                    frame_data,
-                    draw_cmd,
-                    impl->maxNumViews,
-                    info.numLights / info.numWorlds);
+    issueShadowGen(
+        impl->dev, impl->shadowGen, frame_data, draw_cmd,
+        impl->maxNumViews, info.numLights / info.numWorlds);
 
     uint32_t num_processed_views = 0;
 
@@ -2830,9 +2711,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
         // impl->dev.dt.deviceWaitIdle(impl->dev.hdl);
         
         // Now, start the rasterization
-        issueRasterLayoutTransitions(impl->dev,
-                                     target,
-                                     draw_cmd);
+        issueRasterLayoutTransitions(impl->dev, target, draw_cmd);
 
         // Begin rendering
         issueRasterization(impl->dev,
@@ -2848,9 +2727,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                            !this->renderOptions.outputRGB && this->renderOptions.outputDepth,
                            info.numLights / info.numWorlds);
 
-        issueComputeLayoutTransitions(impl->dev,
-                                      target,
-                                      draw_cmd);
+        issueComputeLayoutTransitions(impl->dev, target, draw_cmd);
 
         issueMemoryBarrier(impl->dev,
                            draw_cmd,
@@ -2889,9 +2766,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
     // End the command buffer and stuff
     REQ_VK(impl->dev.dt.endCommandBuffer(draw_cmd));
 
-    VkPipelineStageFlags prepare_wait_flag =
-        VK_PIPELINE_STAGE_TRANSFER_BIT;
-
+    VkPipelineStageFlags prepare_wait_flag = VK_PIPELINE_STAGE_TRANSFER_BIT;
     VkSubmitInfo submit_info = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .pNext = nullptr,
@@ -2906,20 +2781,18 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
 
     REQ_VK(impl->dev.dt.resetFences(impl->dev.hdl, 1, &frame_data.renderFence));
     REQ_VK(impl->dev.dt.queueSubmit(impl->renderQueue, 1, &submit_info, frame_data.renderFence));
-
     REQ_VK(impl->dev.dt.deviceWaitIdle(impl->dev.hdl));
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-
     double duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
     float duration_ms = (float)(duration/1000000.0);
 
     impl->recordedTimings.push_back(duration_ms);
 
     impl->dev.dt.getQueryPoolResults(
-                impl->dev.hdl, impl->timeQueryPool, 0, 2, sizeof(uint64_t) * 2, 
-                impl->timestamps, sizeof(uint64_t),
-                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+        impl->dev.hdl, impl->timeQueryPool, 0, 2, sizeof(uint64_t) * 2, 
+        impl->timestamps, sizeof(uint64_t),
+        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
 
     frame_data.latestOp = LatestOperation::RenderViews;
 }
@@ -2973,7 +2846,7 @@ const uint8_t * BatchRenderer::getRGBCUDAPtr() const
 #ifndef MADRONA_VK_CUDA_SUPPORT
     return nullptr;
 #else
-    if(this->renderOptions.outputRGB == 0) {
+    if (this->renderOptions.outputRGB == 0) {
         return nullptr;
     }
     return (uint8_t *)impl->batchFrames[0].rgbOutputCUDA.getDevicePointer();
@@ -2985,7 +2858,7 @@ const float * BatchRenderer::getDepthCUDAPtr() const
 #ifndef MADRONA_VK_CUDA_SUPPORT
     return nullptr;
 #else
-    if(this->renderOptions.outputDepth == 0) {
+    if (this->renderOptions.outputDepth == 0) {
         return nullptr;
     }
     return (float *)impl->batchFrames[0].depthOutputCUDA.getDevicePointer();
@@ -2997,7 +2870,7 @@ const uint8_t * BatchRenderer::getNormalCUDAPtr() const
 #ifndef MADRONA_VK_CUDA_SUPPORT
     return nullptr;
 #else
-    if(this->renderOptions.outputNormal == 0) {
+    if (this->renderOptions.outputNormal == 0) {
         return nullptr;
     }
     return (uint8_t *)impl->batchFrames[0].normalOutputCUDA.getDevicePointer();
@@ -3009,7 +2882,7 @@ const int32_t * BatchRenderer::getSegmentationCUDAPtr() const
 #ifndef MADRONA_VK_CUDA_SUPPORT
     return nullptr;
 #else
-    if(this->renderOptions.outputSegmentation == 0) {
+    if (this->renderOptions.outputSegmentation == 0) {
         return nullptr;
     }
     return (int32_t *)impl->batchFrames[0].segmentationOutputCUDA.getDevicePointer();

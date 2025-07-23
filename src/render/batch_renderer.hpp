@@ -100,17 +100,12 @@ struct BatchRenderer {
         uint32_t numFrames;
     };
 
-    BatchRenderer(const Config& cfg,
-                  RenderContext &rctx);
-
+    BatchRenderer(const Config& cfg, RenderContext &rctx);
     ~BatchRenderer();
     void importCudaData(VkCommandBuffer);
 
     void setRenderOptions(const render::RenderOptions &render_options);
-
-    void prepareForRendering(BatchRenderInfo info,
-                             EngineInterop *interop);
-
+    void prepareForRendering(BatchRenderInfo info, EngineInterop *interop);
     void renderViews(BatchRenderInfo info,
                      const DynArray<AssetData> &loaded_assets,
                      EngineInterop *interop,

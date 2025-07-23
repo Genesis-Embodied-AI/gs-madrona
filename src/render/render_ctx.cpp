@@ -1533,15 +1533,15 @@ RenderContext::RenderContext(
 #endif
 
     BatchRenderer::Config br_cfg = {
-         cfg.enableBatchRenderer,
-         (RenderManager::Config::RenderMode)cfg.renderMode,
-         br_width_,
-         br_height_,
-         cfg.numWorlds,
-         cfg.maxViewsPerWorld,
-         cfg.maxInstancesPerWorld,
-         cfg.maxLightsPerWorld,
-         1
+        cfg.enableBatchRenderer,
+        (RenderManager::Config::RenderMode)cfg.renderMode,
+        br_width_,
+        br_height_,
+        cfg.numWorlds,
+        cfg.maxViewsPerWorld,
+        cfg.maxInstancesPerWorld,
+        cfg.maxLightsPerWorld,
+        1
     };
 
     batchRenderer = std::make_unique<BatchRenderer>(br_cfg, *this);
