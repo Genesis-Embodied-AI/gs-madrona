@@ -761,16 +761,16 @@ struct BatchFrame {
     VkDescriptorSet shadowAssetSet;
 
     HeapArray<LayeredTarget> targets;
-    vk::DedicatedBuffer rgbOutput;
-    vk::DedicatedBuffer depthOutput;
-    vk::DedicatedBuffer normalOutput;
-    vk::DedicatedBuffer segmentationOutput;
-
+    std::vector<std::unique_ptr<vk::DedicatedBuffer>> componentOutputs;
+    // vk::DedicatedBuffer rgbOutput;
+    // vk::DedicatedBuffer depthOutput;
+    // vk::DedicatedBuffer normalOutput;
+    // vk::DedicatedBuffer segmentationOutput;
 #ifdef MADRONA_VK_CUDA_SUPPORT
-    vk::CudaImportedBuffer rgbOutputCUDA;
-    vk::CudaImportedBuffer depthOutputCUDA;
-    vk::CudaImportedBuffer normalOutputCUDA;
-    vk::CudaImportedBuffer segmentationOutputCUDA;
+    std::vector<std::unique_ptr<vk::CudaImportedBuffer>> componentOutputsCUDA;
+    // vk::CudaImportedBuffer depthOutputCUDA;
+    // vk::CudaImportedBuffer normalOutputCUDA;
+    // vk::CudaImportedBuffer segmentationOutputCUDA;
 #endif
 
     // Swapchain of draw packages which get used to feed to the rasterizer
@@ -795,7 +795,7 @@ struct BatchFrame {
     // Keep track of which semaphore to wait on
     LatestOperation latestOp;
 
-    VkFence & getLatestFence()
+    VkFence &getLatestFence()
     {
         if (latestOp == LatestOperation::RenderPrepare) {
             return prepareFence;
@@ -803,6 +803,18 @@ struct BatchFrame {
             return renderFence;
         }
     }
+
+    const vk::LocalBuffer &getComponentOutputBuffer(uint32_t component) const
+    {
+        return componentOutputs[component]->buf;
+    }
+
+#ifdef MADRONA_VK_CUDA_SUPPORT
+    const void *getComponentOutputBufferCUDA(uint32_t component) const
+    {
+        return componentOutputsCUDA[component]->getDevicePointer();
+    }
+#endif
 };
 
 static DrawCommandPackage makeDrawCommandPackage(vk::Device& dev,
@@ -2785,7 +2797,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     double duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-    float duration_ms = (float)(duration/1000000.0);
+    float duration_ms = (float)(duration / 1000000.0);
 
     impl->recordedTimings.push_back(duration_ms);
 
@@ -2802,34 +2814,36 @@ BatchImportedBuffers &BatchRenderer::getImportedBuffers(uint32_t frame_id)
     return impl->batchFrames[frame_id].buffers;
 }
 
-const vk::LocalBuffer & BatchRenderer::getRGBBuffer() const
+const vk::LocalBuffer &BatchRenderer::getComponentBuffer(uint32_t frame_id, uint32_t component) const
 {
-    return impl->batchFrames[0].rgbOutput.buf;
+    return impl->batchFrames[frame_id].getComponentOutputBuffer(component);
 }
 
-const vk::LocalBuffer & BatchRenderer::getDepthBuffer() const
-{
-    return impl->batchFrames[0].depthOutput.buf;
-}
+// const vk::LocalBuffer & BatchRenderer::getRGBBuffer() const
+// {
+//     return impl->batchFrames[0].rgbOutput.buf;
+// }
 
-const vk::LocalBuffer & BatchRenderer::getNormalBuffer() const
-{
-    return impl->batchFrames[0].normalOutput.buf;
-}
+// const vk::LocalBuffer & BatchRenderer::getDepthBuffer() const
+// {
+//     return impl->batchFrames[0].depthOutput.buf;
+// }
 
-const vk::LocalBuffer & BatchRenderer::getSegmentationBuffer() const
-{
-    return impl->batchFrames[0].segmentationOutput.buf;
-}
+// const vk::LocalBuffer & BatchRenderer::getNormalBuffer() const
+// {
+//     return impl->batchFrames[0].normalOutput.buf;
+// }
+
+// const vk::LocalBuffer & BatchRenderer::getSegmentationBuffer() const
+// {
+//     return impl->batchFrames[0].segmentationOutput.buf;
+// }
 
 // Get the semaphore that the viewer renderer has to wait on
 VkSemaphore BatchRenderer::getLatestWaitSemaphore()
 {
-    uint32_t last_frame = (impl->currentFrame + impl->batchFrames.size() - 1) %
-        impl->batchFrames.size();
-
+    uint32_t last_frame = (impl->currentFrame + impl->batchFrames.size() - 1) % impl->batchFrames.size();
     assert(impl->batchFrames[last_frame].latestOp != LatestOperation::None);
-
     if (impl->batchFrames[last_frame].latestOp == LatestOperation::RenderPrepare) {
         return impl->batchFrames[last_frame].prepareFinished;
     } else if (impl->batchFrames[last_frame].latestOp == LatestOperation::RenderViews) {
@@ -2841,52 +2855,73 @@ VkSemaphore BatchRenderer::getLatestWaitSemaphore()
     return VK_NULL_HANDLE;
 }
 
-const uint8_t * BatchRenderer::getRGBCUDAPtr() const
+template <typename T>
+const T *BatchRenderer::getComponentCUDAPtr(uint32_t frame_id, uint32_t component) const
 {
 #ifndef MADRONA_VK_CUDA_SUPPORT
     return nullptr;
 #else
-    if (this->renderOptions.outputRGB == 0) {
-        return nullptr;
-    }
-    return (uint8_t *)impl->batchFrames[0].rgbOutputCUDA.getDevicePointer();
+    if (!checkRenderComponent(component)) { return nullptr; }
+    return reinterpret_cast<const T *>(impl->batchFrames[frame_id].getComponentOutputBufferCUDA(component));
 #endif
 }
 
-const float * BatchRenderer::getDepthCUDAPtr() const
+inline uint BatchRenderer::getComponentIndex(const string &name) const
 {
-#ifndef MADRONA_VK_CUDA_SUPPORT
-    return nullptr;
-#else
-    if (this->renderOptions.outputDepth == 0) {
-        return nullptr;
-    }
-    return (float *)impl->batchFrames[0].depthOutputCUDA.getDevicePointer();
-#endif
+    return this->componentIndices[name];
 }
 
-const uint8_t * BatchRenderer::getNormalCUDAPtr() const
+inline bool BatchRenderer::checkRenderComponent(uint32_t component) const
 {
-#ifndef MADRONA_VK_CUDA_SUPPORT
-    return nullptr;
-#else
-    if (this->renderOptions.outputNormal == 0) {
-        return nullptr;
-    }
-    return (uint8_t *)impl->batchFrames[0].normalOutputCUDA.getDevicePointer();
-#endif
+    return this->renderOptions.output[component];
 }
 
-const int32_t * BatchRenderer::getSegmentationCUDAPtr() const
-{
-#ifndef MADRONA_VK_CUDA_SUPPORT
-    return nullptr;
-#else
-    if (this->renderOptions.outputSegmentation == 0) {
-        return nullptr;
-    }
-    return (int32_t *)impl->batchFrames[0].segmentationOutputCUDA.getDevicePointer();
-#endif
-}
+// const uint8_t * BatchRenderer::getRGBCUDAPtr() const
+// {
+// #ifndef MADRONA_VK_CUDA_SUPPORT
+//     return nullptr;
+// #else
+//     if (this->renderOptions.outputRGB == 0) {
+//         return nullptr;
+//     }
+//     return (uint8_t *)impl->batchFrames[0].rgbOutputCUDA.getDevicePointer();
+// #endif
+// }
+
+// const float * BatchRenderer::getDepthCUDAPtr() const
+// {
+// #ifndef MADRONA_VK_CUDA_SUPPORT
+//     return nullptr;
+// #else
+//     if (this->renderOptions.outputDepth == 0) {
+//         return nullptr;
+//     }
+//     return (float *)impl->batchFrames[0].depthOutputCUDA.getDevicePointer();
+// #endif
+// }
+
+// const uint8_t * BatchRenderer::getNormalCUDAPtr() const
+// {
+// #ifndef MADRONA_VK_CUDA_SUPPORT
+//     return nullptr;
+// #else
+//     if (this->renderOptions.outputNormal == 0) {
+//         return nullptr;
+//     }
+//     return (uint8_t *)impl->batchFrames[0].normalOutputCUDA.getDevicePointer();
+// #endif
+// }
+
+// const int32_t * BatchRenderer::getSegmentationCUDAPtr() const
+// {
+// #ifndef MADRONA_VK_CUDA_SUPPORT
+//     return nullptr;
+// #else
+//     if (this->renderOptions.outputSegmentation == 0) {
+//         return nullptr;
+//     }
+//     return (int32_t *)impl->batchFrames[0].segmentationOutputCUDA.getDevicePointer();
+// #endif
+// }
 
 }

@@ -86,6 +86,7 @@ struct BatchRenderer {
 
     bool didRender;
     RenderOptions renderOptions;
+    std::unordered_map<std::string, uint> componentNames;
 
     struct Config {
         bool enableBatchRenderer;
