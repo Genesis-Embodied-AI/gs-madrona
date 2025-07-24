@@ -286,7 +286,7 @@ struct Manager::Impl {
                 static_cast<bool>(render_options[1]),
                 static_cast<bool>(render_options[2]),
                 static_cast<bool>(render_options[3]),
-            }
+            },
             // .outputSegmentation = static_cast<bool>(render_options[3]),
             .enableAntialiasing = static_cast<bool>(render_options[4]),
         };

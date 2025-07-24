@@ -31,13 +31,42 @@ enum ComponentNames {
     Depth = 1,
     Normal = 2,
     Segmentation = 3,
-    MaxComponents,
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// DRAW COMMAND BUFFER CREATION                                               //
+////////////////////////////////////////////////////////////////////////////////
+struct DrawCommandPackage {
+    // Draw cmds and drawdata
+    vk::LocalBuffer drawBuffer;
+
+    // This descriptor set contains draw information
+    VkDescriptorSet drawBufferSetPrepare;
+    VkDescriptorSet drawBufferSetDraw;
+
+    uint32_t drawCmdOffset;
+    uint32_t drawCmdBufferSize;
+
+    uint32_t numDrawCounts;
+};
+
+struct BatchImportedBuffers {
+    render::vk::LocalBuffer views;
+    render::vk::LocalBuffer viewOffsets;
+
+    render::vk::LocalBuffer instances;
+    render::vk::LocalBuffer instanceOffsets;
+
+    render::vk::LocalBuffer lights;
+    render::vk::LocalBuffer lightOffsets;
+
+    render::vk::LocalBuffer shadowViewData;
 };
 
 struct LayeredTarget {
     // Contains a uint for triangle ID and another for instance ID
-    std::vector<std::unique_ptr<vk::LocalImage> > components;
-    std::vector<VkImageView> componentsView;
+    std::vector<std::unique_ptr<vk::LocalImage>> components;
+    HeapArray<VkImageView> componentsView;
     // render::vk::LocalImage rgb;
     // VkImageView rgbView;
     // // Depth
@@ -94,13 +123,13 @@ struct BatchFrame {
 
     HeapArray<LayeredTarget> targets;
     uint64_t numPixels;
-    HeapArray<std::unique_ptr<vk::DedicatedBuffer>> componentOutputs;
+    std::vector<std::unique_ptr<vk::DedicatedBuffer>> componentOutputs;
     // vk::DedicatedBuffer rgbOutput;
     // vk::DedicatedBuffer depthOutput;
     // vk::DedicatedBuffer normalOutput;
     // vk::DedicatedBuffer segmentationOutput;
 #ifdef MADRONA_VK_CUDA_SUPPORT
-    HeapArray<std::unique_ptr<vk::CudaImportedBuffer> > componentOutputsCUDA;
+    std::vector<std::unique_ptr<vk::CudaImportedBuffer>> componentOutputsCUDA;
     // vk::CudaImportedBuffer depthOutputCUDA;
     // vk::CudaImportedBuffer normalOutputCUDA;
     // vk::CudaImportedBuffer segmentationOutputCUDA;
@@ -136,7 +165,7 @@ struct BatchFrame {
     void initComponent(
         uint32_t component, 
         const vk::Device &dev,
-        vk::MemoryAllocator &alloc, 
+        vk::MemoryAllocator &alloc
         // VkDescriptorSet &lighting_set
     );
 };
@@ -149,18 +178,6 @@ struct BatchRenderInfo {
     RenderOptions renderOptions;
 };
 
-struct BatchImportedBuffers {
-    render::vk::LocalBuffer views;
-    render::vk::LocalBuffer viewOffsets;
-
-    render::vk::LocalBuffer instances;
-    render::vk::LocalBuffer instanceOffsets;
-
-    render::vk::LocalBuffer lights;
-    render::vk::LocalBuffer lightOffsets;
-
-    render::vk::LocalBuffer shadowViewData;
-};
 
 struct BatchRenderer {
     struct Impl;
@@ -168,7 +185,7 @@ struct BatchRenderer {
 
     bool didRender;
     RenderOptions renderOptions;
-    std::unordered_map<std::string, uint> componentNames;
+    // std::unordered_map<std::string, uint> componentNames;
 
     struct Config {
         bool enableBatchRenderer;
@@ -215,22 +232,5 @@ struct BatchRenderer {
     const void *getComponentCUDAPtr(uint32_t frame_id, uint32_t component) const;
 };
 
-
-////////////////////////////////////////////////////////////////////////////////
-// DRAW COMMAND BUFFER CREATION                                               //
-////////////////////////////////////////////////////////////////////////////////
-struct DrawCommandPackage {
-    // Draw cmds and drawdata
-    vk::LocalBuffer drawBuffer;
-
-    // This descriptor set contains draw information
-    VkDescriptorSet drawBufferSetPrepare;
-    VkDescriptorSet drawBufferSetDraw;
-
-    uint32_t drawCmdOffset;
-    uint32_t drawCmdBufferSize;
-
-    uint32_t numDrawCounts;
-};
 
 }

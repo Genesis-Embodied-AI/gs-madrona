@@ -260,11 +260,14 @@ struct PixelOutput {
 [shader("pixel")]
 PixelOutput frag(in V2F v2f, in uint prim_id : SV_PrimitiveID)
 {
+
+    printf("%d\n", prim_id);
+
     PixelOutput output;
     RenderOptions renderOptions = renderOptionsBuffer[0];
     float3 normal = normalize(v2f.worldNormal);
 
-    if (!renderOptions.outputRGB) {
+    if (!renderOptions.outputs[0]) {
         output.rgbOut = float4(0.0, 0.0, 0.0, 1.0);
     }
     else {
@@ -310,11 +313,11 @@ PixelOutput frag(in V2F v2f, in uint prim_id : SV_PrimitiveID)
         }
     }
 
-    if (renderOptions.outputNormal) {
+    if (renderOptions.outputs[2]) {
         output.normalOut = float4(0.5 * (normal + 1.0), 1.0);
     }
 
-    if (renderOptions.outputSegmentation) {
+    if (renderOptions.outputs[3]) {
         output.segmentationOut = v2f.objectIdx;
     }
 

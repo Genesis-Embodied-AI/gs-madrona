@@ -32,7 +32,6 @@ inline constexpr uint32_t maxNumImagesPerTarget = maxNumImagesX * maxNumImagesY;
 inline constexpr uint32_t maxDrawsPerLayeredImage = maxDrawsPerView * maxNumImagesPerTarget;
 inline constexpr uint32_t numDrawCmdBuffers = 4; // Triple buffering
 inline constexpr uint32_t maxBatchShadowMapSize = 1024;
-inline constexpr uint32_t maxComponents = 4;
 
 // const bool[maxComponents] componentFormat = {};
 }
@@ -42,11 +41,11 @@ inline constexpr uint32_t maxComponents = 4;
 //
 const VkImageView &LayeredTarget::getImageView(
     // int target_id,
-    uint32_t component,
+    uint32_t component
     // const vk::Device &dev,
     // vk::MemoryAllocator &alloc,
     // VkDescriptorSet &lighting_set
-) {
+) const {
     // if (components[component]) { return componentsView[component]; }
     return componentsView[component];
 }
@@ -68,7 +67,10 @@ const vk::LocalBuffer &BatchFrame::getComponentOutputBuffer(
     // const vk::Device &dev,
     // vk::MemoryAllocator &alloc, 
     // VkDescriptorSet &lighting_set
-) {
+) const {
+
+    printf("GET????????\n");
+
     return componentOutputs[component]->buf;
     // uint64_t num_rgb_bytes = total_num_pixels * sizeof(uint8_t) * 4_u64;
     // uint64_t num_depth_bytes = total_num_pixels * sizeof(float);
@@ -111,25 +113,34 @@ void BatchFrame::initComponent(
     vk::MemoryAllocator &alloc
 ) {
     if (componentOutputs[component]) return;
+#ifdef MADRONA_VK_CUDA_SUPPORT
+    bool supports_cuda_export = true;
+#else
+    bool supports_cuda_export = false;
+#endif
+
     uint64_t num_bytes = numPixels * InternalConfig::componentBytes[component];
     componentOutputs[component] = std::make_unique<vk::DedicatedBuffer>(
         alloc.makeDedicatedBuffer(num_bytes, false, supports_cuda_export));
 #ifdef MADRONA_VK_CUDA_SUPPORT
     componentOutputsCUDA[component] = std::make_unique<vk::CudaImportedBuffer>(
-        dev, componentOutputs[component].mem, num_bytes);
+        dev, componentOutputs[component]->mem, num_bytes);
 #endif
 
     HeapArray<VkWriteDescriptorSet> lighting_desc_updates(targets.size() + 1);
 
     // Target inputs
     HeapArray<VkDescriptorImageInfo> buffers_info(targets.size());
+
+    printf("3target size: %d\n", targets.size());
+
     for (uint32_t i = 0; i < targets.size(); ++i) {
         // Create target image and image view
         targets[i].components[component] = std::make_unique<vk::LocalImage>(
             alloc.makeAttachment(
-                pixelWidth, pixelHeight, 1,
+                targets[i].pixelWidth, targets[i].pixelHeight, 1,
                 InternalConfig::componentFormats[component],
-                InternalConfig::isDepth[component],
+                InternalConfig::isDepth[component]
             ));
 
         VkImageViewCreateInfo view_info = {
@@ -159,7 +170,7 @@ void BatchFrame::initComponent(
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         };
         
-        if (componentTexture[component]) {
+        if (InternalConfig::isTexture[component]) {
             vk::DescHelper::textures(
                 lighting_desc_updates[i], targetsSetLighting, &buffers_info[i], 1, component, i
             );
@@ -180,7 +191,7 @@ void BatchFrame::initComponent(
     vk::DescHelper::storage(
         lighting_desc_updates[targets.size()],
         targetsSetLighting, &component_output_info,
-        consts::maxComponents + component
+        InternalConfig::maxComponents + component
     );
     vk::DescHelper::update(dev, lighting_desc_updates.data(), lighting_desc_updates.size());
 }
@@ -249,8 +260,8 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
             //     image_width, image_height, 1,
             //     depth_only ? InternalConfig::depthOnlyFormat : InternalConfig::segmentationOnlyFormat),
             // .segmentationView = {},
-            .components = HeapArray(maxComponents),
-            .componentsView = HeapArray(maxComponents),
+            .components = std::vector<std::unique_ptr<vk::LocalImage>>(InternalConfig::maxComponents),
+            .componentsView = HeapArray<VkImageView>(InternalConfig::maxComponents),
             .shadowMap = alloc.makeAttachment(shadow_image_width, shadow_image_height, 1, InternalConfig::varianceFormat, false),
             .shadowMapView = {},
             .shadowDepth = alloc.makeAttachment(shadow_image_width, shadow_image_height, 1, InternalConfig::depthFormat, true),
@@ -311,7 +322,7 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
         views_left -= num_views_in_image;
     }
 
-    return std::move(local_images);
+    return local_images;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -445,15 +456,15 @@ static PipelineMP<1> makeDrawPipeline(const vk::Device &dev,
         },
     }};
     std::array<VkFormat, 3> colorFormats = {
-        InternalConfig::colorOnlyFormat,
-        InternalConfig::normalOnlyFormat,
-        InternalConfig::segmentationOnlyFormat
+        InternalConfig::componentFormats[0],
+        InternalConfig::componentFormats[2],
+        InternalConfig::componentFormats[3]
     };
     VkPipelineRenderingCreateInfo rendering_info = {};
     rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     rendering_info.colorAttachmentCount = 3;
     rendering_info.pColorAttachmentFormats = colorFormats.data();
-    rendering_info.depthAttachmentFormat = InternalConfig::depthFormat;
+    rendering_info.depthAttachmentFormat = InternalConfig::componentFormats[1];
 
     // Depth pass
     // std::array<VkPipelineShaderStageCreateInfo, 1> depth_gfx_stages {{
@@ -640,21 +651,13 @@ static PipelineMP<1> makeShadowDrawPipeline(const vk::Device &dev,
     std::array<VkPipelineShaderStageCreateInfo, 2> gfx_stages {{
         {
             VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            nullptr,
-            0,
-            VK_SHADER_STAGE_VERTEX_BIT,
-            shaders.getShader(0),
-            "vert",
-            nullptr,
+            nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT,
+            shaders.getShader(0), "vert", nullptr,
         },
         {
             VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            nullptr,
-            0,
-            VK_SHADER_STAGE_FRAGMENT_BIT,
-            shaders.getShader(1),
-            "frag",
-            nullptr,
+            nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT,
+            shaders.getShader(1), "frag", nullptr,
         },
     }};
 
@@ -849,7 +852,7 @@ static PipelineMP<1> makeComputePipeline(const vk::Device &dev,
 static DrawCommandPackage makeDrawCommandPackage(vk::Device& dev,
                           render::vk::MemoryAllocator &alloc,
                           PipelineMP<1> &prepare_views,
-                          PipelineMP<2> &draw_views,
+                          PipelineMP<1> &draw_views,
                           uint32_t max_views_per_target)
 {
     VkDescriptorSet prepare_set = prepare_views.descPools[1].makeSet();
@@ -962,11 +965,6 @@ static void makeBatchFrame(vk::Device& dev,
     VkFence prepare_fence = vk::makeFence(dev, true);
     VkFence render_fence = vk::makeFence(dev, true);
 
-#ifdef MADRONA_VK_CUDA_SUPPORT
-    bool supports_cuda_export = true;
-#else
-    bool supports_cuda_export = false;
-#endif
 
     VkDescriptorSet lighting_set = lighting.descPools[0].makeSet();
     VkDescriptorSet pbr_set = lighting.descPools[2].makeSet();
@@ -1184,6 +1182,11 @@ static void makeBatchFrame(vk::Device& dev,
         vk::DescHelper::update(dev, shadow_map_desc_updates.data(), shadow_map_desc_updates.size());
     }
 
+    //  componentOutputs;
+    // for (int i = 0; i < 4; ++i) 
+    //     {printf("Yes %d %p\n",i, componentOutputs[i].get());}
+        // if (frame->componentOutputs[i]) 
+
     new (frame) BatchFrame {
         .buffers = {
             std::move(views),
@@ -1209,13 +1212,14 @@ static void makeBatchFrame(vk::Device& dev,
        
         .targets = std::move(layered_targets),
         .numPixels = num_pixels,
-        .componentOutputs = HeapArray<>(consts::maxComponents),
+        .componentOutputs = std::vector<std::unique_ptr<vk::DedicatedBuffer>>(InternalConfig::maxComponents),
         // std::move(rgb_output_buffer),
         // std::move(depth_output_buffer),
         // std::move(normal_output_buffer),
         // std::move(segmentation_output_buffer),
 #ifdef MADRONA_VK_CUDA_SUPPORT
-        .componentOutputsCUDA = HeapArray<>(consts::maxComponents),
+        .componentOutputsCUDA = std::vector<std::unique_ptr<vk::CudaImportedBuffer>>(InternalConfig::maxComponents),
+        // .componentOutputsCUDA = HeapArray<std::unique_ptr<vk::CudaImportedBuffer>>(1),
         // std::move(rgb_output_cuda),
         // std::move(depth_output_cuda),
         // std::move(normal_output_cuda),
@@ -1234,8 +1238,9 @@ static void makeBatchFrame(vk::Device& dev,
         .layoutTransitionFinished = transition_finished,   // Waited for if that latest thing was a transition
         .prepareFence = prepare_fence,      // Waited for at the beginning of each renderViews call
         .renderFence = render_fence,
-        ,latestOp = LatestOperation::None
+        .latestOp = LatestOperation::None
     };
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1248,8 +1253,8 @@ static void issueRasterLayoutTransitions(
     const RenderOptions &render_options
 ) {
     // Transition image layouts
-    auto makeBarrier = [](uint32_t component) {
-        bool isDepth = InternalConfig::IsDepth[component];
+    auto makeBarrier = [&target](uint32_t component) {
+        bool isDepth = InternalConfig::isDepth[component];
         return VkImageMemoryBarrier{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             .pNext = nullptr,
@@ -1261,7 +1266,7 @@ static void issueRasterLayoutTransitions(
                                  : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = target.components[component].image,
+            .image = target.components[component]->image,
             .subresourceRange = {
                 .aspectMask = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT
                                       : VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1274,7 +1279,7 @@ static void issueRasterLayoutTransitions(
     };
 
     std::vector<VkImageMemoryBarrier> raster_barriers;
-    for (size_t i = 0; i < consts::maxComponents; ++i) {
+    for (size_t i = 0; i < InternalConfig::maxComponents; ++i) {
         if (render_options.outputs[i])
             raster_barriers.emplace_back(makeBarrier(i));
     }
@@ -1369,8 +1374,8 @@ static void issueComputeLayoutTransitions(
     const RenderOptions &render_options
 ) {
     // Transition image layouts
-    auto makeBarrier = [](uint32_t component) {
-        bool isDepth = InternalConfig::IsDepth[component];
+    auto makeBarrier = [&target](uint32_t component) {
+        bool isDepth = InternalConfig::isDepth[component];
         return VkImageMemoryBarrier{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             .pNext = nullptr,
@@ -1379,10 +1384,10 @@ static void issueComputeLayoutTransitions(
             .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
             .oldLayout = isDepth ? VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL
                                  : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = target.components[component].image,
+            .image = target.components[component]->image,
             .subresourceRange = {
                 .aspectMask = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT
                                       : VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1395,7 +1400,7 @@ static void issueComputeLayoutTransitions(
     };
 
     std::vector<VkImageMemoryBarrier> raster_barriers;
-    for (size_t i = 0; i < consts::maxComponents; ++i) {
+    for (size_t i = 0; i < InternalConfig::maxComponents; ++i) {
         if (render_options.outputs[i])
             raster_barriers.emplace_back(makeBarrier(i));
     }
@@ -1501,25 +1506,25 @@ static void issueRasterization(vk::Device &dev,
 
     VkRenderingAttachmentInfoKHR rgb_attach = {};
     rgb_attach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
-    rgb_attach.imageView = target.rgbView;
+    rgb_attach.imageView = target.componentsView[0];
     rgb_attach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     rgb_attach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     rgb_attach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     rgb_attach.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
 
     VkRenderingAttachmentInfoKHR normal_attach = rgb_attach;
-    normal_attach.imageView = target.normalView;
+    normal_attach.imageView = target.componentsView[2];
     normal_attach.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
 
     VkRenderingAttachmentInfoKHR segmentation_attach = rgb_attach;
-    segmentation_attach.imageView = target.segmentationView;
+    segmentation_attach.imageView = target.componentsView[3];
     segmentation_attach.clearValue.color = {.int32 = {-1, 0, 0, 0}};
 
     std::array color_attach = {rgb_attach, normal_attach, segmentation_attach};
 
     VkRenderingAttachmentInfoKHR depth_attach = {};
     depth_attach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
-    depth_attach.imageView = target.depthView;
+    depth_attach.imageView = target.componentsView[1];
     depth_attach.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
     depth_attach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depth_attach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1957,7 +1962,7 @@ static void issueShadowDraw(vk::Device &dev,
 
 struct BatchRenderer::Impl {
     vk::Device &dev;
-    bool depthOnly;
+    // bool depthOnly;
     vk::MemoryAllocator &mem;
 
     uint32_t maxNumViews;
@@ -2003,18 +2008,18 @@ struct BatchRenderer::Impl {
     Impl(const Config &cfg, RenderContext &rctx);
 };
 
-static const char *getDrawDeferredPath(bool render_rgb)
-{
-    if (render_rgb) {
-        return "draw_deferred_rgb.hlsl";
-    } else {
-        return "draw_deferred_depth.hlsl";
-    }
-}
+// static const char *getDrawDeferredPath(bool render_rgb)
+// {
+//     if (render_rgb) {
+//         return "draw_deferred_rgb.hlsl";
+//     } else {
+//         return "draw_deferred_depth.hlsl";
+//     }
+// }
 
 BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
     dev(rctx.dev),
-    depthOnly(cfg.renderMode == RenderManager::Config::RenderMode::Depth),
+    // depthOnly(cfg.renderMode == RenderManager::Config::RenderMode::Depth),
     mem(rctx.alloc),
     maxNumViews(cfg.numWorlds * cfg.maxViewsPerWorld),
     numWorlds(cfg.numWorlds),
@@ -2023,7 +2028,7 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
         makeComputePipeline(
             dev, rctx.pipelineCache, 4, sizeof(shader::PrepareViewPushConstant),
             4 + consts::numDrawCmdBuffers, rctx.repeatSampler,
-            "prepare_views.hlsl", false, "main", makeShaders)),
+            "prepare_views.hlsl", "main", makeShaders)),
     batchDraw(
         makeDrawPipeline(
             dev, rctx.pipelineCache, VK_NULL_HANDLE, 
@@ -2032,17 +2037,18 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
         makeComputePipeline(
             dev, rctx.pipelineCache, 1, sizeof(uint32_t) * 2,
             consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
-            "visualize_tris.hlsl", false, "visualize", makeShaders)),
+            "visualize_tris.hlsl", "visualize", makeShaders)),
     lighting(
         makeComputePipeline(
             dev, rctx.pipelineCache, 3, sizeof(shader::DeferredLightingPushConstBR),
-            consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler, 
-            getDrawDeferredPath(!depthOnly), depthOnly, "lighting", makeShadersLighting)),
+            consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
+            // getDrawDeferredPath(!depthOnly), "lighting", makeShadersLighting)),
+            "draw_deferred_rgb.hlsl", "lighting", makeShadersLighting)),
     shadowGen(
         makeComputePipeline(
             dev, rctx.pipelineCache, 1, sizeof(shader::ShadowGenPushConst),
             consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
-            "batch_shadow_gen.hlsl", false, "shadowGen", makeShaders)),
+            "batch_shadow_gen.hlsl", "shadowGen", makeShaders)),
     shadowDraw(
         makeShadowDrawPipeline(
             dev, rctx.pipelineCache, VK_NULL_HANDLE, 
@@ -2052,7 +2058,7 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
         makeComputePipeline(
             dev, rctx.pipelineCache, 1, sizeof(uint32_t) * 4, // push constants for width, height, view count, etc.
             consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
-            "post_process.hlsl", false, "main", makeShaders) :
+            "post_process.hlsl", "main", makeShaders) :
         Optional<PipelineMP<1>>::none()
     ),
     batchFrames(cfg.numFrames),
@@ -2068,10 +2074,13 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
     viewports(dev.maxViewports)
 {
     for (uint32_t i = 0; i < cfg.numFrames; i++) {
+        
+        printf("make batchf: %d\n", i);
+
         makeBatchFrame(
             dev, &batchFrames[i], mem, cfg,
-            prepareViews, batchDraw, lighting, shadowGen, shadowDraw,
-            cfg.renderWidth, cfg.renderHeight, depthOnly);
+            prepareViews, batchDraw, lighting, shadowGen, shadowDraw);
+            // cfg.renderWidth, cfg.renderHeight);
     }
 
     VkQueryPoolCreateInfo pool_create_info = {};
@@ -2125,7 +2134,7 @@ BatchRenderer::~BatchRenderer()
     impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->shadowDraw.hdls[0], nullptr);
     impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->shadowDraw.layout, nullptr);
 
-    for(int i = 0; i < impl->batchFrames.size(); i++) {
+    for (CountT i = 0; i < impl->batchFrames.size(); i++) {
         impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].prepareCmdPool, nullptr);
         impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].renderCmdPool, nullptr);
         impl->dev.dt.destroySemaphore(impl->dev.hdl, impl->batchFrames[i].prepareFinished, nullptr);
@@ -2134,13 +2143,17 @@ BatchRenderer::~BatchRenderer()
         impl->dev.dt.destroyFence(impl->dev.hdl, impl->batchFrames[i].prepareFence, nullptr);
         impl->dev.dt.destroyFence(impl->dev.hdl, impl->batchFrames[i].renderFence, nullptr);
 
-        for(int j = 0; j < impl->batchFrames[i].targets.size(); j++) {
-            for (int k = 0; k < consts::maxComponents; ++k) {
-                impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j]., nullptr);
+        for (CountT j = 0; j < impl->batchFrames[i].targets.size(); j++) {
+            for (CountT k = 0; k < InternalConfig::maxComponents; ++k) {
+
+                printf("destroy:%d\n", k);
+
+                impl->dev.dt.destroyImageView(
+                    impl->dev.hdl, impl->batchFrames[i].targets[j].componentsView[k], nullptr);
             }
-            impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].depthView, nullptr);
-            impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].normalView, nullptr);
-            impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].segmentationView, nullptr);
+            // impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].depthView, nullptr);
+            // impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].normalView, nullptr);
+            // impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].segmentationView, nullptr);
             impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].shadowMapView, nullptr);
             impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].shadowDepthView, nullptr);
         }
@@ -2259,11 +2272,11 @@ static void issueMemoryBarrier(vk::Device &dev,
 
 static void sortInstancesAndViewsCPU(EngineInterop *interop)
 {
-    for (uint32_t i = 0; i < *interop->bridge.totalNumInstances; ++i) {
+    for (size_t i = 0; i < *interop->bridge.totalNumInstances; ++i) {
         interop->iotaArrayInstancesCPU[i] = i;
     }
 
-    for (uint32_t i = 0; i < *interop->bridge.totalNumViews; ++i) {
+    for (size_t i = 0; i < *interop->bridge.totalNumViews; ++i) {
         interop->iotaArrayViewsCPU[i] = i;
     }
 
@@ -2285,7 +2298,7 @@ static void sortInstancesAndViewsCPU(EngineInterop *interop)
     PerspectiveCameraData *views = (PerspectiveCameraData *)interop->viewsCPU->ptr;
 
     { // Write the sorted array of views and instances
-        for (uint32_t i = 0; i < *interop->bridge.totalNumInstances; ++i) {
+        for (size_t i = 0; i < *interop->bridge.totalNumInstances; ++i) {
             instances[i] = interop->bridge.instances[interop->iotaArrayInstancesCPU[i]];
 
             // We also need to have the sorted instance IDs in order to extract the offsets
@@ -2293,7 +2306,7 @@ static void sortInstancesAndViewsCPU(EngineInterop *interop)
                 interop->bridge.instancesWorldIDs[interop->iotaArrayInstancesCPU[i]];
         }
 
-        for (uint32_t i = 0; i < *interop->bridge.totalNumViews; ++i) {
+        for (size_t i = 0; i < *interop->bridge.totalNumViews; ++i) {
             views[i] = interop->bridge.views[interop->iotaArrayViewsCPU[i]];
 
             interop->sortedViewWorldIDs[i] = 
@@ -2304,7 +2317,7 @@ static void sortInstancesAndViewsCPU(EngineInterop *interop)
 
 static void sortLightsCPU(EngineInterop *interop)
 {
-    for (uint32_t i = 0; i < *interop->bridge.totalNumLights; ++i) {
+    for (size_t i = 0; i < *interop->bridge.totalNumLights; ++i) {
         interop->iotaArrayLightOffsetsCPU[i] = i;
     }
 
@@ -2317,7 +2330,7 @@ static void sortLightsCPU(EngineInterop *interop)
 
     LightDesc *lights = (LightDesc *)interop->lightsCPU->ptr;
 
-    for (uint32_t i = 0; i < *interop->bridge.totalNumLights; ++i) {
+    for (size_t i = 0; i < *interop->bridge.totalNumLights; ++i) {
         lights[i] = interop->bridge.lights[interop->iotaArrayLightOffsetsCPU[i]];
 
         interop->sortedLightOffsets[i] = 
@@ -2329,11 +2342,11 @@ static void computeInstanceOffsets(EngineInterop *interop, uint32_t num_worlds)
 {
     uint32_t *instanceOffsets = (uint32_t *)interop->instanceOffsetsCPU->ptr;
 
-    for (int i = 0; i < (int)num_worlds; ++i) {
+    for (size_t i = 0; i < num_worlds; ++i) {
         instanceOffsets[i] = 0;
     }
 
-    for (uint32_t i = 1; i < *interop->bridge.totalNumInstances; ++i) {
+    for (size_t i = 1; i < *interop->bridge.totalNumInstances; ++i) {
         uint32_t current_world_id = (uint32_t)(interop->sortedInstanceWorldIDs[i] >> 32);
         uint32_t prev_world_id = (uint32_t)(interop->sortedInstanceWorldIDs[i-1] >> 32);
 
@@ -2347,11 +2360,11 @@ static void computeViewOffsets(EngineInterop *interop, uint32_t num_worlds)
 {
     uint32_t *viewOffsets = (uint32_t *)interop->viewOffsetsCPU->ptr;
 
-    for (int i = 0; i < (int)num_worlds; ++i) {
+    for (size_t i = 0; i < num_worlds; ++i) {
         viewOffsets[i] = 0;
     }
 
-    for (uint32_t i = 1; i < *interop->bridge.totalNumViews; ++i) {
+    for (size_t i = 1; i < *interop->bridge.totalNumViews; ++i) {
         uint32_t current_world_id = (uint32_t)(interop->sortedViewWorldIDs[i] >> 32);
         uint32_t prev_world_id = (uint32_t)(interop->sortedViewWorldIDs[i-1] >> 32);
 
@@ -2389,6 +2402,8 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info, EngineInterop *int
     // Circles between 0 to number of frames (not anymore, there is only one frame now)
     uint32_t frame_index = impl->currentFrame;
 
+    printf("prepare: %d\n", frame_index);
+
     { // Flush CPU buffers if we used CPU buffers
         if (interop->viewsCPU.has_value()) {
             *interop->bridge.totalNumViews = interop->bridge.totalNumViewsCPUInc->load_acquire();
@@ -2420,9 +2435,7 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info, EngineInterop *int
 
         if (interop->lightsCPU.has_value()) {
             *interop->bridge.totalNumLights = interop->bridge.totalNumLightsCPUInc->load_acquire();
-
             info.numLights = *interop->bridge.totalNumLights;
-
             interop->bridge.totalNumLightsCPUInc->store_release(0);
 
             // First, need to perform the sorts
@@ -2434,13 +2447,16 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info, EngineInterop *int
         }
     }
 
+    printf("Flush CPU buffers.\n");
     BatchFrame &frame_data = impl->batchFrames[frame_index];
 
-    for (uint32_t i = 0; i < consts::maxComponents; ++i) {
-        if (checkRenderComponent(component)) {
-            frame_data.initComponent(component, impl->dev, impl->mem);
+    for (uint32_t i = 0; i < InternalConfig::maxComponents; ++i) {
+        if (renderOptions.outputs[i]) {
+            printf("initComponent %d\n", i);
+            frame_data.initComponent(i, impl->dev, impl->mem);
         }
     }
+    printf("InitComponent.\n");
 
     { // Wait for the frame to be ready
         if (frame_data.latestOp != LatestOperation::None) {
@@ -2449,6 +2465,7 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info, EngineInterop *int
                                        VK_TRUE, UINT64_MAX);
         }
     }
+    printf("Wait for frame.\n");
 
     BatchImportedBuffers &batch_buffers = getImportedBuffers(frame_index);
 
@@ -2604,8 +2621,10 @@ static void packRenderOptions(const vk::Device &dev,
 {
     render::shader::RenderOptions *data = (render::shader::RenderOptions *)staging.ptr;
     
-    for (size_t i = 0; i < const::maxComponents; ++i) {
+    for (size_t i = 0; i < InternalConfig::maxComponents; ++i) {
         data->outputs[i] = render_options.outputs[i];
+
+        printf("Options: %d %d\n", i, data->outputs[i]);
         // data->outputDepth = render_options.outputDepth;
         // data->outputNormal = render_options.outputNormal;
         // data->outputSegmentation = render_options.outputSegmentation;
@@ -2659,8 +2678,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
 
     ////////////////////////////////////////////////////////////////
     { // Import the lights
-        VkDeviceSize num_lights_bytes = info.numLights *
-            sizeof(shader::PackedLightData);
+        VkDeviceSize num_lights_bytes = info.numLights * sizeof(shader::PackedLightData);
         VkBufferCopy lights_data_copy = {
             .srcOffset = 0,
             .dstOffset = 0,
@@ -2672,8 +2690,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
     }
 
     { // Import the light offsets
-        VkDeviceSize num_offsets_bytes = info.numWorlds *
-            sizeof(int32_t);
+        VkDeviceSize num_offsets_bytes = info.numWorlds * sizeof(int32_t);
         VkBufferCopy offsets_data_copy = {
             .srcOffset = 0,
             .dstOffset = 0,
@@ -2697,7 +2714,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
     }
     
     {
-        packRenderOptions(impl->dev, frame_data.renderOptionsStagingBuffer, this->renderOptions);
+        packRenderOptions(impl->dev, frame_data.renderOptionsStagingBuffer, renderOptions);
         VkBufferCopy render_options_copy {
             .srcOffset = 0,
             .dstOffset = 0,
@@ -2711,56 +2728,49 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
     { // Prepare memory written to by ECS with barrier
         std::array barriers = {
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-                nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.buffers.views.buffer,
                 0, VK_WHOLE_SIZE
             },
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-                nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.buffers.instances.buffer,
                 0, VK_WHOLE_SIZE
             },
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-                nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.buffers.instanceOffsets.buffer,
                 0, VK_WHOLE_SIZE
             },
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-                nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.skyInput.buffer,
                 0, VK_WHOLE_SIZE
             },
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-                nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.renderOptionsBuffer.buffer,
                 0, VK_WHOLE_SIZE
             },
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-                nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.buffers.lights.buffer,
                 0, VK_WHOLE_SIZE
             },
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-                nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.buffers.lightOffsets.buffer,
@@ -2831,7 +2841,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
         // impl->dev.dt.deviceWaitIdle(impl->dev.hdl);
         
         // Now, start the rasterization
-        issueRasterLayoutTransitions(impl->dev, target, draw_cmd, this->renderOptions);
+        issueRasterLayoutTransitions(impl->dev, target, draw_cmd, renderOptions);
 
         // Begin rendering
         issueRasterization(impl->dev,
@@ -2847,7 +2857,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                         //    !this->renderOptions.outputRGB && this->renderOptions.outputDepth,
                            info.numLights / info.numWorlds);
 
-        issueComputeLayoutTransitions(impl->dev, target, draw_cmd, this->renderOptions);
+        issueComputeLayoutTransitions(impl->dev, target, draw_cmd, renderOptions);
 
         issueMemoryBarrier(impl->dev,
                            draw_cmd,
@@ -2922,7 +2932,7 @@ BatchImportedBuffers &BatchRenderer::getImportedBuffers(uint32_t frame_id)
 
 const vk::LocalBuffer &BatchRenderer::getComponentBuffer(uint32_t frame_id, uint32_t component) const
 {
-    return impl->batchFrames[frame_id].getComponentOutputBuffer(component, mem);
+    return impl->batchFrames[frame_id].getComponentOutputBuffer(component);
 }
 
 // const vk::LocalBuffer & BatchRenderer::getRGBBuffer() const
@@ -2972,15 +2982,15 @@ const void *BatchRenderer::getComponentCUDAPtr(uint32_t frame_id, uint32_t compo
 #endif
 }
 
-inline uint BatchRenderer::getComponentIndex(const string &name) const
-{
-    return componentIndices[name];
-}
+// inline uint BatchRenderer::getComponentIndex(const string &name) const
+// {
+//     return componentIndices[name];
+// }
 
-inline bool BatchRenderer::checkRenderComponent(uint32_t component) const
-{
-    return renderOptions.output[component];
-}
+// inline bool BatchRenderer::checkRenderComponent(uint32_t component) const
+// {
+//     return renderOptions.output[component];
+// }
 
 // const uint8_t * BatchRenderer::getRGBCUDAPtr() const
 // {

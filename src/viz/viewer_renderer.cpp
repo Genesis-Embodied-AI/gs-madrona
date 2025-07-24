@@ -1420,7 +1420,7 @@ static ShadowFramebuffer makeShadowFramebuffer(const Device &dev,
                                    uint32_t fb_height,
                                    VkRenderPass render_pass)
 {
-    auto color = alloc.makeCAttachment(fb_width, fb_height, 1, InternalConfig::varianceFormat, false);
+    auto color = alloc.makeAttachment(fb_width, fb_height, 1, InternalConfig::varianceFormat, false);
     auto intermediate = alloc.makeAttachment(fb_width, fb_height, 1, InternalConfig::varianceFormat, false);
     auto depth = alloc.makeAttachment(fb_width, fb_height, 1, InternalConfig::depthFormat, true);
 
@@ -2586,8 +2586,8 @@ static ViewerRendererState initState(RenderContext &rctx,
                   grid_draw.descPool.makeSet(),
                   rctx.sky_,
                   rctx.batchRenderer->getImportedBuffers(0),
-                  rctx.batchRenderer->getRGBBuffer(),
-                  rctx.batchRenderer->getDepthBuffer());
+                  rctx.batchRenderer->getComponentBuffer(0, ComponentNames::RGB),
+                  rctx.batchRenderer->getComponentBuffer(0, ComponentNames::Depth));
     }
 
     HostBuffer screenshot_buffer = rctx.alloc.makeStagingBuffer(
