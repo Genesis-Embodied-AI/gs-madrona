@@ -19,10 +19,24 @@ namespace madrona::render {
 
 struct RenderContext;
 
+enum class LatestOperation {
+    None,
+    RenderPrepare,
+    RenderViews,
+    Transition,
+};
+
+enum ComponentNames {
+    RGB = 0,
+    Depth = 1,
+    Normal = 2,
+    Segmentation = 3,
+};
+
 struct LayeredTarget {
     // Contains a uint for triangle ID and another for instance ID
     std::vector<std::unique_ptr<vk::LocalImage> > components;
-    std::vector<std::unique_ptr<VkImageView> > componentsView;
+    std::vector<VkImageView> componentsView;
     // render::vk::LocalImage rgb;
     // VkImageView rgbView;
     // // Depth
@@ -38,13 +52,12 @@ struct LayeredTarget {
     // Shadow map
     render::vk::LocalImage shadowMap;
     VkImageView shadowMapView;
-
     render::vk::LocalImage shadowDepth;
     VkImageView shadowDepthView;
 
     uint32_t numViews;
 
-    VkDescriptorSet lightingSet;
+    // VkDescriptorSet lightingSet;
 
     uint32_t pixelWidth;
     uint32_t pixelHeight;
@@ -58,6 +71,73 @@ struct LayeredTarget {
     uint32_t shadowMapSize;
     
     const VkImageView &getImageView(uint32_t component) const;
+};
+
+struct BatchFrame {
+    BatchImportedBuffers buffers;
+
+    vk::LocalBuffer skyInput;
+    vk::HostBuffer skyInputStaging;
+
+    vk::LocalBuffer renderOptionsBuffer;
+    vk::HostBuffer renderOptionsStagingBuffer;
+
+    // View, instance info, instance data
+    VkDescriptorSet viewInstanceSetPrepare;
+    VkDescriptorSet viewAABBSetPrepare;
+    VkDescriptorSet drawViewSet;
+    VkDescriptorSet viewInstanceSetLighting;
+    VkDescriptorSet shadowGenSet;
+    VkDescriptorSet shadowDrawSet;
+    VkDescriptorSet shadowAssetSet;
+
+    HeapArray<LayeredTarget> targets;
+    uint64_t numPixels;
+    HeapArray<std::unique_ptr<vk::DedicatedBuffer>> componentOutputs;
+    // vk::DedicatedBuffer rgbOutput;
+    // vk::DedicatedBuffer depthOutput;
+    // vk::DedicatedBuffer normalOutput;
+    // vk::DedicatedBuffer segmentationOutput;
+#ifdef MADRONA_VK_CUDA_SUPPORT
+    HeapArray<std::unique_ptr<vk::CudaImportedBuffer> > componentOutputsCUDA;
+    // vk::CudaImportedBuffer depthOutputCUDA;
+    // vk::CudaImportedBuffer normalOutputCUDA;
+    // vk::CudaImportedBuffer segmentationOutputCUDA;
+#endif
+
+    // Swapchain of draw packages which get used to feed to the rasterizer
+    HeapArray<DrawCommandPackage> drawPackageSwapchain;
+
+    // Descriptor set which contains all the vizBuffer outputs and
+    // the lighting outputs
+    VkDescriptorSet targetsSetLighting;
+    VkDescriptorSet pbrSet;
+
+    VkCommandPool prepareCmdPool;
+    VkCommandBuffer prepareCmdbuf;
+
+    VkCommandPool renderCmdPool;
+    VkCommandBuffer renderCmdbuf;
+    VkSemaphore prepareFinished;    // Waited for by the viewer or the batch renderer
+    VkSemaphore renderFinished;     // Waited for by the viewer to render stuff to the window
+    VkSemaphore layoutTransitionFinished;   // Waited for if that latest thing was a transition
+    VkFence prepareFence;   // Waited for at the beginning of each renderViews call
+    VkFence renderFence;
+
+    // Keep track of which semaphore to wait on
+    LatestOperation latestOp;
+
+    VkFence &getLatestFence();
+    const vk::LocalBuffer &getComponentOutputBuffer(uint32_t component) const;
+#ifdef MADRONA_VK_CUDA_SUPPORT
+    const void *getComponentOutputBufferCUDA(uint32_t component);
+#endif
+    void initComponent(
+        uint32_t component, 
+        const vk::Device &dev,
+        vk::MemoryAllocator &alloc, 
+        // VkDescriptorSet &lighting_set
+    );
 };
 
 struct BatchRenderInfo {
@@ -115,20 +195,41 @@ struct BatchRenderer {
 
     BatchImportedBuffers &getImportedBuffers(uint32_t frame_id);
 
-    const vk::LocalBuffer & getRGBBuffer() const;
-    const vk::LocalBuffer & getDepthBuffer() const;
-    const vk::LocalBuffer & getNormalBuffer() const;
-    const vk::LocalBuffer & getSegmentationBuffer() const;
+    const vk::LocalBuffer &getComponentBuffer(uint32_t frame_id, uint32_t component) const;
+    // const vk::LocalBuffer & getRGBBuffer() const;
+    // const vk::LocalBuffer & getDepthBuffer() const;
+    // const vk::LocalBuffer & getNormalBuffer() const;
+    // const vk::LocalBuffer & getSegmentationBuffer() const;
 
     // Get the semaphore that the viewer renderer has to wait on.
     // This is either going to be the semaphore from prepareForRendering,
     // or it's the one from renderViews.
     VkSemaphore getLatestWaitSemaphore();
 
-    const uint8_t * getRGBCUDAPtr() const;
-    const float * getDepthCUDAPtr() const;
-    const uint8_t * getNormalCUDAPtr() const;
-    const int32_t * getSegmentationCUDAPtr() const;
+    // const uint8_t * getRGBCUDAPtr() const;
+    // const float * getDepthCUDAPtr() const;
+    // const uint8_t * getNormalCUDAPtr() const;
+    // const int32_t * getSegmentationCUDAPtr() const;
+    // template <typename T>
+    const void *getComponentCUDAPtr(uint32_t frame_id, uint32_t component) const;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+// DRAW COMMAND BUFFER CREATION                                               //
+////////////////////////////////////////////////////////////////////////////////
+struct DrawCommandPackage {
+    // Draw cmds and drawdata
+    vk::LocalBuffer drawBuffer;
+
+    // This descriptor set contains draw information
+    VkDescriptorSet drawBufferSetPrepare;
+    VkDescriptorSet drawBufferSetDraw;
+
+    uint32_t drawCmdOffset;
+    uint32_t drawCmdBufferSize;
+
+    uint32_t numDrawCounts;
 };
 
 }
