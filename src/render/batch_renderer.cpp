@@ -69,7 +69,7 @@ const vk::LocalBuffer &BatchFrame::getComponentOutputBuffer(
     // vk::MemoryAllocator &alloc, 
     // VkDescriptorSet &lighting_set
 ) {
-    if (componentOutputs[component]) { return componentOutputs[component]->buf; }
+    return componentOutputs[component]->buf;
     // uint64_t num_rgb_bytes = total_num_pixels * sizeof(uint8_t) * 4_u64;
     // uint64_t num_depth_bytes = total_num_pixels * sizeof(float);
     // uint64_t num_normal_bytes = total_num_pixels * sizeof(uint8_t) * 4_u64;
@@ -1241,10 +1241,12 @@ static void makeBatchFrame(vk::Device& dev,
 ////////////////////////////////////////////////////////////////////////////////
 // RASTERIZATION AND RENDERING / POST PROCESSING                              //
 ////////////////////////////////////////////////////////////////////////////////
-static void issueRasterLayoutTransitions(vk::Device &dev, 
-                                   LayeredTarget &target,
-                                   VkCommandBuffer &draw_cmd)
-{
+static void issueRasterLayoutTransitions(
+    vk::Device &dev, 
+    LayeredTarget &target,
+    VkCommandBuffer &draw_cmd,
+    const RenderOptions &render_options
+) {
     // Transition image layouts
     auto makeBarrier = [](uint32_t component) {
         bool isDepth = InternalConfig::IsDepth[component];
@@ -1259,7 +1261,7 @@ static void issueRasterLayoutTransitions(vk::Device &dev,
                                  : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = target.components[component],
+            .image = target.components[component].image,
             .subresourceRange = {
                 .aspectMask = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT
                                       : VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1273,14 +1275,10 @@ static void issueRasterLayoutTransitions(vk::Device &dev,
 
     std::vector<VkImageMemoryBarrier> raster_barriers;
     for (size_t i = 0; i < consts::maxComponents; ++i) {
-        if (check)
+        if (render_options.outputs[i])
+            raster_barriers.emplace_back(makeBarrier(i));
     }
 
-    std::array raster_barriers = {
-        makeBarrier(),
-        makeBarrier(),
-        makeBarrier(),
-        makeBarrier(),
         // VkImageMemoryBarrier{
         //     .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         //     .pNext = nullptr,
@@ -1353,102 +1351,137 @@ static void issueRasterLayoutTransitions(vk::Device &dev,
         //         .layerCount = 1
         //     }
         // },
-    };
+    // };
 
-    dev.dt.cmdPipelineBarrier(draw_cmd,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-            0, 0, nullptr, 0, nullptr,
-            raster_barriers.size(), raster_barriers.data());   
+    dev.dt.cmdPipelineBarrier(
+        draw_cmd,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+        0, 0, nullptr, 0, nullptr,
+        raster_barriers.size(), raster_barriers.data()
+    );   
 }
 
-static void issueComputeLayoutTransitions(vk::Device &dev, 
-                                   LayeredTarget &target,
-                                   VkCommandBuffer &draw_cmd)
-{
+static void issueComputeLayoutTransitions(
+    vk::Device &dev, 
+    LayeredTarget &target,
+    VkCommandBuffer &draw_cmd,
+    const RenderOptions &render_options
+) {
     // Transition image layouts
-    std::array barriers = {
-        VkImageMemoryBarrier{
+    auto makeBarrier = [](uint32_t component) {
+        bool isDepth = InternalConfig::IsDepth[component];
+        return VkImageMemoryBarrier{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             .pNext = nullptr,
-            .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            .srcAccessMask = isDepth ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+                                     : VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .oldLayout = isDepth ? VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL
+                                 : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = target.rgb.image,
+            .image = target.components[component].image,
             .subresourceRange = {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .aspectMask = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT
+                                      : VK_IMAGE_ASPECT_COLOR_BIT,
                 .baseMipLevel = 0,
                 .levelCount = 1,
                 .baseArrayLayer = 0,
                 .layerCount = 1
             }
-        },
-        VkImageMemoryBarrier{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-            .pNext = nullptr,
-            .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = target.depth.image,
-            .subresourceRange = {
-                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1
-            }
-        },
-        VkImageMemoryBarrier{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-            .pNext = nullptr,
-            .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = target.normal.image,
-            .subresourceRange = {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1
-            }
-        },
-        VkImageMemoryBarrier{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-            .pNext = nullptr,
-            .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = target.segmentation.image,
-            .subresourceRange = {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1
-            }
-        },
+        };
     };
 
-    dev.dt.cmdPipelineBarrier(draw_cmd,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+    std::vector<VkImageMemoryBarrier> raster_barriers;
+    for (size_t i = 0; i < consts::maxComponents; ++i) {
+        if (render_options.outputs[i])
+            raster_barriers.emplace_back(makeBarrier(i));
+    }
+
+    // std::array barriers = {
+    //     VkImageMemoryBarrier{
+    //         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+    //         .pNext = nullptr,
+    //         .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    //         .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+    //         .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    //         .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    //         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //         .image = target.rgb.image,
+    //         .subresourceRange = {
+    //             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+    //             .baseMipLevel = 0,
+    //             .levelCount = 1,
+    //             .baseArrayLayer = 0,
+    //             .layerCount = 1
+    //         }
+    //     },
+    //     VkImageMemoryBarrier{
+    //         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+    //         .pNext = nullptr,
+    //         .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+    //         .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+    //         .oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+    //         .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    //         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //         .image = target.depth.image,
+    //         .subresourceRange = {
+    //             .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+    //             .baseMipLevel = 0,
+    //             .levelCount = 1,
+    //             .baseArrayLayer = 0,
+    //             .layerCount = 1
+    //         }
+    //     },
+    //     VkImageMemoryBarrier{
+    //         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+    //         .pNext = nullptr,
+    //         .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    //         .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+    //         .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    //         .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    //         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //         .image = target.normal.image,
+    //         .subresourceRange = {
+    //             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+    //             .baseMipLevel = 0,
+    //             .levelCount = 1,
+    //             .baseArrayLayer = 0,
+    //             .layerCount = 1
+    //         }
+    //     },
+    //     VkImageMemoryBarrier{
+    //         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+    //         .pNext = nullptr,
+    //         .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    //         .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+    //         .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    //         .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    //         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //         .image = target.segmentation.image,
+    //         .subresourceRange = {
+    //             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+    //             .baseMipLevel = 0,
+    //             .levelCount = 1,
+    //             .baseArrayLayer = 0,
+    //             .layerCount = 1
+    //         }
+    //     },
+    // };
+
+    dev.dt.cmdPipelineBarrier(
+        draw_cmd,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
         0, 0, nullptr, 0, nullptr,
-        barriers.size(), barriers.data());   
+        raster_barriers.size(), raster_barriers.data()
+    );   
 }
 
 static void issueRasterization(vk::Device &dev, 
@@ -2798,7 +2831,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
         // impl->dev.dt.deviceWaitIdle(impl->dev.hdl);
         
         // Now, start the rasterization
-        issueRasterLayoutTransitions(impl->dev, target, draw_cmd);
+        issueRasterLayoutTransitions(impl->dev, target, draw_cmd, this->renderOptions);
 
         // Begin rendering
         issueRasterization(impl->dev,
@@ -2811,10 +2844,10 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                            impl->assetSetTextureMat,
                            impl->renderExtent,
                            loaded_assets,
-                           !this->renderOptions.outputRGB && this->renderOptions.outputDepth,
+                        //    !this->renderOptions.outputRGB && this->renderOptions.outputDepth,
                            info.numLights / info.numWorlds);
 
-        issueComputeLayoutTransitions(impl->dev, target, draw_cmd);
+        issueComputeLayoutTransitions(impl->dev, target, draw_cmd, this->renderOptions);
 
         issueMemoryBarrier(impl->dev,
                            draw_cmd,
@@ -2845,10 +2878,8 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
         frame_data.targets[0].viewWidth,
         frame_data.targets[0].viewHeight);
 
-    impl->dev.dt.cmdWriteTimestamp(draw_cmd, 
-                                   VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                                   impl->timeQueryPool,
-                                   1);
+    impl->dev.dt.cmdWriteTimestamp(
+        draw_cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, impl->timeQueryPool, 1);
 
     // End the command buffer and stuff
     REQ_VK(impl->dev.dt.endCommandBuffer(draw_cmd));
@@ -2936,8 +2967,8 @@ const void *BatchRenderer::getComponentCUDAPtr(uint32_t frame_id, uint32_t compo
 #ifndef MADRONA_VK_CUDA_SUPPORT
     return nullptr;
 #else
-    if (!checkRenderComponent(component)) { return nullptr; }
-    return impl->batchFrames[frame_id].getComponentOutputBufferCUDA(component, mem);
+    if (!renderOptions.outputs[component]) { return nullptr; }
+    return impl->batchFrames[frame_id].getComponentOutputBufferCUDA(component);
 #endif
 }
 

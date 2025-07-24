@@ -31,6 +31,7 @@ enum ComponentNames {
     Depth = 1,
     Normal = 2,
     Segmentation = 3,
+    MaxComponents,
 };
 
 struct LayeredTarget {
