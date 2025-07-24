@@ -11,7 +11,8 @@ from PIL import Image
 from gs_madrona._gs_madrona_batch_renderer import MadronaBatchRenderer
 
 
-os.environ['MADRONA_ROOT_PATH'] = os.path.dirname(os.path.abspath(__file__))
+os.environ['MADRONA_ROOT_PATH'] = str(Path(__file__).parent.absolute())
+os.environ['MADRONA_ROOT_CACHE_DIR'] = str(Path.home() / ".cache" / "madrona")
 
 
 class MadronaBatchRendererAdapter:
