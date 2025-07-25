@@ -1143,8 +1143,6 @@ static void issueRasterization(vk::Device &dev,
     rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR;
     rendering_info.renderArea = total_rect;
     rendering_info.layerCount = 1;
-    // rendering_info.colorAttachmentCount = depth_only ? 0 : 3;
-    // rendering_info.pColorAttachments = depth_only ? nullptr : color_attach.data();
     rendering_info.colorAttachmentCount = 3;
     rendering_info.pColorAttachments = color_attach.data();
     rendering_info.pDepthAttachment = &depth_attach;
@@ -1632,7 +1630,6 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
         makeComputePipeline(
             dev, rctx.pipelineCache, 3, sizeof(shader::DeferredLightingPushConstBR),
             consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
-            // getDrawDeferredPath(!depthOnly), "lighting", makeShadersLighting)),
             "draw_deferred_rgb.hlsl", "lighting", makeShadersLighting)),
     shadowGen(
         makeComputePipeline(
@@ -1667,7 +1664,6 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
         makeBatchFrame(
             dev, &batchFrames[i], mem, cfg,
             prepareViews, batchDraw, lighting, shadowGen, shadowDraw);
-            // cfg.renderWidth, cfg.renderHeight);
     }
 
     VkQueryPoolCreateInfo pool_create_info = {};
@@ -1706,7 +1702,6 @@ BatchRenderer::~BatchRenderer()
 
     // If the batch renderer was enabled
     impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->batchDraw.hdls[0], nullptr);
-    // impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->batchDraw.hdls[1], nullptr);
     impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->batchDraw.layout, nullptr);
 
     impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->createVisualization.hdls[0], nullptr);
@@ -1735,9 +1730,6 @@ BatchRenderer::~BatchRenderer()
                 impl->dev.dt.destroyImageView(
                     impl->dev.hdl, impl->batchFrames[i].targets[j].componentsView[k], nullptr);
             }
-            // impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].depthView, nullptr);
-            // impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].normalView, nullptr);
-            // impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].segmentationView, nullptr);
             impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].shadowMapView, nullptr);
             impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].shadowDepthView, nullptr);
         }
@@ -2515,7 +2507,6 @@ VkSemaphore BatchRenderer::getLatestWaitSemaphore()
     return VK_NULL_HANDLE;
 }
 
-// template <typename T>
 const void *BatchRenderer::getComponentCUDAPtr(uint32_t frame_id, uint32_t component) const
 {
 #ifndef MADRONA_VK_CUDA_SUPPORT

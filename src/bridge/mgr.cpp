@@ -280,9 +280,6 @@ struct Manager::Impl {
 
     inline render::RenderOptions makeRenderOptions(const uint32_t *render_options)
     {
-        
-        printf("%d %d %d %d\n", render_options[0], render_options[1], render_options[2], render_options[3]);
-
         return render::RenderOptions{
             .outputs = {
                 static_cast<bool>(render_options[0]),

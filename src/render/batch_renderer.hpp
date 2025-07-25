@@ -67,17 +67,6 @@ struct LayeredTarget {
     // Contains a uint for triangle ID and another for instance ID
     std::vector<std::unique_ptr<vk::LocalImage>> components;
     HeapArray<VkImageView> componentsView;
-    // render::vk::LocalImage rgb;
-    // VkImageView rgbView;
-    // // Depth
-    // render::vk::LocalImage depth;
-    // VkImageView depthView;
-    // // Normal
-    // render::vk::LocalImage normal;
-    // VkImageView normalView;
-    // // Segmentation
-    // render::vk::LocalImage segmentation;
-    // VkImageView segmentationView;
 
     // Shadow map
     render::vk::LocalImage shadowMap;
@@ -86,8 +75,6 @@ struct LayeredTarget {
     VkImageView shadowDepthView;
 
     uint32_t numViews;
-
-    // VkDescriptorSet lightingSet;
 
     uint32_t pixelWidth;
     uint32_t pixelHeight;
@@ -124,15 +111,8 @@ struct BatchFrame {
     HeapArray<LayeredTarget> targets;
     uint64_t numPixels;
     std::vector<std::unique_ptr<vk::DedicatedBuffer>> componentOutputs;
-    // vk::DedicatedBuffer rgbOutput;
-    // vk::DedicatedBuffer depthOutput;
-    // vk::DedicatedBuffer normalOutput;
-    // vk::DedicatedBuffer segmentationOutput;
 #ifdef MADRONA_VK_CUDA_SUPPORT
     std::vector<std::unique_ptr<vk::CudaImportedBuffer>> componentOutputsCUDA;
-    // vk::CudaImportedBuffer depthOutputCUDA;
-    // vk::CudaImportedBuffer normalOutputCUDA;
-    // vk::CudaImportedBuffer segmentationOutputCUDA;
 #endif
 
     // Swapchain of draw packages which get used to feed to the rasterizer
@@ -185,7 +165,6 @@ struct BatchRenderer {
 
     bool didRender;
     RenderOptions renderOptions;
-    // std::unordered_map<std::string, uint> componentNames;
 
     struct Config {
         bool enableBatchRenderer;
@@ -214,21 +193,10 @@ struct BatchRenderer {
     BatchImportedBuffers &getImportedBuffers(uint32_t frame_id);
 
     const vk::LocalBuffer &getComponentBuffer(uint32_t frame_id, uint32_t component) const;
-    // const vk::LocalBuffer & getRGBBuffer() const;
-    // const vk::LocalBuffer & getDepthBuffer() const;
-    // const vk::LocalBuffer & getNormalBuffer() const;
-    // const vk::LocalBuffer & getSegmentationBuffer() const;
-
     // Get the semaphore that the viewer renderer has to wait on.
     // This is either going to be the semaphore from prepareForRendering,
     // or it's the one from renderViews.
     VkSemaphore getLatestWaitSemaphore();
-
-    // const uint8_t * getRGBCUDAPtr() const;
-    // const float * getDepthCUDAPtr() const;
-    // const uint8_t * getNormalCUDAPtr() const;
-    // const int32_t * getSegmentationCUDAPtr() const;
-    // template <typename T>
     const void *getComponentCUDAPtr(uint32_t frame_id, uint32_t component) const;
 };
 
