@@ -131,8 +131,7 @@ void BatchFrame::initComponent(
 
     // Target inputs
     HeapArray<VkDescriptorImageInfo> buffers_info(targets.size());
-
-    printf("3target size: %d\n", targets.size());
+    // printf("3target size: %d\n", targets.size());
 
     for (uint32_t i = 0; i < targets.size(); ++i) {
         // Create target image and image view
@@ -373,7 +372,8 @@ static PipelineMP<1> makeDrawPipeline(const vk::Device &dev,
     VkPipelineMultisampleStateCreateInfo multisample_info {};
     VkPipelineRasterizationStateCreateInfo raster_info {};
 
-    initCommonDrawPipelineInfo(vert_info, input_assembly_info,
+    initCommonDrawPipelineInfo(
+        vert_info, input_assembly_info,
         viewport_info, multisample_info, raster_info);
 
     // Depth/Stencil
@@ -1134,6 +1134,8 @@ static void makeBatchFrame(vk::Device& dev,
                                      &shadow_map_infos[i], 1, 0, i);
         }
 
+
+        
         // VkDescriptorBufferInfo rgb_output_buffer_info {
         //     .buffer = rgb_output_buffer.buf.buffer,
         //     .offset = 0,
@@ -1240,6 +1242,9 @@ static void makeBatchFrame(vk::Device& dev,
         .renderFence = render_fence,
         .latestOp = LatestOperation::None
     };
+
+    for (int i = 0; i < 4; ++i)
+        frame->initComponent(i, dev, alloc);
 
 }
 
@@ -1499,7 +1504,6 @@ static void issueRasterization(vk::Device &dev,
                                VkDescriptorSet asset_mat_tex_set,
                                VkExtent2D render_extent,
                                const DynArray<AssetData> &loaded_assets,
-                            //    bool depth_only,
                                uint32_t num_lights_per_world)
 {
     (void)render_extent;
@@ -1547,8 +1551,6 @@ static void issueRasterization(vk::Device &dev,
     dev.dt.cmdBeginRenderingKHR(draw_cmd, &rendering_info);
 
     dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw_pipeline.hdls[0]);
-                        //    depth_only ? draw_pipeline.hdls[1] : draw_pipeline.hdls[0]);
-
     dev.dt.cmdBindIndexBuffer(draw_cmd, loaded_assets[0].buf.buffer,
                               loaded_assets[0].idxBufferOffset,
                               VK_INDEX_TYPE_UINT32);
@@ -2450,13 +2452,13 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info, EngineInterop *int
     printf("Flush CPU buffers.\n");
     BatchFrame &frame_data = impl->batchFrames[frame_index];
 
-    for (uint32_t i = 0; i < InternalConfig::maxComponents; ++i) {
-        if (renderOptions.outputs[i]) {
-            printf("initComponent %d\n", i);
-            frame_data.initComponent(i, impl->dev, impl->mem);
-        }
-    }
-    printf("InitComponent.\n");
+    // for (uint32_t i = 0; i < InternalConfig::maxComponents; ++i) {
+    //     if (renderOptions.outputs[i]) {
+    //         printf("initComponent %d\n", i);
+    //         frame_data.initComponent(i, impl->dev, impl->mem);
+    //     }
+    // }
+    // printf("InitComponent.\n");
 
     { // Wait for the frame to be ready
         if (frame_data.latestOp != LatestOperation::None) {
