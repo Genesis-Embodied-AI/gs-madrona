@@ -2564,6 +2564,7 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info, EngineInterop *int
 
     REQ_VK(impl->dev.dt.resetFences(impl->dev.hdl, 1, &frame_data.prepareFence));
     REQ_VK(impl->dev.dt.queueSubmit(impl->renderQueue, 1, &submit_info, frame_data.prepareFence));
+    REQ_VK(impl->dev.dt.deviceWaitIdle(impl->dev.hdl));
 
     frame_data.latestOp = LatestOperation::RenderPrepare;
 

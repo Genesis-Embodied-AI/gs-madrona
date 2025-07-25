@@ -260,9 +260,6 @@ struct PixelOutput {
 [shader("pixel")]
 PixelOutput frag(in V2F v2f, in uint prim_id : SV_PrimitiveID)
 {
-
-    printf("%d\n", prim_id);
-
     PixelOutput output;
     RenderOptions renderOptions = renderOptionsBuffer[0];
     float3 normal = normalize(v2f.worldNormal);
