@@ -42,7 +42,7 @@ inline constexpr uint32_t componentBytes[maxComponents] = {
 };
 inline constexpr VkFormat componentFormats[maxComponents] = {
     VK_FORMAT_R8G8B8A8_UNORM,   // RGB
-    VK_FORMAT_R32_SFLOAT,       // depth
+    VK_FORMAT_D32_SFLOAT,       // depth
     VK_FORMAT_R8G8B8A8_UNORM,   // normals
     VK_FORMAT_R32_SINT          // segmentation
 };

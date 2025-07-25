@@ -165,8 +165,8 @@ struct BatchFrame {
     void initComponent(
         uint32_t component, 
         const vk::Device &dev,
-        vk::MemoryAllocator &alloc
-        // VkDescriptorSet &lighting_set
+        vk::MemoryAllocator &alloc,
+        bool allocate
     );
 };
 
