@@ -348,20 +348,16 @@ inline void exportCountsGPU(Context &ctx,
     auto state_mgr = mwGPU::getStateManager();
 
     if (sys_state.totalNumViews) {
-        *sys_state.totalNumViews = state_mgr->getArchetypeNumRows<
-            RenderCameraArchetype>();
-        *sys_state.totalNumInstances = state_mgr->getArchetypeNumRows<
-            RenderableArchetype>();
+        *sys_state.totalNumViews = state_mgr->getArchetypeNumRows<RenderCameraArchetype>();
+        *sys_state.totalNumInstances = state_mgr->getArchetypeNumRows<RenderableArchetype>();
     }
     if (sys_state.totalNumLights) {
-        *sys_state.totalNumLights = state_mgr->getArchetypeNumRows<
-            LightArchetype>();
+        *sys_state.totalNumLights = state_mgr->getArchetypeNumRows<LightArchetype>();
     }
 
     auto &gpu_consts = mwGPU::GPUImplConsts::get();
 
-    BVHInternalData *bvh_internals =
-        (BVHInternalData *)gpu_consts.bvhInternalData;
+    BVHInternalData *bvh_internals =(BVHInternalData *)gpu_consts.bvhInternalData;
 
     if (bvh_internals != nullptr) {
         uint32_t num_views =
@@ -370,11 +366,8 @@ inline void exportCountsGPU(Context &ctx,
     }
 
 #if 0
-    uint32_t *morton_codes = state_mgr->getArchetypeComponent<
-        RenderableArchetype, MortonCode>();
-    
-    WorldID *world_ids = state_mgr->getArchetypeComponent<
-        RenderableArchetype, WorldID>();
+    uint32_t *morton_codes = state_mgr->getArchetypeComponent<RenderableArchetype, MortonCode>();
+    WorldID *world_ids = state_mgr->getArchetypeComponent<RenderableArchetype, WorldID>();
 
     uint32_t current_world = 0;
     uint32_t current_world_offset = 0;

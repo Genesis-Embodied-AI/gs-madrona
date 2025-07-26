@@ -106,10 +106,8 @@ StateManager::StateManager(uint32_t)
     uint32_t init_mapped_entities = 1'048'576;
     uint32_t max_mapped_entities = 2'147'483'648;
 
-    uint64_t reserve_entity_bytes =
-        (uint64_t)max_mapped_entities * sizeof(EntityStore::EntitySlot);
-    uint64_t reserve_idx_bytes =
-        (uint64_t)max_mapped_entities * sizeof(int32_t);
+    uint64_t reserve_entity_bytes = (uint64_t)max_mapped_entities * sizeof(EntityStore::EntitySlot);
+    uint64_t reserve_idx_bytes = (uint64_t)max_mapped_entities * sizeof(int32_t);
 
     reserve_entity_bytes = alloc->roundUpReservation(reserve_entity_bytes);
     reserve_idx_bytes = alloc->roundUpReservation(reserve_idx_bytes);
