@@ -133,13 +133,13 @@ void lighting(uint3 idx : SV_DispatchThreadID)
         view_idx * pushConst.viewWidth * pushConst.viewHeight +
         idx.y * pushConst.viewWidth + idx.x;
 
-    if (renderOptionsBuffer[0].outputRGB) {
+    if (renderOptionsBuffer[0].outputs[0]) {    // RGB
         float4 color = rgbInBuffer[target_idx][vbuffer_pixel + uint3(pixel_offset.xy, 0)];
         float3 out_color = color.rgb;
         rgbOutputBuffer[out_pixel_idx] = linearToSRGB8(out_color); 
     }
 
-    if (renderOptionsBuffer[0].outputDepth) {
+    if (renderOptionsBuffer[0].outputs[1]) {    // Depth
         uint2 depth_dim;
         depthInBuffer[target_idx].GetDimensions(depth_dim.x, depth_dim.y);
         float2 depth_uv = float2(vbuffer_pixel.x + pixel_offset.x + 0.5, 
@@ -154,7 +154,7 @@ void lighting(uint3 idx : SV_DispatchThreadID)
         depthOutputBuffer[out_pixel_idx] = linear_depth;
     }
 
-    if (renderOptionsBuffer[0].outputNormal) {
+    if (renderOptionsBuffer[0].outputs[2]) {    // Normal
         uint2 normal_dim;
         normalInBuffer[target_idx].GetDimensions(normal_dim.x, normal_dim.y);
 
@@ -165,7 +165,7 @@ void lighting(uint3 idx : SV_DispatchThreadID)
         normalOutputBuffer[out_pixel_idx] = float3ToUint32(normal_in);
     }
     
-    if (renderOptionsBuffer[0].outputSegmentation) {
+    if (renderOptionsBuffer[0].outputs[3]) {    // Segmentation
         int out_segmentation = segmentationInBuffer[target_idx][
             vbuffer_pixel + uint3(pixel_offset.xy, 0)
         ];

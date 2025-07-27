@@ -173,8 +173,7 @@ public:
 
     std::pair<int32_t, int32_t> fetchRecyclableEntities();
 
-    void recycleEntities(int32_t thread_offset,
-                         int32_t recycle_base);
+    void recycleEntities(int32_t thread_offset, int32_t recycle_base);
 
     inline bool archetypeNeedsSort(uint32_t archetype_id) const;
     inline void archetypeClearNeedsSort(uint32_t archetype_id);
@@ -265,11 +264,9 @@ private:
     uint32_t query_data_offset_ = 0;
     SpinLock query_data_lock_ {};
     FixedInlineArray<Optional<TypeInfo>, max_components_> components_ {};
-    std::array<uint32_t, max_archetype_components_ * max_archetypes_>
-        archetype_components_ {};
+    std::array<uint32_t, max_archetype_components_ * max_archetypes_>archetype_components_ {};
     FixedInlineArray<Optional<ArchetypeStore>, max_archetypes_> archetypes_ {};
-    std::array<uint32_t, max_archetype_components_ * max_archetypes_>
-        bundle_components_ {};
+    std::array<uint32_t, max_archetype_components_ * max_archetypes_> bundle_components_ {};
     std::array<BundleInfo, max_bundles_> bundle_infos_ {};
     std::array<uint32_t, max_query_slots_> query_data_ {};
     EntityStore entity_store_;

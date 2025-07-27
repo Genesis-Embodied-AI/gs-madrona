@@ -125,10 +125,7 @@ struct LightArchetype : public Archetype<
 > {};
 
 struct RenderOptions {
-    bool outputRGB;
-    bool outputDepth;
-    bool outputNormal;
-    bool outputSegmentation;
+    bool outputs[4];
     bool enableAntialiasing;
 };
 

@@ -281,10 +281,12 @@ struct Manager::Impl {
     inline render::RenderOptions makeRenderOptions(const uint32_t *render_options)
     {
         return render::RenderOptions{
-            .outputRGB = static_cast<bool>(render_options[0]),
-            .outputDepth = static_cast<bool>(render_options[1]),
-            .outputNormal = static_cast<bool>(render_options[2]),
-            .outputSegmentation = static_cast<bool>(render_options[3]),
+            .outputs = {
+                static_cast<bool>(render_options[0]),
+                static_cast<bool>(render_options[1]),
+                static_cast<bool>(render_options[2]),
+                static_cast<bool>(render_options[3]),
+            },
             .enableAntialiasing = static_cast<bool>(render_options[4]),
         };
     }

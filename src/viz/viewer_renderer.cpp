@@ -1309,14 +1309,10 @@ static std::pair<Framebuffer, Framebuffer> makeFramebuffers(
     VkRenderPass render_pass,
     VkRenderPass imgui_render_pass)
 {
-    auto albedo = alloc.makeColorAttachment(
-        fb_width, fb_height, 1, VK_FORMAT_R8G8B8A8_UNORM);
-    auto normal = alloc.makeColorAttachment(
-        fb_width, fb_height, 1, VK_FORMAT_R16G16B16A16_SFLOAT);
-    auto position = alloc.makeColorAttachment(
-        fb_width, fb_height, 1, VK_FORMAT_R16G16B16A16_SFLOAT);
-    auto depth = alloc.makeDepthAttachment(
-        fb_width, fb_height, 1, InternalConfig::depthFormat);
+    auto albedo = alloc.makeAttachment(fb_width, fb_height, 1, VK_FORMAT_R8G8B8A8_UNORM, false);
+    auto normal = alloc.makeAttachment(fb_width, fb_height, 1, VK_FORMAT_R16G16B16A16_SFLOAT, false);
+    auto position = alloc.makeAttachment(fb_width, fb_height, 1, VK_FORMAT_R16G16B16A16_SFLOAT, false);
+    auto depth = alloc.makeAttachment(fb_width, fb_height, 1, InternalConfig::depthFormat, true);
 
     VkImageViewCreateInfo view_info {};
     view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1424,12 +1420,9 @@ static ShadowFramebuffer makeShadowFramebuffer(const Device &dev,
                                    uint32_t fb_height,
                                    VkRenderPass render_pass)
 {
-    auto color = alloc.makeColorAttachment(fb_width, fb_height, 1,
-        InternalConfig::varianceFormat);
-    auto intermediate = alloc.makeColorAttachment(fb_width, fb_height, 1,
-        InternalConfig::varianceFormat);
-    auto depth = alloc.makeDepthAttachment(
-        fb_width, fb_height, 1, InternalConfig::depthFormat);
+    auto color = alloc.makeAttachment(fb_width, fb_height, 1, InternalConfig::varianceFormat, false);
+    auto intermediate = alloc.makeAttachment(fb_width, fb_height, 1, InternalConfig::varianceFormat, false);
+    auto depth = alloc.makeAttachment(fb_width, fb_height, 1, InternalConfig::depthFormat, true);
 
     VkImageViewCreateInfo view_info {};
     view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -2593,8 +2586,8 @@ static ViewerRendererState initState(RenderContext &rctx,
                   grid_draw.descPool.makeSet(),
                   rctx.sky_,
                   rctx.batchRenderer->getImportedBuffers(0),
-                  rctx.batchRenderer->getRGBBuffer(),
-                  rctx.batchRenderer->getDepthBuffer());
+                  rctx.batchRenderer->getComponentBuffer(0, ComponentNames::RGB),
+                  rctx.batchRenderer->getComponentBuffer(0, ComponentNames::Depth));
     }
 
     HostBuffer screenshot_buffer = rctx.alloc.makeStagingBuffer(
