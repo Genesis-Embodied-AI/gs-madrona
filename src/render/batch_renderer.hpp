@@ -110,6 +110,7 @@ struct BatchFrame {
 
     HeapArray<LayeredTarget> targets;
     uint64_t numPixels;
+    std::vector<bool> allocated;
     std::vector<std::unique_ptr<vk::DedicatedBuffer>> componentOutputs;
 #ifdef MADRONA_VK_CUDA_SUPPORT
     std::vector<std::unique_ptr<vk::CudaImportedBuffer>> componentOutputsCUDA;

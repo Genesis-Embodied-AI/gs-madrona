@@ -71,7 +71,7 @@ void BatchFrame::initComponent(
     vk::MemoryAllocator &alloc,
     bool allocate
 ) {
-    if (componentOutputs[component]) return;
+    if (allocated[component]) return;
 #ifdef MADRONA_VK_CUDA_SUPPORT
     bool supports_cuda_export = true;
 #else
@@ -79,6 +79,7 @@ void BatchFrame::initComponent(
 #endif
 
     uint64_t num_bytes = allocate ? numPixels * InternalConfig::componentBytes[component] : 16u;
+    allocated[component] = allocate;
     componentOutputs[component] = std::make_unique<vk::DedicatedBuffer>(
         alloc.makeDedicatedBuffer(num_bytes, false, supports_cuda_export));
 #ifdef MADRONA_VK_CUDA_SUPPORT
@@ -981,6 +982,7 @@ static void makeBatchFrame(vk::Device& dev,
        
         .targets = std::move(layered_targets),
         .numPixels = num_pixels,
+        .allocated = std::vector<bool>(InternalConfig::maxComponents),
         .componentOutputs = std::vector<std::unique_ptr<vk::DedicatedBuffer>>(InternalConfig::maxComponents),
 #ifdef MADRONA_VK_CUDA_SUPPORT
         .componentOutputsCUDA = std::vector<std::unique_ptr<vk::CudaImportedBuffer>>(InternalConfig::maxComponents),
