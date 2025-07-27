@@ -1017,13 +1017,9 @@ extern "C" __global__ void bvhRaycastEntry()
             &bvhParams.views[current_view_offset];
 
         uint32_t world_idx = (uint32_t)view_data->worldIDX;
-
         Vector3 ray_start = view_data->position;
         Vector3 ray_dir = calculateOutRay(view_data, pixel_x, pixel_y);
-
         uint32_t internal_nodes_offset = bvhParams.instanceOffsets[world_idx];
-
-
 
         // This does both the tracing / lighting, etc... just like a fragment
         // shader does in GLSL.
@@ -1044,14 +1040,8 @@ extern "C" __global__ void bvhRaycastEntry()
             }
         );
 
-
-
-
-        uint32_t linear_pixel_idx = 4 * 
-            (pixel_x + pixel_y * bvhParams.renderOutputWidth);
-
-        uint32_t global_pixel_byte_off = current_view_offset * bytes_per_view +
-            linear_pixel_idx;
+        uint32_t linear_pixel_idx = 4 * (pixel_x + pixel_y * bvhParams.renderOutputWidth);
+        uint32_t global_pixel_byte_off = current_view_offset * bytes_per_view + linear_pixel_idx;
 
         if (bvhParams.raycastRGBD) {
             // Write both depth and color information
