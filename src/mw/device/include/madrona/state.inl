@@ -10,8 +10,7 @@ ComponentID StateManager::registerComponent(uint32_t num_bytes)
     uint32_t id = TypeTracker::registerType<ComponentT>(
         &StateManager::num_components_);
 
-    uint32_t component_size = (num_bytes == 0) ?
-        sizeof(ComponentT) : num_bytes;
+    uint32_t component_size = (num_bytes == 0) ? sizeof(ComponentT) : num_bytes;
 
     registerComponent(id, alignof(ComponentT), component_size);
 
@@ -359,15 +358,11 @@ template <typename ArchetypeT, typename ComponentT>
 std::pair<ComponentT *, uint32_t> StateManager::getWorldComponentsAndCount(
         uint32_t world_id)
 {
-    ComponentT *glob_comps = getArchetypeComponent<
-        ArchetypeT, ComponentT>();
-    int32_t *world_offsets = getArchetypeWorldOffsets<
-        ArchetypeT>();
-    int32_t *world_counts = getArchetypeWorldCounts<
-        ArchetypeT>();
+    ComponentT *glob_comps = getArchetypeComponent<ArchetypeT, ComponentT>();
+    int32_t *world_offsets = getArchetypeWorldOffsets<ArchetypeT>();
+    int32_t *world_counts = getArchetypeWorldCounts<ArchetypeT>();
 
-    return std::make_pair(glob_comps + world_offsets[world_id],
-            world_counts[world_id]);
+    return std::make_pair(glob_comps + world_offsets[world_id], world_counts[world_id]);
 }
 
 template <typename ArchetypeT>
@@ -376,8 +371,7 @@ Entity * StateManager::getWorldEntities(uint32_t world_id)
     uint32_t archetype_id = TypeTracker::typeID<ArchetypeT>();
 
     Entity *glob_comps = (Entity *)getArchetypeColumn(archetype_id, 0);
-    int32_t *world_offsets = getArchetypeWorldOffsets<
-        ArchetypeT>();
+    int32_t *world_offsets = getArchetypeWorldOffsets<ArchetypeT>();
 
     return glob_comps + world_offsets[world_id];
 }
