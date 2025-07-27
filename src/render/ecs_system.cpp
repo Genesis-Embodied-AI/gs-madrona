@@ -487,21 +487,14 @@ void registerTypes(ECSRegistry &registry,
     if (bridge) {
         auto *state_mgr = mwGPU::getStateManager();
 
-        state_mgr->setArchetypeWorldOffsets<RenderableArchetype>(
-            bridge->instanceOffsets);
-        state_mgr->setArchetypeWorldOffsets<RenderCameraArchetype>(
-            bridge->viewOffsets);
-        state_mgr->setArchetypeWorldOffsets<LightArchetype>(
-            bridge->lightOffsets);
+        state_mgr->setArchetypeWorldOffsets<RenderableArchetype>(bridge->instanceOffsets);
+        state_mgr->setArchetypeWorldOffsets<RenderCameraArchetype>(bridge->viewOffsets);
+        state_mgr->setArchetypeWorldOffsets<LightArchetype>(bridge->lightOffsets);
 
-        state_mgr->setArchetypeComponent<RenderableArchetype, InstanceData>(
-            bridge->instances);
-        state_mgr->setArchetypeComponent<RenderCameraArchetype, PerspectiveCameraData>(
-            bridge->views);
-        state_mgr->setArchetypeComponent<LightArchetype, LightDesc>(
-            bridge->lights);
-        state_mgr->setArchetypeComponent<RenderableArchetype, TLBVHNode>(
-            bridge->aabbs);
+        state_mgr->setArchetypeComponent<RenderableArchetype, InstanceData>(bridge->instances);
+        state_mgr->setArchetypeComponent<RenderCameraArchetype, PerspectiveCameraData>(bridge->views);
+        state_mgr->setArchetypeComponent<LightArchetype, LightDesc>(bridge->lights);
+        state_mgr->setArchetypeComponent<RenderableArchetype, TLBVHNode>(bridge->aabbs);
     }
 
 #if 0

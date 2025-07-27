@@ -220,8 +220,7 @@ StateManager::ArchetypeStore::ArchetypeStore(
         if ((component_flag & ComponentFlags::ImportMemory) !=
                 ComponentFlags::ImportMemory) {
             if (max_num_entities == 0) {
-                tbl.columns[i] =
-                    alloc->reserveMemory(reserve_bytes, init_bytes);
+                tbl.columns[i] = alloc->reserveMemory(reserve_bytes, init_bytes);
                 tbl.columnFlags[i] |= ComponentFlags::CudaReserveMemory;
             } else {
                 uint64_t alloc_bytes = col_row_bytes * max_num_entities;
@@ -297,12 +296,8 @@ void StateManager::registerArchetype(uint32_t id,
             BundleInfo bundle_info = bundle_infos_[bundle_id];
 
             for (CountT j = 0; j < (CountT)bundle_info.numComponents; j++) {
-                uint32_t bundle_component_id =
-                    bundle_components_[bundle_info.componentOffset + j];
-
-                archetype_components_[archetype_component_offset_++] =
-                    bundle_component_id;
-
+                uint32_t bundle_component_id = bundle_components_[bundle_info.componentOffset + j];
+                archetype_components_[archetype_component_offset_++] = bundle_component_id;
                 flattened_flags[flag_offset++] = component_flags[i];
             }
         } else {
@@ -310,23 +305,18 @@ void StateManager::registerArchetype(uint32_t id,
             flattened_flags[flag_offset++] = component_flags[i];
         }
     }
-    uint32_t num_flattened_user_components =
-        archetype_component_offset_ - flattened_user_component_start;
+    uint32_t num_flattened_user_components = archetype_component_offset_ - flattened_user_component_start;
 
     for (int i = 0; i < (int)num_flattened_user_components; i++) {
-        uint32_t component_id = archetype_components_[
-            flattened_user_component_start + i];
-
+        uint32_t component_id = archetype_components_[flattened_user_component_start + i];
         type_ptr[i] = *components_[component_id];
-
         lookup_input_ptr[i] = IntegerMapPair {
             /* .key = */   component_id,
             /* .value = */ (uint32_t)i + user_component_offset_,
         };
     }
 
-    uint32_t num_total_components =
-        num_flattened_user_components + user_component_offset_;
+    uint32_t num_total_components = num_flattened_user_components + user_component_offset_;
 
     archetypes_[id].emplace(flattened_user_component_start,
                             archetype_flags,
