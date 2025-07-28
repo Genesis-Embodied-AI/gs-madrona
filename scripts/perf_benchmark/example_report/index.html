@@ -1,0 +1,78 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Benchmark Results</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; }
+            .plot-container { margin-bottom: 40px; }
+            .section { margin-bottom: 60px; }
+            img { max-width: 100%; border: 1px solid #ddd; }
+            h1 { color: #333; }
+            h2 { color: #333; }
+            h3 { color: #666; margin-top: 30px; }
+        </style>
+    </head>
+    <body>
+        <h1>Benchmark Results</h1>
+    <div class='section'>
+<h2>Performance Comparison Plots</h2>
+<h3>Resolution: 128x128</h3>
+<div class='plot-container'>
+
+    <style>
+        .benchmark-table {
+            margin: 20px auto;
+            border-collapse: collapse;
+            background-color: #f8f9fa;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        .benchmark-table th {
+            background-color: #495057;
+            color: white;
+            padding: 12px;
+            border: 1px solid #dee2e6;
+            text-align: center;
+            font-weight: bold;
+        }
+        .benchmark-table td:first-child {
+            background-color: #6c757d;
+            color: white;
+            font-weight: bold;
+        }
+        .benchmark-table td {
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            text-align: center;
+        }
+        .benchmark-table tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .benchmark-table tr:hover {
+            background-color: #e9ecef;
+        }
+        .benchmark-table tr:hover td:first-child {
+            background-color: #5a6268;
+        }
+    </style>
+    <table class='benchmark-table'>
+<tr><th>Renderer</th><th>1</th><th>2</th><th>4</th><th>8</th><th>16</th><th>32</th><th>64</th><th>128</th><th>256</th><th>512</th><th>768</th><th>1024</th><th>1536</th><th>2048</th><th>3072</th><th>4096</th><th>6144</th><th>8192</th></tr>
+<tr><td>madrona - rasterizer</td><td>554.1</td><td>1095.5</td><td>2224.4</td><td>4086.9</td><td>7020.5</td><td>11627.6</td><td>15647.1</td><td>17862.8</td><td>19456.8</td><td>22208.3</td><td>23533.1</td><td>24551.7</td><td>26077.3</td><td>26885.8</td><td>28884.4</td><td>29497.9</td><td>30696.3</td><td>31509.4</td></tr>
+<tr><td>madrona - raytracer</td><td>491.9</td><td>919.8</td><td>1730.9</td><td>3100.6</td><td>5565.0</td><td>8604.0</td><td>12626.7</td><td>15650.1</td><td>16656.6</td><td>18522.4</td><td>19175.6</td><td>19943.9</td><td>19366.2</td><td>20415.9</td><td>20077.0</td><td>21039.6</td><td>21619.4</td><td>21667.8</td></tr>
+<tr><td>Speedup</td><td>0.9x</td><td>0.8x</td><td>0.8x</td><td>0.8x</td><td>0.8x</td><td>0.7x</td><td>0.8x</td><td>0.9x</td><td>0.9x</td><td>0.8x</td><td>0.8x</td><td>0.8x</td><td>0.7x</td><td>0.8x</td><td>0.7x</td><td>0.7x</td><td>0.7x</td><td>0.7x</td></tr>
+</table><img src='panda_madrona rasterizer_ madrona raytracer_128x128_comparison_plot.png' alt='panda_madrona rasterizer_ madrona raytracer_128x128_comparison_plot.png'/><br/>
+</div>
+</div>
+<div class='section'>
+<h2>Performance Plots</h2>
+<div class='plot-container'>
+<h3>panda - panda_madrona_rasterizer_plot.png</h3>
+<img src='panda_madrona_rasterizer_plot.png' alt='panda_madrona_rasterizer_plot.png'/><br/>
+<h3>panda - panda_madrona_raytracer_plot.png</h3>
+<img src='panda_madrona_raytracer_plot.png' alt='panda_madrona_raytracer_plot.png'/><br/>
+</div>
+</div>
+
+    </body>
+    </html>
+    
