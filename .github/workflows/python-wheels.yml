@@ -63,3 +63,6 @@ jobs:
       with:
         packages-dir: wheelhouse
         verify-metadata: true
+        attestations: true
+        print-hash: true
+        skip-existing: true
