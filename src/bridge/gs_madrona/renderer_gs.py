@@ -117,7 +117,7 @@ class MadronaBatchRendererAdapter:
             cam_fovy=cam_fovy,
             enabled_geom_groups=default_enabled_geom_groups,
             add_cam_debug_geo=add_cam_debug_geo,
-            use_rt=not use_rasterizer,
+            use_rt=use_rasterizer,
         )
 
     def init(
