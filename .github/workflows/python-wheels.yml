@@ -7,9 +7,13 @@ on:
   push:
     branches:
       - main
+  release:
+    branches:
+      - main
+    types: [published]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -48,7 +52,7 @@ jobs:
       id-token: write
 
     needs: build-wheels
-    if: github.repository == 'Genesis-Embodied-AI/gs-madrona' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'release'
 
     steps:
     - name: Download the wheels previously generated
