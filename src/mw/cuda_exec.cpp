@@ -891,7 +891,9 @@ static __attribute__((always_inline)) inline void dispatch(
     // Need to save bytecode until nvJitLinkComplete is called,
     // unlike old driver API
     DynArray<HeapArray<char>> source_bytecodes(num_sources);
-    printf("Compiling GPU engine code:\n");
+    if (verbose_compile) {
+        printf("Compiling GPU engine code:\n");
+    }
     for (int64_t i = 0; i < num_sources; i++) {
         if (verbose_compile) {
             printf("%s\n", sources[i]);
@@ -1084,6 +1086,9 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
             MADRONA_MW_GPU_BVH_INTERNAL_CPP
         };
 
+    char *verbose_compile_env = getenv("MADRONA_MWGPU_VERBOSE_COMPILE");
+    bool verbose_compile = verbose_compile_env && verbose_compile_env[0] == '1';
+
     bool need_recompile = kernelCacheNeedsRecompile(
         cache_path,
         bvh_srcs);
@@ -1092,7 +1097,10 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
     if (!need_recompile) {
         auto bvh_cache = loadKernelCache<BVHKernelCache>(cache_path);
         REQ_CU(CudaDynamicLoader::cuModuleLoadData(&mod, bvh_cache.cubinStart));
-        printf("Loaded BVH kernel cache from %s\n", cache_path.c_str());
+        if (verbose_compile)
+        {
+            printf("Loaded BVH kernel cache from %s\n", cache_path.c_str());
+        }
     }
     else {
         const char *force_debug_env = getenv("MADRONA_MWGPU_FORCE_DEBUG");
@@ -1120,7 +1128,9 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
 
         if (force_debug_env != nullptr && force_debug_env[0] == '1') {
             linker_flags.push_back("-g");
-            printf("compiling with debug\n");
+            if (verbose_compile) {
+                printf("Compiling with debug\n");
+            }
         }
 
         nvJitLinkHandle linker;
@@ -1218,7 +1228,9 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
             std::string bvh_src((std::istreambuf_iterator<char>(bvh_file_stream)),
                 std::istreambuf_iterator<char>());
 
-            printf("Compiling %s\n", bvh_srcs[i].c_str());
+            if (verbose_compile) {
+                printf("Compiling %s\n", bvh_srcs[i].c_str());
+            }
 
             // Gives us LTOIR
             auto jit_output = cu::jitCompileCPPSrc(
@@ -2128,6 +2140,10 @@ static DynArray<int32_t> processExecConfigFile(
 {
     using namespace simdjson;
 
+    char *verbose_taskgraph_env = getenv("MADRONA_MWGPU_VERBOSE_TASKGRAPH");
+    bool verbose_taskgraph =
+        verbose_taskgraph_env && verbose_taskgraph_env[0] == '1';
+
     padded_string json_data;
     REQ_JSON(padded_string::load(file_path).get(json_data));
 
@@ -2164,8 +2180,11 @@ static DynArray<int32_t> processExecConfigFile(
         int64_t megakernel_idx = findMatchingMegakernelConfig(
             megakernel_cfgs, num_configs, node_cfg);
 
-        printf("Taskgraph node %lu: using config %d %d %d\n", node_idx,
-            node_cfg.numThreads, node_cfg.numBlocksPerSM, node_cfg.numSMs);
+        if (verbose_taskgraph)
+        {
+            printf("Taskgraph node %lu: using config %d %d %d\n", node_idx,
+                node_cfg.numThreads, node_cfg.numBlocksPerSM, node_cfg.numSMs);
+        }
 
         if ((CountT)node_idx >= node_megakernels.size()) {
             node_megakernels.resize(node_idx + 1, [&](int32_t *v) {
@@ -2354,8 +2373,8 @@ MWCudaExecutor::MWCudaExecutor(
     std::string bvh_cache_path = "/tmp/madrona_cache/bvh_cache";
     setenv("MADRONA_MWGPU_KERNEL_CACHE", kernel_cache_path.c_str(), 1);
     setenv("MADRONA_BVH_KERNEL_CACHE", bvh_cache_path.c_str(), 1);
-    printf("Kernel cache directory set to: %s\n", kernel_cache_path.c_str());
-    printf("BVH cache directory set to: %s\n", bvh_cache_path.c_str());
+    // printf("Kernel cache directory set to: %s\n", kernel_cache_path.c_str());
+    // printf("BVH cache directory set to: %s\n", bvh_cache_path.c_str());
 
     const ExecutorMode exec_mode = ExecutorMode::TaskGraph;
 
@@ -2506,29 +2525,34 @@ MWCudaExecutor::~MWCudaExecutor()
     REQ_CU(CudaDynamicLoader::cuModuleUnload(impl_->cuModule));
     REQ_CUDA(cudaStreamDestroy(impl_->cuStream));
 
-    if (impl_->enableRaycasting) { // RT times
-        float avg_total_time = 0.f;
-        u32 num_times = impl_->bvhKernels.recordedTimings.size();
-        for (u32 i = 0; i < num_times; ++i) {
-            avg_total_time += impl_->bvhKernels.recordedTimings[i].totalTime /
-                (float)num_times;
+    char *verbose_stats_env = getenv("MADRONA_MWGPU_VERBOSE_STAT");
+    bool verbose_stats = verbose_stats_env && verbose_stats_env[0] == '1';
+    if (verbose_stats)
+    {
+        if (impl_->enableRaycasting) { // RT times
+            float avg_total_time = 0.f;
+            u32 num_times = impl_->bvhKernels.recordedTimings.size();
+            for (u32 i = 0; i < num_times; ++i) {
+                avg_total_time += impl_->bvhKernels.recordedTimings[i].totalTime /
+                    (float)num_times;
+            }
+
+            printf("rt avg total time = %f ms\n", avg_total_time);
         }
 
-        printf("rt avg total time = %f ms\n", avg_total_time);
-    }
+        // Other times
+        for (u32 g = 0; g < impl_->timingGroups.size(); ++g) {
+            TimingGroup &times = impl_->timingGroups[g];
 
-    // Other times
-    for (u32 g = 0; g < impl_->timingGroups.size(); ++g) {
-        TimingGroup &times = impl_->timingGroups[g];
+            float avg_total_time = 0.f;
+            for (u32 i = 0; i < times.recordedTimings.size(); ++i) {
+                avg_total_time += times.recordedTimings[i] /
+                    (float)times.recordedTimings.size();
+            }
 
-        float avg_total_time = 0.f;
-        for (u32 i = 0; i < times.recordedTimings.size(); ++i) {
-            avg_total_time += times.recordedTimings[i] /
-                (float)times.recordedTimings.size();
+            printf("%s avg total time = %f ms\n", times.statName,
+                    avg_total_time);
         }
-
-        printf("%s avg total time = %f ms\n", times.statName,
-                avg_total_time);
     }
 }
 
