@@ -8,7 +8,7 @@ using namespace madrona::phys;
 
 namespace RenderingSystem = madrona::render::RenderingSystem;
 
-namespace madMJX {
+namespace madGS {
 
 // Register all the ECS components and archetypes that will be
 // used in the simulation

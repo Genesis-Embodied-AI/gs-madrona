@@ -28,12 +28,9 @@ target_link_libraries(madrona_mw_gpu
         madrona_hdrs madrona_cuda
     PRIVATE
         madrona_mw_core madrona_json
-        CUDA::nvrtc CUDA::cuda_driver
-        ${CUDA_NVJITLINK_LIBRARY}
+        CUDA::nvrtc_static
+        CUDA::nvJitLink  # FIXME: CUDA::nvJitLink_static
 )
-
-
-file(GLOB CUDA_DEVICE_RUNTIME "${CUDAToolkit_LIBRARY_DIR}/*cudadevrt*")
 
 set(MADRONA_MW_GPU_COMPILE_FLAGS
     -std=c++20
@@ -46,7 +43,14 @@ set(MADRONA_MW_GPU_COMPILE_FLAGS
     -DCUB_DISABLE_BF16_SUPPORT=1
 )
 
-set(DEVICE_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/device)
+if (SKBUILD)
+    set(MADRONA_SRC_DIR "./src")
+else()
+    set(MADRONA_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
+endif()
+
+set(DEVICE_SRC_DIR "${MADRONA_SRC_DIR}/mw/device")
+
 set(JOB_SYS_DEVICE_SOURCES
     ${DEVICE_SRC_DIR}/job.cpp
     ${DEVICE_SRC_DIR}/state.cpp
@@ -72,18 +76,18 @@ set(TASK_GRAPH_DEVICE_SOURCES
     ${DEVICE_SRC_DIR}/host_print.cpp
     ${DEVICE_SRC_DIR}/ecs_render_bridge.cpp
     # FIXME
-    ${CMAKE_CURRENT_SOURCE_DIR}/../common/hashmap.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../common/navmesh.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../core/base.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../physics/physics.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../physics/geo.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../physics/xpbd.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../physics/tgs.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../physics/narrowphase.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../physics/broadphase.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../render/ecs_system.cpp
+    ${MADRONA_SRC_DIR}/common/hashmap.cpp
+    ${MADRONA_SRC_DIR}/common/navmesh.cpp
+    ${MADRONA_SRC_DIR}/core/base.cpp
+    ${MADRONA_SRC_DIR}/physics/physics.cpp
+    ${MADRONA_SRC_DIR}/physics/geo.cpp
+    ${MADRONA_SRC_DIR}/physics/xpbd.cpp
+    ${MADRONA_SRC_DIR}/physics/tgs.cpp
+    ${MADRONA_SRC_DIR}/physics/narrowphase.cpp
+    ${MADRONA_SRC_DIR}/physics/broadphase.cpp
+    ${MADRONA_SRC_DIR}/render/ecs_system.cpp
 )
-    
+
 set(JOB_SYS_INTERNAL_SRC_LIST)
 foreach(f ${JOB_SYS_DEVICE_SOURCES})
     set(JOB_SYS_INTERNAL_SRC_LIST "${JOB_SYS_INTERNAL_SRC_LIST}\"${f}\", ")
@@ -105,50 +109,59 @@ set(BVH_INTERNAL_SRC_LIST "${BVH_INTERNAL_SRC_LIST}")
 get_target_property(MADRONA_HDRS_INCLUDES madrona_hdrs INTERFACE_INCLUDE_DIRECTORIES)
 
 set(CCCL_OVERRIDE_INCLUDE_DIRS "")
-if (CUDAToolkit_VERSION_MINOR LESS 5)
-    set(CCCL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../external/cccl")
+if (SKBUILD)
+    if (CUDAToolkit_VERSION_MINOR LESS 5)
+        list(APPEND CCCL_OVERRIDE_INCLUDE_DIRS
+            "./cccl/libcudacxx/include/"
+            "./cccl/cub"
+            "./cccl/thrust"
+        )
+    endif()
 
-    list(APPEND CCCL_OVERRIDE_INCLUDE_DIRS
-        "${CCCL_DIR}/libcudacxx/include/"
-        "${CCCL_DIR}/cub"
-        "${CCCL_DIR}/thrust"
+    set(NVRTC_INCLUDE_DIRS
+        ${DEVICE_SRC_DIR}/include
+        "./include"
+        ${CCCL_OVERRIDE_INCLUDE_DIRS}
+        "./cuda/include"
+    )
+else()
+    if (CUDAToolkit_VERSION_MINOR LESS 5)
+        set(CCCL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../external/cccl")
+        list(APPEND CCCL_OVERRIDE_INCLUDE_DIRS
+            "${CCCL_DIR}/libcudacxx/include/"
+            "${CCCL_DIR}/cub"
+            "${CCCL_DIR}/thrust"
+        )
+    endif()
+
+    set(NVRTC_INCLUDE_DIRS
+        ${DEVICE_SRC_DIR}/include
+        ${MADRONA_HDRS_INCLUDES}
+        ${CCCL_OVERRIDE_INCLUDE_DIRS}
+        ${CUDAToolkit_INCLUDE_DIRS}
     )
 endif()
-
-set(NVRTC_INCLUDE_DIRS
-    ${CMAKE_CURRENT_SOURCE_DIR}/device/include
-    ${MADRONA_HDRS_INCLUDES}
-    ${CCCL_OVERRIDE_INCLUDE_DIRS}
-    ${CUDAToolkit_INCLUDE_DIRS}
-)
+set(NVRTC_INCLUDE_DIRS_LIST)
+foreach(f ${NVRTC_INCLUDE_DIRS})
+    set(NVRTC_INCLUDE_DIRS_LIST "${NVRTC_INCLUDE_DIRS_LIST}\"${f}\", ")
+endforeach()
+set(NVRTC_INCLUDE_DIRS_LIST "${NVRTC_INCLUDE_DIRS_LIST}")
 
 set(NVRTC_OPTIONS)
-foreach(f ${NVRTC_INCLUDE_DIRS})
-    set(NVRTC_OPTIONS "${NVRTC_OPTIONS}\"-I${f}\", ")
-endforeach()
 foreach(f ${MADRONA_MW_GPU_COMPILE_FLAGS})
     set(NVRTC_OPTIONS "${NVRTC_OPTIONS}\"${f}\", ")
 endforeach()
 set(NVRTC_OPTIONS "${NVRTC_OPTIONS}")
 
-
-target_compile_definitions(madrona_mw_gpu PRIVATE
-    MADRONA_NVRTC_OPTIONS=${NVRTC_OPTIONS}
-    MADRONA_MW_GPU_JOB_SYS_INTERNAL_CPP=${JOB_SYS_INTERNAL_SRC_LIST}
-    MADRONA_MW_GPU_TASK_GRAPH_INTERNAL_CPP=${TASK_GRAPH_INTERNAL_SRC_LIST}
-    MADRONA_MW_GPU_BVH_INTERNAL_CPP=${BVH_INTERNAL_SRC_LIST}
-    MADRONA_CUDADEVRT_PATH=\"${CUDA_DEVICE_RUNTIME}\"
-    MADRONA_MW_GPU_DEVICE_SRC_DIR=\"${DEVICE_SRC_DIR}\"
-)
-
 target_compile_definitions(madrona_mw_gpu
     PUBLIC
         MADRONA_MWGPU_SUPPORT=1
     PRIVATE
+        MADRONA_NVRTC_INCLUDE_DIRS=${NVRTC_INCLUDE_DIRS_LIST}
         MADRONA_NVRTC_OPTIONS=${NVRTC_OPTIONS}
         MADRONA_MW_GPU_JOB_SYS_INTERNAL_CPP=${JOB_SYS_INTERNAL_SRC_LIST}
         MADRONA_MW_GPU_TASK_GRAPH_INTERNAL_CPP=${TASK_GRAPH_INTERNAL_SRC_LIST}
-        MADRONA_CUDADEVRT_PATH=\"${CUDA_DEVICE_RUNTIME}\"
+        MADRONA_MW_GPU_BVH_INTERNAL_CPP=${BVH_INTERNAL_SRC_LIST}
         MADRONA_MW_GPU_DEVICE_SRC_DIR=\"${DEVICE_SRC_DIR}\"
 )
 
@@ -163,7 +176,13 @@ function(madrona_build_compile_defns)
     set(ALL_TARGET_SOURCES ${M_SRCS})
     list(FILTER ALL_TARGET_SOURCES INCLUDE REGEX ".+\.cpp")
     list(TRANSFORM ALL_TARGET_SOURCES REPLACE "${CMAKE_CURRENT_SOURCE_DIR}" "")
-    list(TRANSFORM ALL_TARGET_SOURCES PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/")
+    if (SKBUILD)
+        file(RELATIVE_PATH CMAKE_CURRENT_SOURCE_DIR_REL
+            "${CMAKE_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
+        list(TRANSFORM ALL_TARGET_SOURCES PREPEND "${CMAKE_CURRENT_SOURCE_DIR_REL}/")
+    else()
+        list(TRANSFORM ALL_TARGET_SOURCES PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/")
+    endif()
 
     set(ALL_TARGET_INCLUDES "")
     foreach(t ${M_SRC_TARGETS})

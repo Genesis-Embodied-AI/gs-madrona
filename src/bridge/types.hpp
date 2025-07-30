@@ -6,7 +6,7 @@
 #include <madrona/physics.hpp>
 #include <madrona/render/ecs.hpp>
 
-namespace madMJX {
+namespace madGS {
 
 // Include several madrona types into the simulator namespace for convenience
 using madrona::Entity;
@@ -32,7 +32,7 @@ enum class RenderPrimObjectIDs : uint32_t {
     NumPrims,
 };
 
-enum class MJXGeomType : uint32_t {
+enum class GSGeomType : uint32_t {
     Plane       = 0,
     Heightfield = 1,
     Sphere      = 2,

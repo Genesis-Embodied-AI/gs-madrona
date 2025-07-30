@@ -57,7 +57,7 @@ nb::object tensor_to_pytorch(const Tensor &tensor)
 
     nb::dlpack::dtype type = toDLPackType(tensor.type());
 
-    return nb::cast(nb::ndarray<nb::pytorch, void> {
+    return nb::cast(nb::ndarray<nb::pytorch>(
         tensor.devicePtr(),
         (size_t)tensor.numDims(),
         (const size_t *)tensor.dims(),
@@ -67,15 +67,15 @@ nb::object tensor_to_pytorch(const Tensor &tensor)
         tensor.isOnGPU() ?
             nb::device::cuda::value :
             nb::device::cpu::value,
-        tensor.isOnGPU() ? tensor.gpuID() : 0,
-    });
+        tensor.isOnGPU() ? tensor.gpuID() : 0
+    ));
 }
 
 auto tensor_to_jax(const Tensor &tensor)
 {
     nb::dlpack::dtype type = toDLPackType(tensor.type());
 
-    return nb::ndarray<nb::jax, void> {
+    return nb::ndarray<nb::jax>(
         tensor.devicePtr(),
         (size_t)tensor.numDims(),
         (const size_t *)tensor.dims(),
@@ -85,8 +85,8 @@ auto tensor_to_jax(const Tensor &tensor)
         tensor.isOnGPU() ?
             nb::device::cuda::value :
             nb::device::cpu::value,
-        tensor.isOnGPU() ? tensor.gpuID() : 0,
-    };
+        tensor.isOnGPU() ? tensor.gpuID() : 0
+    );
 }
 
 
