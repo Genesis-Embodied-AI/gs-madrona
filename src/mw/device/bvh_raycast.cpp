@@ -644,8 +644,7 @@ static __device__ TraceResult traceRay(
                     instance_data->rotation.inv().rotateVec(
                             (ray_o - instance_data->position));
                 ray_d = instance_data->scale.inv() *
-                    instance_data->rotation.inv().rotateVec(
-                            ray_d);
+                    instance_data->rotation.inv().rotateVec(ray_d);
                 t_scale = ray_d.length();
                 t_max *= t_scale;
 
@@ -787,8 +786,7 @@ static __device__ TraceResult traceRay(
             int32_t material_idx = override_mat_id;
 
             if (override_mat_id == MaterialOverride::UseDefaultMaterial) {
-                material_idx = tri_hit.bvh->getMaterialIDX(
-                        tri_hit.leafMaterialIndex);
+                material_idx = tri_hit.bvh->getMaterialIDX(tri_hit.leafMaterialIndex);
             }
 
             Vector3 color = { 1.f, 1.f, 1.f };
@@ -818,12 +816,8 @@ static __device__ TraceResult traceRay(
                     // Clamp LOD to [0, 8]
                     lod = fminf(fmaxf(lod, 0.0f), 8.0f);
 
-                    float4 sampled_color = tex2DLod<float4>(*tex,
-                            tri_hit.uv.x, tri_hit.uv.y, lod);
-
-                    Vector3 tex_color = { sampled_color.x,
-                        sampled_color.y,
-                        sampled_color.z };
+                    float4 sampled_color = tex2DLod<float4>(*tex, tri_hit.uv.x, tri_hit.uv.y, lod);
+                    Vector3 tex_color = { sampled_color.x, sampled_color.y, sampled_color.z };
 
                     color.x = tex_color.x * mat->color.x;
                     color.y = tex_color.y * mat->color.y;
@@ -850,8 +844,7 @@ static __device__ TraceResult traceRay(
     return result;
 }
 
-static __device__ void writeRGB(uint32_t pixel_byte_offset,
-                           const Vector3 &color)
+static __device__ void writeRGB(uint32_t pixel_byte_offset, const Vector3 &color)
 {
     uint8_t *rgb_out = (uint8_t *)bvhParams.rgbOutput + pixel_byte_offset;
 
@@ -861,11 +854,9 @@ static __device__ void writeRGB(uint32_t pixel_byte_offset,
     *(rgb_out + 3) = 255;
 }
 
-static __device__ void writeDepth(uint32_t pixel_byte_offset,
-                             float depth)
+static __device__ void writeDepth(uint32_t pixel_byte_offset, float depth)
 {
-    float *depth_out = (float *)
-        ((uint8_t *)bvhParams.depthOutput + pixel_byte_offset);
+    float *depth_out = (float *)((uint8_t *)bvhParams.depthOutput + pixel_byte_offset);
     *depth_out = depth;
 }
 
@@ -1031,13 +1022,9 @@ extern "C" __global__ void bvhRaycastEntry()
             &bvhParams.views[current_view_offset];
 
         uint32_t world_idx = (uint32_t)view_data->worldIDX;
-
         Vector3 ray_start = view_data->position;
         Vector3 ray_dir = calculateOutRay(view_data, pixel_x, pixel_y);
-
         uint32_t internal_nodes_offset = bvhParams.instanceOffsets[world_idx];
-
-
 
         // This does both the tracing / lighting, etc... just like a fragment
         // shader does in GLSL.

@@ -24,13 +24,10 @@ void RenderManager::configureLighting(Span<const LightDesc> lights)
 }
 
 RenderManager::RenderManager(
-        APIBackend *render_backend,
-        GPUDevice *render_dev,
-        const Config &cfg)
-    : rctx_(new RenderContext(render_backend, render_dev, cfg))
-{
-}
-
+    APIBackend *render_backend,
+    GPUDevice *render_dev,
+    const Config &cfg
+): rctx_(new RenderContext(render_backend, render_dev, cfg)) { }
 RenderManager::RenderManager(RenderManager &&) = default;
 RenderManager::~RenderManager() = default;
 
