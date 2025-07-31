@@ -55,6 +55,8 @@ struct MJXModel {
     uint32_t numLights;
     uint32_t numEnabledGeomGroups;
     float *camFovy;
+    float *camZNear;
+    float *camZFar;
 };
 
 // The Manager class encapsulates the linkage between the outside training

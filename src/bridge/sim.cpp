@@ -169,7 +169,7 @@ Sim::Sim(Engine &ctx,
         ctx.get<Position>(cam) = Vector3::zero();
         ctx.get<Rotation>(cam) = Quat { 1, 0, 0, 0 };
         render::RenderingSystem::attachEntityToView(
-            ctx, cam, cfg.camFovy[cam_idx], 0.001f, 100.f, Vector3::zero());
+            ctx, cam, cfg.camFovy[cam_idx], cfg.camZNear[cam_idx], cfg.camZFar[cam_idx], Vector3::zero());
     }
     
     for (CountT light_idx = 0; light_idx < (CountT)cfg.numLights; light_idx++) {

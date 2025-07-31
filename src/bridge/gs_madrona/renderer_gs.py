@@ -18,6 +18,8 @@ class MadronaBatchRendererAdapter:
         num_cameras,
         num_lights,
         cam_fovs_tensor,
+        cam_znears_tensor,
+        cam_zfars_tensor,
         batch_render_view_width=128,
         batch_render_view_height=128,
         add_cam_debug_geo=False,
@@ -69,6 +71,8 @@ class MadronaBatchRendererAdapter:
 
         # TODO: Support mutable camera fov
         cam_fovy = cam_fovs_tensor.cpu().numpy()
+        cam_znear = cam_znears_tensor.cpu().numpy()
+        cam_zfar = cam_zfars_tensor.cpu().numpy()
 
         self.madrona = MadronaBatchRenderer(
             gpu_id=gpu_id,
@@ -98,6 +102,8 @@ class MadronaBatchRendererAdapter:
             batch_render_view_width=batch_render_view_width,
             batch_render_view_height=batch_render_view_height,
             cam_fovy=cam_fovy,
+            cam_znear=cam_znear,
+            cam_zfar=cam_zfar,
             enabled_geom_groups=default_enabled_geom_groups,
             add_cam_debug_geo=add_cam_debug_geo,
             use_rt=not use_rasterizer,

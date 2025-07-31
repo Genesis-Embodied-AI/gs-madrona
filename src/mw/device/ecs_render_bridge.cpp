@@ -10,7 +10,6 @@ extern "C" __global__ void initBVHParams(madrona::BVHParams *params,
                                          void *timings,
                                          void *materials,
                                          void *textures,
-                                         float near_sphere,
                                          uint32_t num_sms,
                                          uint32_t sm_shared_memory)
 {
@@ -90,8 +89,6 @@ extern "C" __global__ void initBVHParams(madrona::BVHParams *params,
     params->materials = (Material *)materials;
 
     params->textures = (cudaTextureObject_t *)textures;
-
-    params->nearSphere = near_sphere;
 
     params->raycastRGBD = raycast_rgbd;
 

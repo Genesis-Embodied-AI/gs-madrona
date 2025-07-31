@@ -90,10 +90,6 @@ struct CudaBatchRenderConfig {
     // renderWidth x renderHeight.
     uint32_t renderWidth = 0;
     uint32_t renderHeight = 0;
-
-    // Configure near and far planes of the rendering.
-    float nearPlane = 0.f;
-    float farPlane = 0.f;
 };
 
 class MWCudaExecutor;

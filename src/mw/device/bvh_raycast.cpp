@@ -1032,8 +1032,8 @@ extern "C" __global__ void bvhRaycastEntry()
             TraceInfo {
                 .rayOrigin = ray_start,
                 .rayDirection = ray_dir,
-                .tMin = bvhParams.nearSphere,
-                .tMax = 10000.f,
+                .tMin = view_data->zNear,
+                .tMax = view_data->zFar,
                 .dOnly = false
             },
             TraceWorldInfo {

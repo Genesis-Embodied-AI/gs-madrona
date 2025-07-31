@@ -58,8 +58,7 @@ float calculateLinearDepth(float depth_in)
     PerspectiveCameraData cam_data = unpackViewData(viewDataBuffer[0]);
     float z_near = cam_data.zNear;
     float z_far = cam_data.zFar;
-    float linear_depth = z_far * z_near / (z_near - depth_in * (z_near - z_far));
-
+    float linear_depth = (z_near * z_far) / (z_far + depth_in * (z_near - z_far));
     return linear_depth;
 }
 
