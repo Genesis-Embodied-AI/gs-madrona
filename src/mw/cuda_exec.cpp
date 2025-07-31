@@ -279,8 +279,18 @@ static void setCudaHeapSize()
             heap_size = strtoul(user_heap_size,nullptr,10);
         }
 
-        REQ_CUDA(cudaDeviceSetLimit(cudaLimitMallocHeapSize,
-                                    heap_size));
+        cudaError_t result = cudaDeviceSetLimit(cudaLimitMallocHeapSize, heap_size);
+        // FIXME: Ingore 'cudaErrorInvalidValue' errors, because it would occur systematically if performed after
+        // launching any kernel that uses 'malloc' or 'free' system calls on this device. Anyway, it is not a big
+        // deal and should not be considered as a failure. For reference, see:
+        // https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__DEVICE.html
+        if (result == cudaErrorInvalidValue) {
+            cudaGetLastError();
+        }
+        else
+        {
+            REQ_CUDA(result);
+        }
     }
 }
 
@@ -2382,7 +2392,6 @@ CUcontext MWCudaExecutor::initCUDA(int gpu_id)
     CudaDynamicLoader::ensureLoaded();
 
     REQ_CUDA(cudaSetDevice(gpu_id));
-    REQ_CUDA(cudaFree(nullptr));
     CUdevice cu_dev;
     REQ_CU(CudaDynamicLoader::cuDeviceGet(&cu_dev, gpu_id));
     CUcontext cu_ctx;
