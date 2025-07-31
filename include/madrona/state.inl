@@ -57,25 +57,14 @@ ComponentID StateManager::registerComponent(uint32_t num_bytes)
 
     if (check_id < component_infos_.size() &&
         component_infos_[check_id].has_value()) {
-        return ComponentID {
-            check_id,
-        };
+        return ComponentID { check_id, };
     }
 #endif
-
     TypeTracker::registerType<ComponentT>(&next_component_id_);
-
     uint32_t id = TypeTracker::typeID<ComponentT>();
-
-    uint32_t component_size = (num_bytes == 0) ?
-        sizeof(ComponentT) : num_bytes;
-
-    registerComponent(id, std::alignment_of_v<ComponentT>,
-                      component_size);
-
-    return ComponentID {
-        id,
-    };
+    uint32_t component_size = (num_bytes == 0) ? sizeof(ComponentT) : num_bytes;
+    registerComponent(id, std::alignment_of_v<ComponentT>, component_size);
+    return ComponentID {id,};
 }
 
 template <typename ArchetypeT, typename... MetadataComponentTs>
@@ -155,9 +144,7 @@ ArchetypeID StateManager::registerArchetype(
                       archetype_components.data(),
                       archetype_component_flags.data());
 
-    return ArchetypeID {
-        id,
-    };
+    return ArchetypeID {id,};
 }
 
 template <typename SingletonT>

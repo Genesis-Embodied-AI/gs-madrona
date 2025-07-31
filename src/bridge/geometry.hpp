@@ -9,7 +9,7 @@
 using namespace madrona;
 using namespace madrona::imp;
 
-namespace madMJX
+namespace madGS
 {
 
 SourceMesh CreatePlane(ImportedAssets &assets, float size = 1.0)
@@ -516,4 +516,4 @@ SourceMesh CreateCapsule(
     return mesh;
 }
 
-} // namespace madMJX
+} // namespace madGS

@@ -92,6 +92,7 @@ struct TraceResult {
     bool hit;
     Vector3 color;
     Vector3 normal;
+    int segmentation;
     float metalness;
     float roughness;
     float depth;
@@ -572,7 +573,8 @@ static __device__ TraceResult traceRay(
     float t_max = trace_info.tMax;
 
     TraceResult result = {
-        .hit = false
+        .hit = false,
+        .segmentation = -1,
     };
 
     NodeGroup stack[64];
@@ -838,6 +840,7 @@ static __device__ TraceResult traceRay(
 
             result.color = color;
             result.normal = instance->rotation.rotateVec(tri_hit.normal);
+            result.segmentation = instance->objectID;
         }
         
         result.depth = tri_hit.tHit;
@@ -866,6 +869,22 @@ static __device__ void writeDepth(uint32_t pixel_byte_offset,
     *depth_out = depth;
 }
 
+static __device__ void writeNormal(uint32_t pixel_byte_offset, const Vector3 &normal)
+{
+    uint8_t *normal_out = (uint8_t *)bvhParams.normalOutput + pixel_byte_offset;
+
+    *(normal_out + 0) = (normal.x) * 255;
+    *(normal_out + 1) = (normal.y) * 255;
+    *(normal_out + 2) = (normal.z) * 255;
+    *(normal_out + 3) = 255;
+}
+
+static __device__ void writeSegmentation(uint32_t pixel_byte_offset, int32_t segmentation)
+{
+    int32_t *segmentation_out = (int32_t *)((uint8_t *)bvhParams.segmentationOutput + pixel_byte_offset);
+    *segmentation_out = segmentation;
+}
+
 static __device__ float linearToSRGB(float color) {
     if (color <= 0.00031308f) {
         return 12.92f * color;
@@ -886,6 +905,7 @@ struct FragmentResult {
     bool hit;
     Vector3 color;
     Vector3 normal;
+    int segmentation;
     float depth;
 };
 
@@ -972,6 +992,7 @@ static __device__ FragmentResult computeFragment(
             .hit = true,
             .color = finalColor,
             .normal = first_hit.normal,
+            .segmentation = first_hit.segmentation,
             .depth = first_hit.depth
         };
     }
@@ -1037,23 +1058,21 @@ extern "C" __global__ void bvhRaycastEntry()
             }
         );
 
-
-
-
-        uint32_t linear_pixel_idx = 4 * 
-            (pixel_x + pixel_y * bvhParams.renderOutputWidth);
-
-        uint32_t global_pixel_byte_off = current_view_offset * bytes_per_view +
-            linear_pixel_idx;
+        uint32_t linear_pixel_idx = 4 * (pixel_x + pixel_y * bvhParams.renderOutputWidth);
+        uint32_t global_pixel_byte_off = current_view_offset * bytes_per_view + linear_pixel_idx;
 
         if (bvhParams.raycastRGBD) {
             // Write both depth and color information
             if (result.hit) {
                 writeRGB(global_pixel_byte_off, result.color);
                 writeDepth(global_pixel_byte_off, result.depth);
+                writeNormal(global_pixel_byte_off, (result.normal + 1.0) * 0.5);
+                writeSegmentation(global_pixel_byte_off, result.segmentation);
             } else {
                 writeRGB(global_pixel_byte_off, { 0.f, 0.f, 0.f });
                 writeDepth(global_pixel_byte_off, INFINITY);
+                writeNormal(global_pixel_byte_off, { 0.f, 0.f, 0.f });
+                writeSegmentation(global_pixel_byte_off, -1);
             }
         } else {
             // Only write depth information

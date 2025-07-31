@@ -54,14 +54,28 @@ void RenderManager::batchRender(const RenderOptions &render_options)
         info, rctx_->loaded_assets_, &rctx_->engine_interop_, *rctx_);
 }
 
-const uint8_t * RenderManager::batchRendererRGBOut() const
+const uint8_t *RenderManager::batchRendererRGBOut() const
 {
-    return rctx_->batchRenderer->getRGBCUDAPtr();
+    return (const uint8_t *)rctx_->batchRenderer->getComponentCUDAPtr(
+        0, ComponentNames::RGB);
 }
 
-const float * RenderManager::batchRendererDepthOut() const
+const float *RenderManager::batchRendererDepthOut() const
 {
-    return rctx_->batchRenderer->getDepthCUDAPtr();
+    return (const float *)rctx_->batchRenderer->getComponentCUDAPtr(
+        0, ComponentNames::Depth);
+}
+
+const uint8_t *RenderManager::batchRendererNormalOut() const
+{
+    return (const uint8_t *)rctx_->batchRenderer->getComponentCUDAPtr(
+        0, ComponentNames::Normal);
+}
+
+const int32_t *RenderManager::batchRendererSegmentationOut() const
+{
+    return (const int32_t *)rctx_->batchRenderer->getComponentCUDAPtr(
+        0, ComponentNames::Segmentation);
 }
 
 }

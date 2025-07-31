@@ -6,7 +6,7 @@
 
 #include "types.hpp"
 
-namespace madMJX {
+namespace madGS {
 
 class Engine;
 
@@ -20,8 +20,10 @@ enum class ExportID : uint32_t {
     InstanceScales,
     InstanceMatOverrides,
     InstanceColorOverrides,
-    RaycastDepth,
     RaycastRGB,
+    RaycastDepth,
+    RaycastNormal,
+    RaycastSegmentation,
     LightPositions,
     LightDirections,
     LightTypes,

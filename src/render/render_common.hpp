@@ -27,14 +27,37 @@ inline constexpr uint32_t initMaxMatIndices = 100000;
 inline constexpr uint32_t shadowMapSize = 2048;
 inline constexpr uint32_t maxLights = 10;
 inline constexpr uint32_t maxTextures = 128;
+inline constexpr uint32_t maxComponents = 4;
 inline constexpr VkFormat gbufferFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 inline constexpr VkFormat skyFormatHighp = VK_FORMAT_R32G32B32A32_SFLOAT;
 inline constexpr VkFormat skyFormatHalfp = VK_FORMAT_R16G16B16A16_SFLOAT;
 inline constexpr VkFormat varianceFormat = VK_FORMAT_R32G32_SFLOAT;
 inline constexpr VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
-inline constexpr VkFormat colorOnlyFormat = VK_FORMAT_R8G8B8A8_UNORM;
-inline constexpr VkFormat depthOnlyFormat = VK_FORMAT_R32_SFLOAT;
-inline constexpr VkFormat outputColorFormat = VK_FORMAT_R8G8B8A8_UNORM;
+
+inline constexpr uint32_t componentBytes[maxComponents] = {
+    4,  // VK_FORMAT_R8G8B8A8_UNORM (4 bytes per pixel)
+    4,  // VK_FORMAT_R32_SFLOAT (depth: 4 bytes per float)
+    4,  // VK_FORMAT_R8G8B8A8_UNORM (normals)
+    4   // VK_FORMAT_R32_SINT (segmentation: 4 bytes per int32)
+};
+inline constexpr VkFormat componentFormats[maxComponents] = {
+    VK_FORMAT_R8G8B8A8_UNORM,   // RGB
+    VK_FORMAT_D32_SFLOAT,       // depth
+    VK_FORMAT_R8G8B8A8_UNORM,   // normals
+    VK_FORMAT_R32_SINT          // segmentation
+};
+inline constexpr bool isDepth[maxComponents] = {
+    false,   // RGB
+    true,    // depth
+    false,   // normals
+    false    // segmentation
+};
+inline constexpr bool isTexture[maxComponents] = {
+    false,   // RGB
+    true,    // depth
+    true,    // normals
+    false    // segmentation
+};
 
 }
 

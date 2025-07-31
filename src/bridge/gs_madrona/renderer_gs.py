@@ -1,10 +1,18 @@
+import os
+import ctypes
+from pathlib import Path
+
 import numpy as np
 import torch
-
-from gs_madrona._gs_madrona_batch_renderer import MadronaBatchRenderer
 from trimesh.visual.texture import TextureVisuals
 from trimesh.visual.color import ColorVisuals
 from PIL import Image
+
+from gs_madrona._gs_madrona_batch_renderer import MadronaBatchRenderer
+
+
+os.environ['MADRONA_ROOT_PATH'] = str(Path(__file__).parent.absolute())
+os.environ['MADRONA_ROOT_CACHE_DIR'] = str(Path.home() / ".cache" / "madrona")
 
 
 class MadronaBatchRendererAdapter:
@@ -69,6 +77,15 @@ class MadronaBatchRendererAdapter:
 
         # TODO: Support mutable camera fov
         cam_fovy = cam_fovs_tensor.cpu().numpy()
+
+        # Preload Nvidia compiler runtime if available (i.e. torch is not built from source)
+        try:
+            import nvidia.cuda_nvrtc
+            nvrtc_dir = Path(nvidia.cuda_nvrtc.__file__).parent.absolute()
+            libnvrtc_path, *_ = filter(Path.is_file, (nvrtc_dir / "lib").glob("libnvrtc.so.1*"))
+            ctypes.CDLL(libnvrtc_path, ctypes.RTLD_LOCAL)
+        except ImportError:
+            pass
 
         self.madrona = MadronaBatchRenderer(
             gpu_id=gpu_id,
@@ -172,7 +189,9 @@ class MadronaBatchRendererAdapter:
         )
         rgb_torch = self.madrona.rgb_tensor().to_torch()
         depth_torch = self.madrona.depth_tensor().to_torch()
-        return rgb_torch, depth_torch
+        normal_torch = self.madrona.normal_tensor().to_torch()
+        segmentation_torch = self.madrona.segmentation_tensor().to_torch()
+        return rgb_torch, depth_torch, normal_torch, segmentation_torch
 
     def get_material_data(self, rigid):
         n_vgeom = rigid.n_vgeoms

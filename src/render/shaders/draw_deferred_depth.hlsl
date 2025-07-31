@@ -7,7 +7,7 @@ DeferredLightingPushConstBR pushConst;
 
 // This is an array of all the textures
 [[vk::binding(0, 0)]]
-RWTexture2DArray<float> vizBuffer[];
+RWTexture2DArray<float> rgbInBuffer[];
 
 [[vk::binding(1, 0)]]
 RWStructuredBuffer<uint32_t> rgbOutputBuffer;
@@ -67,7 +67,7 @@ uint zeroDummy()
                       min(0.0, abs(scatteringLUT.SampleLevel(
                           linearSampler, float3(0.0, 0.0f, 0.0f), 0).x)) +
                       min(0.0, abs(skyBuffer[0].solarIrradiance.x)) +
-                      min(0.0, abs(float(vizBuffer[0][uint3(0,0,0)].x))) + 
+                      min(0.0, abs(float(rgbInBuffer[0][uint3(0,0,0)].x))) + 
                       min(0.0, abs(viewDataBuffer[0].data[0].x)) +
                       min(0.0, abs(engineInstanceBuffer[0].data[0].x)) +
                       min(0.0, abs(float(indexBuffer[0]))) +
@@ -144,7 +144,7 @@ void lighting(uint3 idx : SV_DispatchThreadID)
     float2 sample_uv = float2(sample_uv_u32) / total_res;
     sample_uv.y = 1.0 - sample_uv.y;
 
-    float depth = vizBuffer[target_idx][vbuffer_pixel + 
+    float depth = rgbInBuffer[target_idx][vbuffer_pixel + 
                      uint3(x_pixel_offset, y_pixel_offset, 0)];
 
     float3 out_color = float3(depth, depth, depth);

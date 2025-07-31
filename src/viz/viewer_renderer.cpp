@@ -136,8 +136,10 @@ static ImGuiRenderState imguiInit(GLFWwindow *window, const Device &dev,
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
-    auto font_path = std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "font.ttf";
+
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path font_path = std::filesystem::weakly_canonical(root_dir / "font.ttf");
 
     float scale_factor;
     {
@@ -243,9 +245,9 @@ static ImGuiRenderState imguiInit(GLFWwindow *window, const Device &dev,
 
 static PipelineShaders makeVoxelGenShader(const Device& dev)
 {
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     ShaderCompiler compiler;
     SPIRVShader spirv = compiler.compileHLSLFileToSPV(
@@ -329,9 +331,9 @@ static PipelineShaders makeVoxelDrawShaders(
     (void)repeat_sampler;
     (void)clamp_sampler;
 
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     auto shader_path = (shader_dir / "voxel_draw.hlsl").string();
 
@@ -374,9 +376,9 @@ static PipelineShaders makeShadowDrawShaders(
     (void)repeat_sampler;
     (void)clamp_sampler;
 
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     auto shader_path = (shader_dir / "viewer_shadow_draw.hlsl").string();
 
@@ -410,9 +412,10 @@ static PipelineShaders makeShadowDrawShaders(
 static PipelineShaders makeShadowGenShader(const Device &dev, VkSampler clamp_sampler)
 {
     (void)clamp_sampler;
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     ShaderCompiler compiler;
     SPIRVShader spirv = compiler.compileHLSLFileToSPV(
@@ -428,9 +431,9 @@ static PipelineShaders makeShadowGenShader(const Device &dev, VkSampler clamp_sa
 
 static PipelineShaders makeDeferredLightingShader(const Device &dev, VkSampler clamp_sampler)
 {
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     ShaderCompiler compiler;
     SPIRVShader spirv = compiler.compileHLSLFileToSPV(
@@ -447,9 +450,9 @@ static PipelineShaders makeDeferredLightingShader(const Device &dev, VkSampler c
 
 static vk::PipelineShaders makeGridDrawShader(const vk::Device &dev)
 {
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     ShaderCompiler compiler;
     SPIRVShader spirv = compiler.compileHLSLFileToSPV(
@@ -465,9 +468,10 @@ static vk::PipelineShaders makeGridDrawShader(const vk::Device &dev)
 static PipelineShaders makeBlurShader(const Device &dev, VkSampler clamp_sampler)
 {
     (void)clamp_sampler;
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     ShaderCompiler compiler;
     SPIRVShader spirv = compiler.compileHLSLFileToSPV(
@@ -994,9 +998,9 @@ static Pipeline<1> makeGridDrawPipeline(const Device &dev,
 
 static PipelineShaders makeQuadShader(const Device &dev, VkSampler clamp_sampler)
 {
-    std::filesystem::path shader_dir =
-        std::filesystem::path(STRINGIFY(MADRONA_RENDER_DATA_DIR)) /
-        "shaders";
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
+    std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
     ShaderCompiler compiler;
     SPIRVShader vert_spirv = compiler.compileHLSLFileToSPV(
@@ -1309,14 +1313,10 @@ static std::pair<Framebuffer, Framebuffer> makeFramebuffers(
     VkRenderPass render_pass,
     VkRenderPass imgui_render_pass)
 {
-    auto albedo = alloc.makeColorAttachment(
-        fb_width, fb_height, 1, VK_FORMAT_R8G8B8A8_UNORM);
-    auto normal = alloc.makeColorAttachment(
-        fb_width, fb_height, 1, VK_FORMAT_R16G16B16A16_SFLOAT);
-    auto position = alloc.makeColorAttachment(
-        fb_width, fb_height, 1, VK_FORMAT_R16G16B16A16_SFLOAT);
-    auto depth = alloc.makeDepthAttachment(
-        fb_width, fb_height, 1, InternalConfig::depthFormat);
+    auto albedo = alloc.makeAttachment(fb_width, fb_height, 1, VK_FORMAT_R8G8B8A8_UNORM, false);
+    auto normal = alloc.makeAttachment(fb_width, fb_height, 1, VK_FORMAT_R16G16B16A16_SFLOAT, false);
+    auto position = alloc.makeAttachment(fb_width, fb_height, 1, VK_FORMAT_R16G16B16A16_SFLOAT, false);
+    auto depth = alloc.makeAttachment(fb_width, fb_height, 1, InternalConfig::depthFormat, true);
 
     VkImageViewCreateInfo view_info {};
     view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1424,12 +1424,9 @@ static ShadowFramebuffer makeShadowFramebuffer(const Device &dev,
                                    uint32_t fb_height,
                                    VkRenderPass render_pass)
 {
-    auto color = alloc.makeColorAttachment(fb_width, fb_height, 1,
-        InternalConfig::varianceFormat);
-    auto intermediate = alloc.makeColorAttachment(fb_width, fb_height, 1,
-        InternalConfig::varianceFormat);
-    auto depth = alloc.makeDepthAttachment(
-        fb_width, fb_height, 1, InternalConfig::depthFormat);
+    auto color = alloc.makeAttachment(fb_width, fb_height, 1, InternalConfig::varianceFormat, false);
+    auto intermediate = alloc.makeAttachment(fb_width, fb_height, 1, InternalConfig::varianceFormat, false);
+    auto depth = alloc.makeAttachment(fb_width, fb_height, 1, InternalConfig::depthFormat, true);
 
     VkImageViewCreateInfo view_info {};
     view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -2593,8 +2590,8 @@ static ViewerRendererState initState(RenderContext &rctx,
                   grid_draw.descPool.makeSet(),
                   rctx.sky_,
                   rctx.batchRenderer->getImportedBuffers(0),
-                  rctx.batchRenderer->getRGBBuffer(),
-                  rctx.batchRenderer->getDepthBuffer());
+                  rctx.batchRenderer->getComponentBuffer(0, ComponentNames::RGB),
+                  rctx.batchRenderer->getComponentBuffer(0, ComponentNames::Depth));
     }
 
     HostBuffer screenshot_buffer = rctx.alloc.makeStagingBuffer(

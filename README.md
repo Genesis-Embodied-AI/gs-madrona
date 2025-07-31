@@ -51,8 +51,7 @@ While gs-madrona currently relies on Genesis-specific dependencies, we plan to d
 - Output rendering results to video files
 
 ## Supported Platforms and Environments
-**gs-madrona** should be compatible with any linux distribution and Python>=3.10. However, it has been tested only with Ubuntu 22.04 and Ubuntu 24.04 with python 3.10 and 3.12. The rendering pipeline also high depends on CUDA, so an NVIDIA graphics card with CUDA 12+ support is required for running it.
-There is no plan to extend supported platforms at the moment.
+**gs-madrona** should be compatible with any Linux distribution and Python>=3.10. However, it has been tested only with Ubuntu 22.04 and Ubuntu 24.04 for Python 3.10 and 3.12. The rendering pipeline also depends on CUDA, so an NVIDIA graphics card with CUDA 12.4+ support is required for running it. There is no plan to support Windows OS and Mac OS at the moment.
 
 ## Performance
 FPS comparison of rendering [Franka](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/genesis/assets/xml/franka_emika_panda/panda.xml) with gs-madrona rasterizer and raytracer
@@ -67,61 +66,36 @@ Resolution: 128x128
   <img src="./scripts/perf_benchmark/example_report/panda_madrona rasterizer_ madrona raytracer_128x128_comparison_plot.png" width="600" alt="FPS of gs-madrona rasterizer vs raytracer" align="center"/>
 </p>
 
-## Install
+## Install (Linux Only)
 
-### Setup Python
-1. Create a python virtual env 
-```
-python -m venv ~/.virtualenvs/madgs
-```
+### Pre-requisite
+Please first install the latest version of Genesis to date following the [official README instructions](https://github.com/Genesis-Embodied-AI/Genesis#quick-installation).
 
-2. Activate this environment
-```
-source ~/.virtualenvs/madgs/bin/activate
+### Easy install (x86 only)
+Pre-compiled binary wheels for Python>=3.10 are available on PyPI. They can be installed using any Python package manager (e.g. `uv` or `pip`):
+```sh
+pip install gs-madrona
 ```
 
-### Clone Madrona and Genesis
-```
-mkdir gs_render
-cd gs_render
+### Build from source
+```sh
 git clone --recurse-submodules https://github.com/Genesis-Embodied-AI/gs-madrona.git
+cd gs-madrona
+pip install .
+```
+
+### Testing (Optional)
+1. Clone Genesis Simulator repository if not already done
+```sh
 git clone https://github.com/Genesis-Embodied-AI/Genesis.git
 ```
 
-### Install Madrona
-1. Install the following libraries: `sudo apt install libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev mesa-common-dev`
-
-2. Install
+2. Run the following example script provided with Genesis
 ```sh
-cd gs-madrona
-mkdir build
-cd build
-cmake ..
-make -j
-cd ..
-pip install -e .
-cd ..
+python Genesis/examples/rigid/single_franka_batch_render.py
 ```
 
-### Install Genesis
-1. Install **PyTorch** first following the [official instructions](https://pytorch.org/get-started/locally/).
-
-2. Install **CUDA Toolkit** by following the [official instructions](https://developer.nvidia.com/cuda-downloads?target_os=Linux&target_arch=x86_64&Distribution=Ubuntu&target_version=22.04&target_type=deb_network). 
-This page provides the instructions to install the latest CUDA Toolkit, but please make sure to make changes to the install instructions to install the same version that is being used by the currently installed pytorch, otherwise you may encounter NVRTC JIT compiling issue.
-
-3. Install Genesis locally
-```
-cd Genesis
-pip install -e ".[dev]"
-```
-
-### Render
-1. In `gs_render/Genesis`, run
-```
-python examples/rigid/single_franka_batch_render.py
-```
-
-Images will be generated in `image_output`
+All the generated images will be stored in the current directory under `./image_output`.
 
 2. To use ray tracer, change the `use_rasterizer=False` in `single_franka_batch_render.py`
 ```

@@ -1,5 +1,6 @@
-cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
-cmake_policy(VERSION 3.18)
+cmake_minimum_required(VERSION 3.26 FATAL_ERROR)
+cmake_policy(VERSION 3.26)
+
 include(cmake/madrona_init.cmake)
 
 project(madrona LANGUAGES C CXX)

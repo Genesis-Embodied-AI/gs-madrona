@@ -65,6 +65,7 @@ struct V2F {
     [[vk::location(5)]] float3 worldNormal : TEXCOORD4;
     [[vk::location(6)]] uint worldIdx : TEXCOORD5;
     [[vk::location(7)]] uint viewIdx : TEXCOORD6;
+    [[vk::location(8)]] uint objectIdx : TEXCOORD7;
 };
 
 
@@ -117,6 +118,7 @@ void vert(in uint vid : SV_VertexID,
     v2f.worldNormal = rotateVec(instance_data.rotation, vert.normal);
     v2f.worldIdx = instance_data.worldID;
     v2f.viewIdx = draw_data.viewID;
+    v2f.objectIdx = instance_data.objectID;
 
     if (instance_data.matID == -2) {
         v2f.materialIdx = -2;
@@ -251,19 +253,18 @@ float shadowFactorVSM(float3 world_pos, uint view_idx)
 
 struct PixelOutput {
     float4 rgbOut : SV_Target0;
+    float4 normalOut : SV_Target1;
+    int segmentationOut : SV_Target2;
 };
 
 [shader("pixel")]
-PixelOutput frag(in V2F v2f,
-                 in uint prim_id : SV_PrimitiveID)
+PixelOutput frag(in V2F v2f, in uint prim_id : SV_PrimitiveID)
 {
     PixelOutput output;
-
     RenderOptions renderOptions = renderOptionsBuffer[0];
-
     float3 normal = normalize(v2f.worldNormal);
 
-    if (!renderOptions.outputRGB) {
+    if (!renderOptions.outputs[0]) {
         output.rgbOut = float4(0.0, 0.0, 0.0, 1.0);
     }
     else {
@@ -307,6 +308,14 @@ PixelOutput frag(in V2F v2f,
             color.rgb = (totalLighting + ambient) * color.rgb;
             output.rgbOut = color;
         }
+    }
+
+    if (renderOptions.outputs[2]) {
+        output.normalOut = float4(0.5 * (normal + 1.0), 1.0);
+    }
+
+    if (renderOptions.outputs[3]) {
+        output.segmentationOut = v2f.objectIdx;
     }
 
     return output;

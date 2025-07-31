@@ -34,6 +34,7 @@ endif ()
 install(TARGETS madrona_noexceptrtti EXPORT madronaExternal)
 install(EXPORT madronaExternal DESTINATION ${CMAKE_INSTALL_PREFIX})
 
+set(MADRONA_TOOLCHAIN_ROOT_OVERRIDE "${CMAKE_CURRENT_BINARY_DIR}/madrona-toolchain")
 add_subdirectory(madrona-deps)
 
 add_library(madrona_sys_defns INTERFACE)

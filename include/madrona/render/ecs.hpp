@@ -125,10 +125,7 @@ struct LightArchetype : public Archetype<
 > {};
 
 struct RenderOptions {
-    bool outputRGB;
-    bool outputDepth;
-    bool outputNormal;
-    bool outputSegmentation;
+    bool outputs[4];
     bool enableAntialiasing;
 };
 
@@ -153,6 +150,8 @@ struct RenderOutputBuffer {
 
 struct RGBOutputBuffer : RenderOutputBuffer {};
 struct DepthOutputBuffer : RenderOutputBuffer {};
+struct NormalOutputBuffer : RenderOutputBuffer {};
+struct SegmentationOutputBuffer : RenderOutputBuffer {};
 
 // Reference to an output
 struct RenderOutputRef {
@@ -189,7 +188,9 @@ struct RenderCameraArchetype : public Archetype<
 // This is an unsorted archetype with a runtime-sized component
 struct RaycastOutputArchetype : public Archetype<
     RGBOutputBuffer,
-    DepthOutputBuffer
+    DepthOutputBuffer,
+    NormalOutputBuffer,
+    SegmentationOutputBuffer
 > {};
 
 struct RenderECSBridge;

@@ -8,7 +8,7 @@ using namespace madrona;
 
 namespace nb = nanobind;
 
-namespace madMJX {
+namespace madGS {
 
 // This file creates the python bindings used by the learning code.
 // Refer to the nanobind documentation for more details on these functions.
@@ -76,7 +76,7 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
             bool use_rt,
             VisualizerGPUHandles *viz_gpu_hdls)
         {
-            MJXModelGeometry mesh_geo {
+            GSModelGeometry mesh_geo {
                 .vertices = (math::Vector3 *)mesh_vertices.data(),
                 .indices = (uint32_t *)mesh_faces.data(),
                 .vertexOffsets = (uint32_t *)mesh_vertex_offsets.data(),
@@ -101,7 +101,7 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
             memcpy(ptr_geom_mat_ids, geom_mat_ids.data(), sizeof(int32_t) * geom_mat_ids.shape(0));
             memcpy(ptr_geom_data_ids, geom_data_ids.data(), sizeof(int32_t) * geom_data_ids.shape(0));
 
-            MJXModel mjx_model {
+            GSModel gs_model {
                 .meshGeo = mesh_geo,
                 .geomTypes = (int32_t *)geom_types.data(),
                 .geomGroups = (int32_t *)geom_groups.data(),
@@ -133,7 +133,7 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                 .batchRenderViewHeight = (uint32_t)batch_render_view_height,
                 .addCamDebugGeometry = add_cam_debug_geo,
                 .useRT = use_rt,
-            }, mjx_model, viz_gpu_hdls != nullptr ? *viz_gpu_hdls :
+            }, gs_model, viz_gpu_hdls != nullptr ? *viz_gpu_hdls :
                 Optional<VisualizerGPUHandles>::none());
 
             free(ptr_geom_rgba);
@@ -223,6 +223,8 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
         .def("camera_rotations_tensor", &Manager::cameraRotationsTensor)
         .def("rgb_tensor", &Manager::rgbTensor)
         .def("depth_tensor", &Manager::depthTensor)
+        .def("normal_tensor", &Manager::normalTensor)
+        .def("segmentation_tensor", &Manager::segmentationTensor)
     ;
 }
 
