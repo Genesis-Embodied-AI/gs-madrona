@@ -310,7 +310,7 @@ static PipelineMP<1> makeDrawPipeline(const vk::Device &dev,
     depth_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depth_info.depthTestEnable = VK_TRUE;
     depth_info.depthWriteEnable = VK_TRUE;
-    depth_info.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
+    depth_info.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
     depth_info.depthBoundsTestEnable = VK_FALSE;
     depth_info.stencilTestEnable = VK_FALSE;
     depth_info.back.compareOp = VK_COMPARE_OP_ALWAYS;
@@ -482,6 +482,7 @@ static PipelineMP<1> makeShadowDrawPipeline(const vk::Device &dev,
     depth_info.depthTestEnable = VK_TRUE;
     depth_info.depthWriteEnable = VK_TRUE;
     depth_info.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
+    // depth_info.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
     depth_info.depthBoundsTestEnable = VK_FALSE;
     depth_info.stencilTestEnable = VK_FALSE;
     depth_info.back.compareOp = VK_COMPARE_OP_ALWAYS;
@@ -642,7 +643,7 @@ static vk::PipelineShaders makeShadersLighting(const vk::Device &dev,
         Span<const SPIRVShader>(&spirv, 1), 
         Span<const vk::BindingOverride>({
             vk::BindingOverride {
-                0, 0, VK_NULL_HANDLE,  100,
+                0, 0, VK_NULL_HANDLE, 100,
                 VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT 
             },
             vk::BindingOverride {
@@ -1133,6 +1134,7 @@ static void issueRasterization(vk::Device &dev,
     depth_attach.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
     depth_attach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depth_attach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depth_attach.clearValue.depthStencil = {.depth = 1.0f, .stencil = 0};
 
     VkRect2D total_rect = {
         .offset = {},

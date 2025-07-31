@@ -70,6 +70,10 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
             int64_t batch_render_view_height,
             nb::ndarray<const float, nb::shape<-1>,
                 nb::device::cpu> cam_fovy,
+            nb::ndarray<const float, nb::shape<-1>,
+                nb::device::cpu> cam_znear,
+            nb::ndarray<const float, nb::shape<-1>,
+                nb::device::cpu> cam_zfar,
             nb::ndarray<const int32_t, nb::shape<-1>,
                 nb::device::cpu> enabled_geom_groups,
             bool add_cam_debug_geo,
@@ -124,6 +128,8 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                 .numLights = (uint32_t)num_lights,
                 .numEnabledGeomGroups = (uint32_t)enabled_geom_groups.shape(0),
                 .camFovy = (float *)cam_fovy.data(),
+                .camZNear = (float *)cam_znear.data(),
+                .camZFar = (float *)cam_zfar.data(),
             };
 
             new (self) Manager(Manager::Config {
@@ -166,6 +172,8 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
            nb::arg("batch_render_view_width"),
            nb::arg("batch_render_view_height"),
            nb::arg("cam_fovy"),
+           nb::arg("cam_znear"),
+           nb::arg("cam_zfar"),
            nb::arg("enabled_geom_groups"),
            nb::arg("add_cam_debug_geo") = false,
            nb::arg("use_rt") = false,

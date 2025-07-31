@@ -649,8 +649,9 @@ Manager::Impl * Manager::Impl::make(
         sizeof(int32_t) * gs_model.numGeoms);
     Vector3 *geom_sizes_gpu = (Vector3 *)cu::allocGPU(
         sizeof(Vector3) * gs_model.numGeoms);
-    float *cam_fovy = (float * )cu::allocGPU(
-        sizeof(float) * gs_model.numCams);
+    float *cam_fovy = (float *)cu::allocGPU(sizeof(float) * gs_model.numCams);
+    float *cam_zfar = (float *)cu::allocGPU(sizeof(float) * gs_model.numCams);
+    float *cam_znear = (float *)cu::allocGPU(sizeof(float) * gs_model.numCams);
 
     REQ_CUDA(cudaMemcpy(geom_types_gpu, gs_model.geomTypes,
         sizeof(int32_t) * gs_model.numGeoms, cudaMemcpyHostToDevice));
@@ -660,11 +661,17 @@ Manager::Impl * Manager::Impl::make(
         sizeof(Vector3) * gs_model.numGeoms, cudaMemcpyHostToDevice));
     REQ_CUDA(cudaMemcpy(cam_fovy, gs_model.camFovy,
         sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(cam_znear, gs_model.camZNear,
+        sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(cam_zfar, gs_model.camZFar,
+        sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
 
     sim_cfg.geomTypes = geom_types_gpu;
     sim_cfg.geomDataIDs = geom_data_ids_gpu;
     sim_cfg.geomSizes = geom_sizes_gpu;
     sim_cfg.camFovy = cam_fovy;
+    sim_cfg.camZNear = cam_znear;
+    sim_cfg.camZFar = cam_zfar;
 
     HeapArray<Sim::WorldInit> world_inits(mgr_cfg.numWorlds);
 
@@ -677,8 +684,6 @@ Manager::Impl * Manager::Impl::make(
             .materialData = rt_assets.matData,
             .renderWidth = mgr_cfg.batchRenderViewWidth,
             .renderHeight = mgr_cfg.batchRenderViewHeight,
-            .nearPlane = 0.001f,
-            .farPlane = 1000.0f,
         };
     }
 
@@ -725,6 +730,8 @@ Manager::Impl * Manager::Impl::make(
     cu::deallocGPU(geom_data_ids_gpu);
     cu::deallocGPU(geom_sizes_gpu);
     cu::deallocGPU(cam_fovy);
+    cu::deallocGPU(cam_znear);
+    cu::deallocGPU(cam_zfar);
 
     return new Impl {
         mgr_cfg,

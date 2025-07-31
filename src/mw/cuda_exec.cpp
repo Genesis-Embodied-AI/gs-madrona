@@ -2027,7 +2027,6 @@ static GPUEngineState initEngineAndUserState(
             bvh_kernels.timingInfo,
             render_cfg->materialData.materials,
             render_cfg->materialData.textures,
-            render_cfg->nearPlane,
             (uint32_t)num_sms,
             (uint32_t)shared_mem_per_sm);
 
