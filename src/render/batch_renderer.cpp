@@ -483,6 +483,7 @@ static PipelineMP<1> makeShadowDrawPipeline(const vk::Device &dev,
     depth_info.depthTestEnable = VK_TRUE;
     depth_info.depthWriteEnable = VK_TRUE;
     depth_info.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
+    // depth_info.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
     depth_info.depthBoundsTestEnable = VK_FALSE;
     depth_info.stencilTestEnable = VK_FALSE;
     depth_info.back.compareOp = VK_COMPARE_OP_ALWAYS;
