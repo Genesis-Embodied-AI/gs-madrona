@@ -55,10 +55,16 @@ StructuredBuffer<RenderOptions> renderOptionsBuffer;
 float calculateLinearDepth(float depth_in)
 {
     // Calculate linear depth with reverse-z buffer
+
+    // depth_in = max(min(1.0, depth_in), 0.95);
+    depth_in = max(min(1.0, depth_in), 0.9);
+
     PerspectiveCameraData cam_data = unpackViewData(viewDataBuffer[0]);
     float z_near = cam_data.zNear;
     float z_far = cam_data.zFar;
-    float linear_depth = z_far * z_near / (z_near - depth_in * (z_near - z_far));
+    // float linear_depth = z_far * z_near / (z_near - depth_in * (z_near - z_far));
+
+    float linear_depth = (z_near * z_far) / (z_far + z_near - (depth_in * 2 - 1) * (z_far - z_near)) * 2;
 
     return linear_depth;
 }

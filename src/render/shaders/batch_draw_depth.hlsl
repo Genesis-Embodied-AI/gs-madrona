@@ -64,12 +64,14 @@ float4 vert(in uint vid : SV_VertexID,
             to_view_translation;
 
     float depth = length(view_pos);
+    float z_far = view_data.zFar;
+    float z_near = view_data.zNear;
 
     float4 clip_pos = float4(
         view_data.xScale * view_pos.x,
         view_data.yScale * view_pos.z,
-        view_data.zNear,
-        view_pos.y);
+        ((z_far + z_near) * view_pos.y + 2 * z_far * z_near) / (z_near - z_far),
+        -view_pos.y);
 
 #if 1
     uint something = min(0, instanceOffsets[0]) +
