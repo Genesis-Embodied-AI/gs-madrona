@@ -316,7 +316,8 @@ static bool debugPresent()
     return debug_present && debug_present[0] == '1';
 }
 
-BatchRenderer::Impl *BatchRenderer::Impl::make(const Config &cfg)
+BatchRenderer::Impl * BatchRenderer::Impl::make(
+    const Config &cfg)
 {
     const bool need_present = debugPresent();
     const int64_t num_worlds = cfg.numWorlds;
@@ -334,14 +335,16 @@ BatchRenderer::Impl *BatchRenderer::Impl::make(const Config &cfg)
     MTL::Device *dev = MTL::CreateSystemDefaultDevice()->autorelease();
     MTL::CommandQueue *cmd_queue = dev->newCommandQueue()->autorelease();
 
-    auto *color_target_desc = MTL::TextureDescriptor::alloc()->init();
+    auto *color_target_desc =
+        MTL::TextureDescriptor::alloc()->init();
     color_target_desc->setTextureType(MTL::TextureType2DArray);
     color_target_desc->setArrayLength(max_views);
     color_target_desc->setWidth((NS::UInteger)cfg.renderWidth);
     color_target_desc->setHeight((NS::UInteger)cfg.renderHeight);
     color_target_desc->setPixelFormat(MTL::PixelFormatBGRA8Unorm_sRGB);
     color_target_desc->setStorageMode(MTL::StorageModePrivate);
-    color_target_desc->setHazardTrackingMode(MTL::HazardTrackingModeUntracked);
+    color_target_desc->setHazardTrackingMode(
+        MTL::HazardTrackingModeUntracked);
 
     MTL::TextureUsage color_target_usage = MTL::TextureUsageRenderTarget;
     if (need_present) {
@@ -349,33 +352,39 @@ BatchRenderer::Impl *BatchRenderer::Impl::make(const Config &cfg)
     }
     color_target_desc->setUsage(color_target_usage);
 
-    MTL::Texture *color_target = dev->newTexture(color_target_desc)->autorelease();
+    MTL::Texture *color_target =
+        dev->newTexture(color_target_desc)->autorelease();
     color_target_desc->release();
 
-    auto *depth_target_desc = MTL::TextureDescriptor::alloc()->init();
+    auto *depth_target_desc =
+        MTL::TextureDescriptor::alloc()->init();
     depth_target_desc->setTextureType(MTL::TextureType2DArray);
     depth_target_desc->setArrayLength(max_views);
     depth_target_desc->setWidth((NS::UInteger)cfg.renderWidth);
     depth_target_desc->setHeight((NS::UInteger)cfg.renderHeight);
     depth_target_desc->setPixelFormat(MTL::PixelFormatDepth32Float);
     depth_target_desc->setStorageMode(MTL::StorageModePrivate);
-    depth_target_desc->setHazardTrackingMode(MTL::HazardTrackingModeUntracked);
+    depth_target_desc->setHazardTrackingMode(
+        MTL::HazardTrackingModeUntracked);
     depth_target_desc->setUsage(MTL::TextureUsageRenderTarget);
 
-    MTL::Texture *depth_target = dev->newTexture(depth_target_desc)->autorelease();
+    MTL::Texture *depth_target =
+        dev->newTexture(depth_target_desc)->autorelease();
     depth_target_desc->release();
 
     auto *render_pass = MTL::RenderPassDescriptor::renderPassDescriptor();
     render_pass->setRenderTargetWidth(cfg.renderWidth);
     render_pass->setRenderTargetHeight(cfg.renderHeight);
     render_pass->setRenderTargetArrayLength(max_views);
-    MTL::RenderPassColorAttachmentDescriptor *color_attachment = render_pass->colorAttachments()->object(0);
+    MTL::RenderPassColorAttachmentDescriptor *color_attachment =
+        render_pass->colorAttachments()->object(0);
     color_attachment->setClearColor(MTL::ClearColor { 0, 0, 0, 1 });
     color_attachment->setLoadAction(MTL::LoadActionClear);
     color_attachment->setStoreAction(MTL::StoreActionStore);
     color_attachment->setTexture(color_target);
 
-    MTL::RenderPassDepthAttachmentDescriptor *depth_attachment = render_pass->depthAttachment();
+    MTL::RenderPassDepthAttachmentDescriptor *depth_attachment =
+        render_pass->depthAttachment();
     depth_attachment->setClearDepth(0.0);
     depth_attachment->setLoadAction(MTL::LoadActionClear);
     depth_attachment->setStoreAction(MTL::StoreActionStore);
@@ -387,20 +396,27 @@ BatchRenderer::Impl *BatchRenderer::Impl::make(const Config &cfg)
     auto draw_shader_url = NS::URL::fileURLWithPath(
         nsStrUTF8(MADRONA_BATCHRENDERER_MTL_SHADER_DIR "/draw.metallib"));
 
-    MTL::Library *draw_lib = dev->newLibrary(draw_shader_url, &pipeline_err)->autorelease();
+    MTL::Library *draw_lib = dev->newLibrary(
+        draw_shader_url, &pipeline_err)->autorelease();
 
     if (!draw_lib) {
         FATAL("%s\n", pipeline_err->localizedDescription()->utf8String());
     }
 
-    MTL::Function *multiview_setup_fn = draw_lib->newFunction(nsStrUTF8("setupMultiview"))->autorelease();
+    MTL::Function *multiview_setup_fn =
+        draw_lib->newFunction(nsStrUTF8("setupMultiview"))->autorelease();
 
-    auto *multiview_setup_pipeline_desc = MTL::ComputePipelineDescriptor::alloc()->init()->autorelease();
+    auto *multiview_setup_pipeline_desc =
+        MTL::ComputePipelineDescriptor::alloc()->init()->autorelease();
     multiview_setup_pipeline_desc->setComputeFunction(multiview_setup_fn);
-    multiview_setup_pipeline_desc->setMaxTotalThreadsPerThreadgroup(shader::consts::threadsPerInstance);
-    multiview_setup_pipeline_desc->buffers()->object(0)->setMutability(MTL::MutabilityImmutable);
-    multiview_setup_pipeline_desc->buffers()->object(1)->setMutability(MTL::MutabilityImmutable);
-    multiview_setup_pipeline_desc->buffers()->object(2)->setMutability(MTL::MutabilityImmutable);
+    multiview_setup_pipeline_desc->setMaxTotalThreadsPerThreadgroup(
+        shader::consts::threadsPerInstance);
+    multiview_setup_pipeline_desc->buffers()->object(0)->setMutability(
+        MTL::MutabilityImmutable);
+    multiview_setup_pipeline_desc->buffers()->object(1)->setMutability(
+        MTL::MutabilityImmutable);
+    multiview_setup_pipeline_desc->buffers()->object(2)->setMutability(
+        MTL::MutabilityImmutable);
 
     MTL::ComputePipelineState *multiview_setup_pipeline =
         dev->newComputePipelineState(multiview_setup_pipeline_desc,
@@ -411,27 +427,39 @@ BatchRenderer::Impl *BatchRenderer::Impl::make(const Config &cfg)
         FATAL("%s\n", pipeline_err->localizedDescription()->utf8String());
     }
 
-    MTL::Function *vert_fn = draw_lib->newFunction(nsStrUTF8("vertMain"))->autorelease();
-    MTL::Function *frag_fn = draw_lib->newFunction(nsStrUTF8("fragMain"))->autorelease();
+    MTL::Function *vert_fn =
+        draw_lib->newFunction(nsStrUTF8("vertMain"))->autorelease();
+    MTL::Function *frag_fn =
+        draw_lib->newFunction(nsStrUTF8("fragMain"))->autorelease();
 
-    auto *draw_pipeline_desc = MTL::RenderPipelineDescriptor::alloc()->init()->autorelease();
+    auto *draw_pipeline_desc =
+        MTL::RenderPipelineDescriptor::alloc()->init()->autorelease();
     draw_pipeline_desc->setSupportIndirectCommandBuffers(true);
     draw_pipeline_desc->setVertexFunction(vert_fn);
     draw_pipeline_desc->setFragmentFunction(frag_fn);
-    draw_pipeline_desc->setInputPrimitiveTopology(MTL::PrimitiveTopologyClassTriangle);
-    draw_pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm_sRGB);
-    draw_pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormat::PixelFormatDepth32Float);
-    draw_pipeline_desc->vertexBuffers()->object(0)->setMutability(MTL::MutabilityImmutable);
-    draw_pipeline_desc->vertexBuffers()->object(1)->setMutability(MTL::MutabilityImmutable);
-    draw_pipeline_desc->fragmentBuffers()->object(0)->setMutability(MTL::MutabilityImmutable);
-    draw_pipeline_desc->fragmentBuffers()->object(1)->setMutability(MTL::MutabilityImmutable);
+    draw_pipeline_desc->setInputPrimitiveTopology(
+        MTL::PrimitiveTopologyClassTriangle);
+    draw_pipeline_desc->colorAttachments()->object(0)->setPixelFormat(
+        MTL::PixelFormatBGRA8Unorm_sRGB);
+    draw_pipeline_desc->setDepthAttachmentPixelFormat(
+        MTL::PixelFormat::PixelFormatDepth32Float);
+    draw_pipeline_desc->vertexBuffers()->object(0)->setMutability(
+        MTL::MutabilityImmutable);
+    draw_pipeline_desc->vertexBuffers()->object(1)->setMutability(
+        MTL::MutabilityImmutable);
+    draw_pipeline_desc->fragmentBuffers()->object(0)->setMutability(
+        MTL::MutabilityImmutable);
+    draw_pipeline_desc->fragmentBuffers()->object(1)->setMutability(
+        MTL::MutabilityImmutable);
 
-    MTL::RenderPipelineState *draw_pipeline = dev->newRenderPipelineState(draw_pipeline_desc, &pipeline_err);
+    MTL::RenderPipelineState *draw_pipeline = dev->newRenderPipelineState(
+        draw_pipeline_desc, &pipeline_err);
     if (!draw_pipeline) {
         FATAL("%s\n", pipeline_err->localizedDescription()->utf8String());
     }
 
-    auto *draw_icb_desc = MTL::IndirectCommandBufferDescriptor::alloc()->init()->autorelease();
+    auto *draw_icb_desc =
+        MTL::IndirectCommandBufferDescriptor::alloc()->init()->autorelease();
     draw_icb_desc->setCommandTypes(MTL::IndirectCommandTypeDrawIndexed);
     draw_icb_desc->setInheritBuffers(true);
     draw_icb_desc->setMaxVertexBufferBindCount(2);
@@ -443,11 +471,14 @@ BatchRenderer::Impl *BatchRenderer::Impl::make(const Config &cfg)
         MTL::ResourceHazardTrackingModeUntracked);
     assert(draw_icb);
 
-    auto *draw_depth_test_desc = MTL::DepthStencilDescriptor::alloc()->init()->autorelease();
+    auto *draw_depth_test_desc =
+        MTL::DepthStencilDescriptor::alloc()->init()->autorelease();
     draw_depth_test_desc->setDepthWriteEnabled(true);
-    draw_depth_test_desc->setDepthCompareFunction(MTL::CompareFunctionGreaterEqual);
+    draw_depth_test_desc->setDepthCompareFunction(
+        MTL::CompareFunctionGreaterEqual);
 
-    MTL::DepthStencilState *draw_depth_test = dev->newDepthStencilState(draw_depth_test_desc);
+    MTL::DepthStencilState *draw_depth_test =
+        dev->newDepthStencilState(draw_depth_test_desc);
 
     int64_t engine_interop_offsets[2];
     int64_t num_engine_interop_bytes = utils::computeBufferOffsets({
@@ -475,7 +506,9 @@ BatchRenderer::Impl *BatchRenderer::Impl::make(const Config &cfg)
     {
         uint64_t render_argbuffer_gpu_addr = render_data_buf->gpuAddress();
         uint64_t engine_interop_gpu_addr = engine_interop_buf->gpuAddress();
-        uint64_t num_staging_bytes = render_data_offsets[0] + sizeof(RenderArgBuffer);
+
+        uint64_t num_staging_bytes =
+            render_data_offsets[0] + sizeof(RenderArgBuffer);
 
         MTL::Buffer *render_argbuffers_staging = dev->newBuffer(
             num_staging_bytes,
@@ -483,23 +516,37 @@ BatchRenderer::Impl *BatchRenderer::Impl::make(const Config &cfg)
             MTL::ResourceHazardTrackingModeUntracked |
             MTL::ResourceCPUCacheModeWriteCombined)->autorelease();
 
-        auto *staging_argbuffers_base = (char *)render_argbuffers_staging->contents();
-        auto *icb_argbuffer_staging = (DrawICBArgBuffer *)(staging_argbuffers_base);
+        auto *staging_argbuffers_base = 
+            (char *)render_argbuffers_staging->contents();
+
+        auto *icb_argbuffer_staging = (DrawICBArgBuffer *)(
+            staging_argbuffers_base);
 
         icb_argbuffer_staging->hdl = draw_icb->gpuResourceID();
 
-        auto *render_argbuffer_staging = (RenderArgBuffer *)(staging_argbuffers_base + render_data_offsets[0]);
-        render_argbuffer_staging->drawInstances = render_argbuffer_gpu_addr + render_data_offsets[1];
-        render_argbuffer_staging->numDraws = render_argbuffer_gpu_addr + render_data_offsets[2] + 4;
+        auto *render_argbuffer_staging = (RenderArgBuffer *)(
+                staging_argbuffers_base + render_data_offsets[0]);
+
+        render_argbuffer_staging->drawInstances =
+            render_argbuffer_gpu_addr + render_data_offsets[1];
+        render_argbuffer_staging->numDraws =
+            render_argbuffer_gpu_addr + render_data_offsets[2] + 4;
+
         render_argbuffer_staging->engineInstances = engine_interop_gpu_addr;
-        render_argbuffer_staging->views = engine_interop_gpu_addr + engine_interop_offsets[0];
-        render_argbuffer_staging->numViews = engine_interop_gpu_addr + engine_interop_offsets[1];
+        render_argbuffer_staging->views =
+            engine_interop_gpu_addr + engine_interop_offsets[0];
+        render_argbuffer_staging->numViews =
+            engine_interop_gpu_addr + engine_interop_offsets[1];
+
         render_argbuffer_staging->numMaxViewsPerWorld = cfg.maxViewsPerWorld;
 
-        MTL::CommandBuffer *render_args_setup_cmd = cmd_queue->commandBufferWithUnretainedReferences();
-        MTL::BlitCommandEncoder *blit_enc = render_args_setup_cmd->blitCommandEncoder();
+        MTL::CommandBuffer *render_args_setup_cmd =
+            cmd_queue->commandBufferWithUnretainedReferences();
+        MTL::BlitCommandEncoder *blit_enc =
+            render_args_setup_cmd->blitCommandEncoder();
         // Setup argbuffer
-        blit_enc->copyFromBuffer(render_argbuffers_staging, 0, render_data_buf, 0, num_staging_bytes);
+        blit_enc->copyFromBuffer(render_argbuffers_staging, 0,
+            render_data_buf, 0, num_staging_bytes);
         blit_enc->endEncoding();
         render_args_setup_cmd->commit();
         render_args_setup_cmd->waitUntilCompleted();
@@ -507,13 +554,15 @@ BatchRenderer::Impl *BatchRenderer::Impl::make(const Config &cfg)
 
     uint64_t num_pixels = uint64_t(max_views) * uint64_t(cfg.renderWidth) *
         uint64_t(cfg.renderHeight);
-    MTL::Buffer *rgb_out_buffer = dev->newBuffer(
-        NS::UInteger(num_pixels * sizeof(uint8_t) * 4),
-        MTL::ResourceStorageModeShared | MTL::ResourceHazardTrackingModeUntracked);
+    MTL::Buffer *rgb_out_buffer = dev->newBuffer(NS::UInteger(
+         num_pixels * sizeof(uint8_t) * 4),
+        MTL::ResourceStorageModeShared |
+            MTL::ResourceHazardTrackingModeUntracked);
 
-    MTL::Buffer *depth_out_buffer = dev->newBuffer(
-        NS::UInteger(num_pixels * sizeof(float)),
-        MTL::ResourceStorageModeShared | MTL::ResourceHazardTrackingModeUntracked);
+    MTL::Buffer *depth_out_buffer = dev->newBuffer(NS::UInteger(
+            num_pixels * sizeof(float)),
+        MTL::ResourceStorageModeShared |
+            MTL::ResourceHazardTrackingModeUntracked);
 
     init_pool->release();
 
@@ -557,7 +606,8 @@ BatchRenderer::Impl *BatchRenderer::Impl::make(const Config &cfg)
         .renderDataBuffer = render_data_buf,
         .instanceDataBase = (InstanceData *)(engine_interop_base_ptr),
         .viewCamPointers = std::move(view_cam_ptrs),
-        .numViewsBase = (uint32_t *)(engine_interop_base_ptr + engine_interop_offsets[1]),
+        .numViewsBase = (uint32_t *)(
+            engine_interop_base_ptr + engine_interop_offsets[1]),
         .renderDataArgBufferOffset = int32_t(render_data_offsets[0]),
         .renderDataDrawCountOffset = int32_t(render_data_offsets[2]),
         .rgbOutBuffer = rgb_out_buffer,
@@ -574,7 +624,8 @@ BatchRenderer::Impl *BatchRenderer::Impl::make(const Config &cfg)
         auto *app = NS::Application::sharedApplication();
         app->setDelegate(&*impl->appDelegate);
 
-        if (!NS::RunningApplication::currentApplication()->isFinishedLaunching()) {
+        if (!NS::RunningApplication::currentApplication()->
+                isFinishedLaunching()) {
             app->run();
         }
 
@@ -740,7 +791,10 @@ CountT BatchRenderer::Impl::loadObjects(Span<const imp::SourceObject> objs)
     return 0;
 }
 
-BatchRenderer::BatchRenderer(const Config &cfg) : impl_(Impl::make(cfg)) {}
+BatchRenderer::BatchRenderer(const Config &cfg)
+    : impl_(Impl::make(cfg))
+{}
+
 BatchRenderer::BatchRenderer(BatchRenderer &&o) = default;
 BatchRenderer::~BatchRenderer() = default;
 

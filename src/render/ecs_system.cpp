@@ -357,16 +357,20 @@ inline void exportCountsGPU(Context &ctx,
     auto state_mgr = mwGPU::getStateManager();
 
     if (sys_state.totalNumViews) {
-        *sys_state.totalNumViews = state_mgr->getArchetypeNumRows<RenderCameraArchetype>();
-        *sys_state.totalNumInstances = state_mgr->getArchetypeNumRows<RenderableArchetype>();
+        *sys_state.totalNumViews = state_mgr->getArchetypeNumRows<
+            RenderCameraArchetype>();
+        *sys_state.totalNumInstances = state_mgr->getArchetypeNumRows<
+            RenderableArchetype>();
     }
     if (sys_state.totalNumLights) {
-        *sys_state.totalNumLights = state_mgr->getArchetypeNumRows<LightArchetype>();
+        *sys_state.totalNumLights = state_mgr->getArchetypeNumRows<
+            LightArchetype>();
     }
 
     auto &gpu_consts = mwGPU::GPUImplConsts::get();
 
-    BVHInternalData *bvh_internals =(BVHInternalData *)gpu_consts.bvhInternalData;
+    BVHInternalData *bvh_internals =
+        (BVHInternalData *)gpu_consts.bvhInternalData;
 
     if (bvh_internals != nullptr) {
         uint32_t num_views =
@@ -375,8 +379,11 @@ inline void exportCountsGPU(Context &ctx,
     }
 
 #if 0
-    uint32_t *morton_codes = state_mgr->getArchetypeComponent<RenderableArchetype, MortonCode>();
-    WorldID *world_ids = state_mgr->getArchetypeComponent<RenderableArchetype, WorldID>();
+    uint32_t *morton_codes = state_mgr->getArchetypeComponent<
+        RenderableArchetype, MortonCode>();
+    
+    WorldID *world_ids = state_mgr->getArchetypeComponent<
+        RenderableArchetype, WorldID>();
 
     uint32_t current_world = 0;
     uint32_t current_world_offset = 0;
@@ -406,8 +413,10 @@ void registerTypes(ECSRegistry &registry,
                    const RenderECSBridge *bridge)
 {
 #ifdef MADRONA_GPU_MODE
-    uint32_t render_output_width = mwGPU::GPUImplConsts::get().raycastOutputWidth;
-    uint32_t render_output_height = mwGPU::GPUImplConsts::get().raycastOutputHeight;
+    uint32_t render_output_width = 
+        mwGPU::GPUImplConsts::get().raycastOutputWidth;
+    uint32_t render_output_height = 
+        mwGPU::GPUImplConsts::get().raycastOutputHeight;
 
     uint32_t rgb_output_bytes = render_output_width * render_output_height * 4;
     uint32_t depth_output_bytes = render_output_width * render_output_height * 4;
@@ -497,14 +506,21 @@ void registerTypes(ECSRegistry &registry,
     if (bridge) {
         auto *state_mgr = mwGPU::getStateManager();
 
-        state_mgr->setArchetypeWorldOffsets<RenderableArchetype>(bridge->instanceOffsets);
-        state_mgr->setArchetypeWorldOffsets<RenderCameraArchetype>(bridge->viewOffsets);
-        state_mgr->setArchetypeWorldOffsets<LightArchetype>(bridge->lightOffsets);
+        state_mgr->setArchetypeWorldOffsets<RenderableArchetype>(
+            bridge->instanceOffsets);
+        state_mgr->setArchetypeWorldOffsets<RenderCameraArchetype>(
+            bridge->viewOffsets);
+        state_mgr->setArchetypeWorldOffsets<LightArchetype>(
+            bridge->lightOffsets);
 
-        state_mgr->setArchetypeComponent<RenderableArchetype, InstanceData>(bridge->instances);
-        state_mgr->setArchetypeComponent<RenderCameraArchetype, PerspectiveCameraData>(bridge->views);
-        state_mgr->setArchetypeComponent<LightArchetype, LightDesc>(bridge->lights);
-        state_mgr->setArchetypeComponent<RenderableArchetype, TLBVHNode>(bridge->aabbs);
+        state_mgr->setArchetypeComponent<RenderableArchetype, InstanceData>(
+            bridge->instances);
+        state_mgr->setArchetypeComponent<RenderCameraArchetype, PerspectiveCameraData>(
+            bridge->views);
+        state_mgr->setArchetypeComponent<LightArchetype, LightDesc>(
+            bridge->lights);
+        state_mgr->setArchetypeComponent<RenderableArchetype, TLBVHNode>(
+            bridge->aabbs);
     }
 
 #if 0
