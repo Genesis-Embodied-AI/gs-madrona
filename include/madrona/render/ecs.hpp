@@ -70,13 +70,16 @@ struct alignas(16) LightDesc {
     // Affects both directional/spotlight.
     math::Vector3 direction;
 
+    // Color
+    uint32_t color;
+
     // Angle for the spotlight (default to pi/4).
     float cutoffAngle;
 
     // Intensity of the light. (1.f is default)
     float intensity;
 
-    enum Type : bool {
+    enum Type : uint8_t {
         Spotlight = 0,
         Directional = 1
     };
@@ -85,13 +88,13 @@ struct alignas(16) LightDesc {
     Type type;
 
     // Whether the light casts a shadow.
-    bool castShadow;
+    uint8_t castShadow;
 
     // Gives ability to turn light on or off.
-    bool active;
+    uint8_t active;
 
-    bool padding1 = false;
-    float padding2[3] = {0, 0, 0};
+    uint8_t padding1 = 0;
+    float padding2[2] = {0.f, 0.f};
 };
 
 struct LightDescDirection : math::Vector3 {
@@ -105,7 +108,7 @@ struct LightDescType {
 };
 
 struct LightDescShadow {
-    bool castShadow;
+    uint8_t castShadow;
 };
 
 struct LightDescCutoffAngle {
@@ -117,7 +120,7 @@ struct LightDescIntensity {
 };
 
 struct LightDescActive {
-    bool active;
+    uint8_t active;
 };
 
 struct LightArchetype : public Archetype<

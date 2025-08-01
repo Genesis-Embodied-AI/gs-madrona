@@ -26,6 +26,7 @@ enum class ExportID : uint32_t {
     RaycastSegmentation,
     LightPositions,
     LightDirections,
+    LightColors,
     LightTypes,
     LightShadows,
     LightCutoffAngles,

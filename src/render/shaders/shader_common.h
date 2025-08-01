@@ -213,6 +213,7 @@ struct ShadowViewData {
 struct ShaderLightData {
     float3 position;
     float3 direction;
+    uint32_t color;
     float cutoffAngle;
     float intensity;
     uint32_t isDirectional;

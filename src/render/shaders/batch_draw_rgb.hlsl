@@ -281,14 +281,14 @@ PixelOutput frag(in V2F v2f, in uint prim_id : SV_PrimitiveID)
                         linearSampler, v2f.uv);
             }
 
-            float3 totalLighting = 0;
+            float3 totalLighting = 0.f;
             uint numLights = pushConst.numLights;
             float shadowFactor = shadowFactorVSM(v2f.worldPos, v2f.viewIdx);
 
             [unroll(1)]
             for (uint i = 0; i < numLights; i++) {
                 ShaderLightData light = unpackLightData(lightDataBuffer[v2f.worldIdx * numLights + i]);
-                if(!light.active) {
+                if (!light.active) {
                     continue;
                 }
                 
@@ -298,7 +298,7 @@ PixelOutput frag(in V2F v2f, in uint prim_id : SV_PrimitiveID)
                 }
 
                 float n_dot_l = max(0.0, dot(normal, -ray_dir));
-                totalLighting += n_dot_l * light.intensity;
+                totalLighting += hexToRgb(light.color).rgb * n_dot_l * light.intensity;
 
                 // Apply shadow to the shadowed light. Only support one shadow per view for now. 
                 if (i == shadowViewDataBuffer[v2f.viewIdx].lightIdx) {

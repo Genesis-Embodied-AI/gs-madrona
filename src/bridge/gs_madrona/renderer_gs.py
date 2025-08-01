@@ -116,6 +116,7 @@ class MadronaBatchRendererAdapter:
         cam_rot_tensor,
         lights_pos_tensor,
         lights_dir_tensor,
+        lights_rgb_tensor,
         lights_intensity_tensor,
         lights_directional_tensor,
         lights_castshadow_tensor,
@@ -127,6 +128,7 @@ class MadronaBatchRendererAdapter:
         (
             light_pos,
             light_dir,
+            light_rgb,
             light_directional,
             light_castshadow,
             light_cutoff,
@@ -134,11 +136,15 @@ class MadronaBatchRendererAdapter:
         ) = self.get_lights_properties_torch(
             lights_pos_tensor,
             lights_dir_tensor,
+            lights_rgb_tensor,
             lights_intensity_tensor,
             lights_directional_tensor,
             lights_castshadow_tensor,
             lights_cutoff_tensor,
         )
+
+        print(type(geom_rgb), geom_rgb.shape, geom_rgb.dtype)
+        print(type(light_rgb), light_rgb.shape, light_rgb.dtype)
 
         # Make a copy to actually shuffle the memory layout before passing to C++
         self.madrona.init(
@@ -151,6 +157,7 @@ class MadronaBatchRendererAdapter:
             geom_sizes,
             light_pos,
             light_dir,
+            light_rgb,
             light_directional,
             light_castshadow,
             light_cutoff,
@@ -303,6 +310,7 @@ class MadronaBatchRendererAdapter:
         self,
         lights_pos_tensor,
         lights_dir_tensor,
+        lights_rgb_tensor,
         lights_intensity_tensor,
         lights_directional_tensor,
         lights_castshadow_tensor,
@@ -310,6 +318,10 @@ class MadronaBatchRendererAdapter:
     ):
         light_pos = lights_pos_tensor.reshape(-1, 3).unsqueeze(0).repeat(self.num_worlds, 1, 1)
         light_dir = lights_dir_tensor.reshape(-1, 3).unsqueeze(0).repeat(self.num_worlds, 1, 1)
+        light_rgb_int = (lights_rgb_tensor * 255).to(torch.int32)  # Cast to int32
+        light_rgb_uint = (light_rgb_int[:, 0] << 16) | (light_rgb_int[:, 1] << 8) | light_rgb_int[:, 2]
+        light_rgb = light_rgb_uint.unsqueeze(0).repeat(self.num_worlds, 1)
+        
         light_directional = lights_directional_tensor.reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
         light_castshadow = lights_castshadow_tensor.reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
         light_cutoff = lights_cutoff_tensor.reshape(-1).unsqueeze(0).repeat(self.num_worlds, 1)
@@ -317,6 +329,7 @@ class MadronaBatchRendererAdapter:
         return (
             light_pos,
             light_dir,
+            light_rgb,
             light_directional,
             light_castshadow,
             light_cutoff,

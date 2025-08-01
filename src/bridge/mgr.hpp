@@ -92,6 +92,7 @@ public:
                          const madrona::math::Diag3x3 *geom_sizes,
                          const madrona::math::Vector3 *light_pos,
                          const madrona::math::Vector3 *light_dir,
+                         const uint32_t *light_rgb,
                          const bool *light_isdir,
                          const bool *light_castshadow,
                          const float *light_cutoff,

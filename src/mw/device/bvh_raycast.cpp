@@ -921,7 +921,7 @@ static __device__ FragmentResult computeFragment(
         Vector3 hit_pos = trace_info.rayOrigin +
                           first_hit.depth * trace_info.rayDirection;
 
-        float totalLighting = 0.f;
+        Vector3 totalLighting = {0.f, 0.f, 0.f};
 
         for (int i = 0; i < world_info.numLights; ++i) {
             const LightDesc& light = world_info.lights[i];
@@ -963,10 +963,14 @@ static __device__ FragmentResult computeFragment(
             }
 
             float n_dot_l = max(0.0, dot(first_hit.normal, -ray_dir));
-            totalLighting += n_dot_l * light.intensity;
+            totalLighting += n_dot_l * hexToRgb(light.color) * light.intensity;
         }
 
-        Vector3 finalColor = totalLighting * first_hit.color;
+        Vector3 finalColor = {
+            totalLighting.x * first_hit.color.x,
+            totalLighting.y * first_hit.color.y,
+            totalLighting.z * first_hit.color.z
+        };
 
         // Add ambient term
         float ambient = 0.2;

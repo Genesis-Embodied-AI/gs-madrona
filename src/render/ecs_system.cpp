@@ -188,6 +188,7 @@ inline void lightUpdate(Context &ctx,
                         Entity e,
                         const Position &pos,
                         const LightDescDirection &dir,
+                        const ColorOverride &color,
                         const LightDescType &type,
                         const LightDescShadow &shadow,
                         const LightDescCutoffAngle &angle,
@@ -214,6 +215,7 @@ inline void lightUpdate(Context &ctx,
     desc.castShadow = shadow.castShadow;
     desc.position = pos;
     desc.direction = dir;
+    desc.color = color.color;
     desc.cutoffAngle = angle.cutoffAngle;
     desc.intensity = intensity.intensity;
     desc.active = active.active;
@@ -547,6 +549,7 @@ TaskGraphNodeID setupTasks(TaskGraphBuilder &builder,
                 Entity,
                 Position,
                 LightDescDirection,
+                ColorOverride,
                 LightDescType,
                 LightDescShadow,
                 LightDescCutoffAngle,
@@ -758,6 +761,7 @@ void makeEntityLightCarrier(Context &ctx, Entity e)
     ctx.get<LightDesc>(light_e) = LightDesc {
         .position = ctx.get<Position>(e),
         .direction = ctx.get<LightDescDirection>(e),
+        .color = ctx.get<ColorOverride>(e).color,
         .cutoffAngle = ctx.get<LightDescCutoffAngle>(e).cutoffAngle,
         .intensity = ctx.get<LightDescIntensity>(e).intensity,
         .type = ctx.get<LightDescType>(e).type,

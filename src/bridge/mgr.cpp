@@ -182,6 +182,7 @@ struct Manager::Impl {
         uint32_t *col_overrides,
         Vector3 *light_pos,
         Vector3 *light_dir,
+        uint32_t *light_color,
         bool *light_isdir,
         bool *light_castshadow,
         float *light_cutoff,
@@ -216,6 +217,11 @@ struct Manager::Impl {
             sizeof(Vector3) * numLights * cfg.numWorlds,
             cudaMemcpyDeviceToDevice, strm);
         cudaMemcpyAsync(
+            gpuExec.getExported((CountT)ExportID::LightColors),
+            light_color,
+            sizeof(ColorOverride) * numLights * cfg.numWorlds,
+            cudaMemcpyDeviceToDevice, strm);
+        cudaMemcpyAsync(
             gpuExec.getExported((CountT)ExportID::LightTypes),
             light_isdir,
             sizeof(bool) * numLights * cfg.numWorlds,
@@ -246,6 +252,7 @@ struct Manager::Impl {
                      const Diag3x3 *geom_sizes,
                      const Vector3 *light_pos,
                      const Vector3 *light_dir,
+                     const uint32_t *light_rgb,
                      const bool *light_isdir,
                      const bool *light_castshadow,
                      const float *light_cutoff,
@@ -270,6 +277,7 @@ struct Manager::Impl {
             const_cast<uint32_t *>(geom_rgb),
             const_cast<Vector3 *>(light_pos),
             const_cast<Vector3 *>(light_dir),
+            const_cast<uint32_t *>(light_rgb),
             const_cast<bool *>(light_isdir),
             const_cast<bool *>(light_castshadow),
             const_cast<float *>(light_cutoff),
@@ -741,13 +749,13 @@ void Manager::init(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
                    const math::Vector3 *cam_pos, const math::Quat *cam_rot,
                    const int32_t *mat_ids, const uint32_t *geom_rgb,
                    const math::Diag3x3 *geom_sizes, const math::Vector3 *light_pos,
-                   const math::Vector3 *light_dir, const bool *light_isdir,
-                   const bool *light_castshadow, const float *light_cutoff,
-                   const float *light_intensity)
+                   const math::Vector3 *light_dir, const uint32_t *light_rgb,
+                   const bool *light_isdir, const bool *light_castshadow,
+                   const float *light_cutoff, const float *light_intensity)
 {
     impl_->init(
         geom_pos, geom_rot, cam_pos, cam_rot, mat_ids, geom_rgb, geom_sizes,
-        light_pos, light_dir, light_isdir, light_castshadow, 
+        light_pos, light_dir, light_rgb, light_isdir, light_castshadow, 
         light_cutoff, light_intensity);
 }
 
