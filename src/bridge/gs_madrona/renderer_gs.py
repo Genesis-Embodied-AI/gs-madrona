@@ -163,6 +163,9 @@ class MadronaBatchRendererAdapter:
             lights_intensity_tensor,
         )
 
+        print(type(geom_rgb), geom_rgb.shape, geom_rgb.dtype)
+        print(type(light_rgb), light_rgb.shape, light_rgb.dtype)
+
         # Make a copy to actually shuffle the memory layout before passing to C++
         self.madrona.init(
             geom_pos,
