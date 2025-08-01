@@ -16,7 +16,7 @@ using namespace madrona::viz;
 
 namespace nb = nanobind;
 
-namespace madMJX {
+namespace madGS {
 
 struct VisualizerGPUState {
     WindowManager wm;
@@ -27,7 +27,7 @@ struct VisualizerGPUState {
                               int64_t window_height,
                               int gpu_id)
         : wm(),
-          window(wm.makeWindow("MadMJX", window_width, window_height)),
+          window(wm.makeWindow("MadGS", window_width, window_height)),
           renderGPU(wm.initGPU(gpu_id, { window.get() }))
     {}
 

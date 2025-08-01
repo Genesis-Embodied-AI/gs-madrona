@@ -58,18 +58,18 @@ public:
     inline HostPrintCPU(CUdevice cu_gpu)
         : channel_([cu_gpu]() {
               CUdeviceptr channel_devptr;
-              REQ_CU(cuMemAllocManaged(&channel_devptr,
+              REQ_CU(CudaDynamicLoader::cuMemAllocManaged(&channel_devptr,
                                        sizeof(HostPrint::Channel),
                                        CU_MEM_ATTACH_GLOBAL));
 
-              REQ_CU(cuMemAdvise((CUdeviceptr)channel_devptr, 
+              REQ_CU(CudaDynamicLoader::cuMemAdvise((CUdeviceptr)channel_devptr,
                                  sizeof(HostPrint::Channel),
                                  CU_MEM_ADVISE_SET_READ_MOSTLY, 0));
-              REQ_CU(cuMemAdvise((CUdeviceptr)channel_devptr,
+              REQ_CU(CudaDynamicLoader::cuMemAdvise((CUdeviceptr)channel_devptr,
                                  sizeof(HostPrint::Channel),
                                  CU_MEM_ADVISE_SET_ACCESSED_BY, CU_DEVICE_CPU));
 
-              REQ_CU(cuMemAdvise(channel_devptr, sizeof(HostPrint::Channel),
+              REQ_CU(CudaDynamicLoader::cuMemAdvise(channel_devptr, sizeof(HostPrint::Channel),
                                  CU_MEM_ADVISE_SET_ACCESSED_BY, cu_gpu));
 
               auto ptr = (HostPrint::Channel *)channel_devptr;
@@ -88,7 +88,7 @@ public:
     {
         channel_->signal.store(-1, cuda::std::memory_order_release);
         thread_.join();
-        REQ_CU(cuMemFree((CUdeviceptr)channel_));
+        REQ_CU(CudaDynamicLoader::cuMemFree((CUdeviceptr)channel_));
     }
 
     inline void * getChannelPtr()
@@ -124,7 +124,7 @@ private:
             }
 
 
-            std::cout << "GPU debug print:\n";
+            std::cout << "GPU debug print:" << std::endl;
             std::string_view print_str = channel_->buffer;
             size_t buffer_offset = print_str.length() + 1;
             size_t str_offset = 0;
@@ -533,23 +533,23 @@ template <typename T> __global__ void submitRun(uint32_t) {}
     run_name += ">";
 
     nvrtcProgram prog;
-    REQ_NVRTC(nvrtcCreateProgram(&prog, mangle_code.c_str(), "mangle.cpp",
+    REQ_NVRTC(CudaDynamicLoader::nvrtcCreateProgram(&prog, mangle_code.c_str(), "mangle.cpp",
                                  0, nullptr, nullptr));
 
-    REQ_NVRTC(nvrtcAddNameExpression(prog, init_name.c_str()));
-    REQ_NVRTC(nvrtcAddNameExpression(prog, run_name.c_str()));
+    REQ_NVRTC(CudaDynamicLoader::nvrtcAddNameExpression(prog, init_name.c_str()));
+    REQ_NVRTC(CudaDynamicLoader::nvrtcAddNameExpression(prog, run_name.c_str()));
 
-    REQ_NVRTC(nvrtcCompileProgram(prog, num_compile_flags, compile_flags));
+    REQ_NVRTC(CudaDynamicLoader::nvrtcCompileProgram(prog, num_compile_flags, compile_flags));
 
     const char *init_lowered;
-    REQ_NVRTC(nvrtcGetLoweredName(prog, init_name.c_str(), &init_lowered));
+    REQ_NVRTC(CudaDynamicLoader::nvrtcGetLoweredName(prog, init_name.c_str(), &init_lowered));
     const char *run_lowered;
-    REQ_NVRTC(nvrtcGetLoweredName(prog, run_name.c_str(), &run_lowered));
+    REQ_NVRTC(CudaDynamicLoader::nvrtcGetLoweredName(prog, run_name.c_str(), &run_lowered));
 
-    REQ_CU(cuModuleGetFunction(init_out, mod, init_lowered));
-    REQ_CU(cuModuleGetFunction(run_out, mod, run_lowered));
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(init_out, mod, init_lowered));
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(run_out, mod, run_lowered));
 
-    REQ_NVRTC(nvrtcDestroyProgram(&prog));
+    REQ_NVRTC(CudaDynamicLoader::nvrtcDestroyProgram(&prog));
 }
 
 static MegakernelCache loadMegakernelCache(const std::string &cache_path)
@@ -663,14 +663,20 @@ static GPUCompileResults compileCode(
     ExecutorMode exec_mode, bool verbose_compile)
 {
     const std::string cache_path = getenv("MADRONA_MWGPU_KERNEL_CACHE");
-    std::vector<std::string> src_paths(sources, sources + num_sources);
+
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? py_root_env : std::filesystem::current_path();
+    std::vector<std::string> src_paths;
+    for (int64_t i = 0; i < num_sources; ++i) {
+        src_paths.push_back(std::filesystem::weakly_canonical(root_dir / sources[i]).string());
+    }
 
     bool need_recompile = kernelCacheNeedsRecompile(cache_path, src_paths);
     if (!need_recompile) {
         auto kernel_cache = loadMegakernelCache(cache_path.c_str());
 
         CUmodule mod;
-        REQ_CU(cuModuleLoadData(&mod, kernel_cache.cubinStart));
+        REQ_CU(CudaDynamicLoader::cuModuleLoadData(&mod, kernel_cache.cubinStart));
         printf("Loaded megakernel cache from %s\n", cache_path.c_str());
 
         return {
@@ -891,18 +897,20 @@ static __attribute__((always_inline)) inline void dispatch(
     // Need to save bytecode until nvJitLinkComplete is called,
     // unlike old driver API
     DynArray<HeapArray<char>> source_bytecodes(num_sources);
-    printf("Compiling GPU engine code:\n");
+    if (verbose_compile) {
+        printf("Compiling GPU engine code:\n");
+    }
     for (int64_t i = 0; i < num_sources; i++) {
         if (verbose_compile) {
-            printf("%s\n", sources[i]);
+            printf("%s\n", src_paths[i].c_str());
         }
-        auto [ptx, bytecode] = cu::jitCompileCPPFile(sources[i],
+        auto [ptx, bytecode] = cu::jitCompileCPPFile(src_paths[i].c_str(),
             compile_flags, num_compile_flags,
             fast_compile_flags, num_fast_compile_flags,
             opt_mode == CompileConfig::OptMode::LTO);
 
         processPTXSymbols(std::string_view(ptx.data(), ptx.size()));
-        addToLinker(bytecode, sources[i]);
+        addToLinker(bytecode, src_paths[i].c_str());
 
         source_bytecodes.emplace_back(std::move(bytecode));
     }
@@ -971,8 +979,8 @@ static __attribute__((always_inline)) inline void dispatch(
 
         std::string megakernel_file = "megakernel_" + megakernel_cfg_suffix +
             ".cpp";
-        std::string fake_megakernel_cpp_path =
-            std::string(MADRONA_MW_GPU_DEVICE_SRC_DIR) + "/" + megakernel_file;
+        std::string fake_megakernel_cpp_path = std::filesystem::weakly_canonical(
+            root_dir / MADRONA_MW_GPU_DEVICE_SRC_DIR / megakernel_file).string();
 
         uint32_t max_registers =
             65536 / megakernel_cfg.numThreads / megakernel_cfg.numBlocksPerSM;
@@ -1029,7 +1037,7 @@ static __attribute__((always_inline)) inline void dispatch(
     }
 
     CUmodule mod;
-    REQ_CU(cuModuleLoadData(&mod, linked_cubin.data()));
+    REQ_CU(CudaDynamicLoader::cuModuleLoadData(&mod, linked_cubin.data()));
 
     REQ_NVJITLINK(nvJitLinkDestroy(&linker));
 
@@ -1080,9 +1088,21 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
     using namespace std;
 
     const std::string cache_path = getenv("MADRONA_BVH_KERNEL_CACHE");
-    const std::vector<std::string> bvh_srcs = {
+
+    std::vector<std::string> bvh_srcs = {
             MADRONA_MW_GPU_BVH_INTERNAL_CPP
         };
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? py_root_env : std::filesystem::current_path();
+    std::for_each(
+        bvh_srcs.begin(), bvh_srcs.end(),
+        [&root_dir](std::string &src) {
+            src = std::filesystem::weakly_canonical(root_dir / src).string();
+        }
+    );
+
+    char *verbose_compile_env = getenv("MADRONA_MWGPU_VERBOSE_COMPILE");
+    bool verbose_compile = verbose_compile_env && verbose_compile_env[0] == '1';
 
     bool need_recompile = kernelCacheNeedsRecompile(
         cache_path,
@@ -1091,8 +1111,11 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
     CUmodule mod;
     if (!need_recompile) {
         auto bvh_cache = loadKernelCache<BVHKernelCache>(cache_path);
-        REQ_CU(cuModuleLoadData(&mod, bvh_cache.cubinStart));
-        printf("Loaded BVH kernel cache from %s\n", cache_path.c_str());
+        REQ_CU(CudaDynamicLoader::cuModuleLoadData(&mod, bvh_cache.cubinStart));
+        if (verbose_compile)
+        {
+            printf("Loaded BVH kernel cache from %s\n", cache_path.c_str());
+        }
     }
     else {
         const char *force_debug_env = getenv("MADRONA_MWGPU_FORCE_DEBUG");
@@ -1103,11 +1126,11 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
         string gpu_arch_str = "sm_" + to_string(cuda_arch.first) +
             to_string(cuda_arch.second);
 
-        std::string linker_arch_str =
+        std::string gpu_arch_flag =
             std::string("-arch=") + gpu_arch_str;
 
         DynArray<const char *> linker_flags {
-            linker_arch_str.c_str(),
+            gpu_arch_flag.c_str(),
             "-ftz=1",
             "-prec-div=0",
             "-prec-sqrt=0",
@@ -1120,7 +1143,9 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
 
         if (force_debug_env != nullptr && force_debug_env[0] == '1') {
             linker_flags.push_back("-g");
-            printf("compiling with debug\n");
+            if (verbose_compile) {
+                printf("Compiling with debug\n");
+            }
         }
 
         nvJitLinkHandle linker;
@@ -1168,16 +1193,26 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
                 (char *)cubin.data(), cubin.size(), name));
         };
 
-        string gpu_arch_flag = std::string("-arch=") + gpu_arch_str;
-
         std::vector<const char *> common_compile_flags {
             MADRONA_NVRTC_OPTIONS
             "-dlto",
             "-DMADRONA_MWGPU_BVH_MODULE",
-            "-arch", gpu_arch_str.c_str(),
+            gpu_arch_flag.c_str(),
             "-lineinfo",
             "-maxrregcount=96"
         };
+        std::vector<std::string> nvrtc_incl_defs = {
+            MADRONA_NVRTC_INCLUDE_DIRS
+        };
+        std::for_each(
+            nvrtc_incl_defs.begin(), nvrtc_incl_defs.end(),
+            [&root_dir](std::string &def) {
+                def = "-I" + std::filesystem::weakly_canonical(root_dir / def).string();
+            }
+        );
+        for (std::string const & def : nvrtc_incl_defs) {
+            common_compile_flags.push_back(def.c_str());
+        }
 
         if (shadow_enable_env && shadow_enable_env[0] == '1') {
             common_compile_flags.push_back("-DMADRONA_RT_SHADOWS");
@@ -1218,7 +1253,9 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
             std::string bvh_src((std::istreambuf_iterator<char>(bvh_file_stream)),
                 std::istreambuf_iterator<char>());
 
-            printf("Compiling %s\n", bvh_srcs[i].c_str());
+            if (verbose_compile) {
+                printf("Compiling %s\n", bvh_srcs[i].c_str());
+            }
 
             // Gives us LTOIR
             auto jit_output = cu::jitCompileCPPSrc(
@@ -1243,44 +1280,44 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
             cache_file.close();
         }
 
-        REQ_CU(cuModuleLoadData(&mod, linked_cubin.data()));
+        REQ_CU(CudaDynamicLoader::cuModuleLoadData(&mod, linked_cubin.data()));
         REQ_NVJITLINK(nvJitLinkDestroy(&linker));
     }
 
     CUfunction bvh_build_fast;
-    REQ_CU(cuModuleGetFunction(&bvh_build_fast, mod,
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&bvh_build_fast, mod,
                                "bvhBuildFast"));
 
     CUfunction bvh_build_slow;
-    REQ_CU(cuModuleGetFunction(&bvh_build_slow, mod,
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&bvh_build_slow, mod,
                                "bvhBuildSlow"));
 
     CUfunction bvh_init;
-    REQ_CU(cuModuleGetFunction(&bvh_init, mod,
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&bvh_init, mod,
                                "bvhInit"));
 
     CUfunction bvh_alloc;
-    REQ_CU(cuModuleGetFunction(&bvh_alloc, mod,
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&bvh_alloc, mod,
                                "bvhAllocInternalNodes"));
 
     CUfunction bvh_aabbs;
-    REQ_CU(cuModuleGetFunction(&bvh_aabbs, mod,
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&bvh_aabbs, mod,
                                "bvhConstructAABBs"));
 
     CUfunction widen_tree;
-    REQ_CU(cuModuleGetFunction(&widen_tree, mod,
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&widen_tree, mod,
                                "bvhWidenTree"));
 
     CUfunction bvh_opt;
-    REQ_CU(cuModuleGetFunction(&bvh_opt, mod,
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&bvh_opt, mod,
                                "bvhOptimizeLBVH"));
 
     CUfunction bvh_debug;
-    REQ_CU(cuModuleGetFunction(&bvh_debug, mod,
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&bvh_debug, mod,
                                "bvhDebug"));
 
     CUfunction bvh_raycast_entry;
-    REQ_CU(cuModuleGetFunction(&bvh_raycast_entry, mod,
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&bvh_raycast_entry, mod,
                                "bvhRaycastEntry"));
 
     CUevent alloc_event;
@@ -1289,11 +1326,11 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
     CUevent trace_event;
     CUevent stop_event;
 
-    cuEventCreate(&alloc_event, CU_EVENT_DEFAULT);
-    cuEventCreate(&build_event, CU_EVENT_DEFAULT);
-    cuEventCreate(&widen_event, CU_EVENT_DEFAULT);
-    cuEventCreate(&trace_event, CU_EVENT_DEFAULT);
-    cuEventCreate(&stop_event, CU_EVENT_DEFAULT);
+    CudaDynamicLoader::cuEventCreate(&alloc_event, CU_EVENT_DEFAULT);
+    CudaDynamicLoader::cuEventCreate(&build_event, CU_EVENT_DEFAULT);
+    CudaDynamicLoader::cuEventCreate(&widen_event, CU_EVENT_DEFAULT);
+    CudaDynamicLoader::cuEventCreate(&trace_event, CU_EVENT_DEFAULT);
+    CudaDynamicLoader::cuEventCreate(&stop_event, CU_EVENT_DEFAULT);
 
     auto *timing_info = (mwGPU::madrona::KernelTimingInfo *)
         cu::allocReadback(sizeof(mwGPU::madrona::KernelTimingInfo));
@@ -1373,6 +1410,8 @@ static GPUKernels buildKernels(const CompileConfig &cfg,
     string gpu_arch_str = "sm_" + to_string(cuda_arch.first) +
         to_string(cuda_arch.second);
 
+    string gpu_arch_flag = std::string("-arch=") + gpu_arch_str;
+
     string num_sms_str =
         "-DMADRONA_MWGPU_NUM_SMS=(" + to_string(num_sms) + "_i32)";
 
@@ -1388,13 +1427,27 @@ static GPUKernels buildKernels(const CompileConfig &cfg,
 
     DynArray<const char *> common_compile_flags {
         MADRONA_NVRTC_OPTIONS
-        "-arch", gpu_arch_str.c_str(),
+        gpu_arch_flag.c_str(),
         num_sms_str.c_str(),
         max_blocks_str.c_str(),
 #ifdef MADRONA_TRACING
         "-DMADRONA_TRACING=1",
 #endif
     };
+    std::vector<std::string> nvrtc_incl_defs = {
+        MADRONA_NVRTC_INCLUDE_DIRS
+    };
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? py_root_env : std::filesystem::current_path();
+    std::for_each(
+        nvrtc_incl_defs.begin(), nvrtc_incl_defs.end(),
+        [&root_dir](std::string &def) {
+            def = "-I" + std::filesystem::weakly_canonical(root_dir / def).string();
+        }
+    );
+    for (std::string const & def : nvrtc_incl_defs) {
+        common_compile_flags.push_back(def.c_str());
+    }
 
     for (const char *user_flag : cfg.userCompileFlags) {
         common_compile_flags.push_back(user_flag);
@@ -1429,11 +1482,8 @@ static GPUKernels buildKernels(const CompileConfig &cfg,
         compile_flags.push_back("-DMADRONA_MWGPU_TASKGRAPH=1");
     }
 
-    std::string linker_arch_str =
-        std::string("-arch=") + gpu_arch_str;
-
     DynArray<const char *> linker_flags {
-        linker_arch_str.c_str(),
+        gpu_arch_flag.c_str(),
         "-ftz=1",
         "-prec-div=0",
         "-prec-sqrt=0",
@@ -1483,7 +1533,7 @@ static GPUKernels buildKernels(const CompileConfig &cfg,
         std::string kernel_name = "madronaMWGPUMegakernel_" +
             getMegakernelConfigSuffixStr(megakernel_cfg);
 
-        REQ_CU(cuModuleGetFunction(&megakernel_fns[i],
+        REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&megakernel_fns[i],
                                    compile_results.mod, kernel_name.c_str()));
     }
 
@@ -1500,28 +1550,28 @@ static GPUKernels buildKernels(const CompileConfig &cfg,
         .destroyECS = nullptr,
     };
 
-    REQ_CU(cuModuleGetFunction(&gpu_kernels.computeGPUImplConsts,
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.computeGPUImplConsts,
         gpu_kernels.mod, "madronaMWGPUComputeConstants"));
 
     if (exec_mode == ExecutorMode::JobSystem) {
-        REQ_CU(cuModuleGetFunction(&gpu_kernels.initECS, gpu_kernels.mod,
+        REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.initECS, gpu_kernels.mod,
                                    "madronaMWGPUInitialize"));
         // FIXME: getUserEntries is broken
         getUserEntries("", gpu_kernels.mod, compile_flags.data(),
             compile_flags.size(), &gpu_kernels.queueUserInit,
             &gpu_kernels.queueUserRun);
     } else if (exec_mode == ExecutorMode::TaskGraph) {
-        REQ_CU(cuModuleGetFunction(&gpu_kernels.initECS, gpu_kernels.mod,
+        REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.initECS, gpu_kernels.mod,
                                    compile_results.initECSName.c_str()));
-        REQ_CU(cuModuleGetFunction(&gpu_kernels.initWorlds, gpu_kernels.mod,
+        REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.initWorlds, gpu_kernels.mod,
                                    compile_results.initWorldsName.c_str()));
-        REQ_CU(cuModuleGetFunction(&gpu_kernels.initTasks, gpu_kernels.mod,
+        REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.initTasks, gpu_kernels.mod,
                                    compile_results.initTasksName.c_str()));
     }
 
-    REQ_CU(cuModuleGetFunction(&gpu_kernels.initBVHParams, gpu_kernels.mod,
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.initBVHParams, gpu_kernels.mod,
                                "initBVHParams"));
-    REQ_CU(cuModuleGetFunction(&gpu_kernels.destroyECS, gpu_kernels.mod,
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.destroyECS, gpu_kernels.mod,
                                "freeECSTables"));
 
     return gpu_kernels;
@@ -1610,16 +1660,16 @@ static void mapGPUMemory(CUdevice dev, CUdeviceptr base, uint64_t num_bytes)
     alloc_prop.location.id = dev;
 
     CUmemGenericAllocationHandle mem;
-    REQ_CU(cuMemCreate(&mem, num_bytes,
+    REQ_CU(CudaDynamicLoader::cuMemCreate(&mem, num_bytes,
                        &alloc_prop, 0));
 
-    REQ_CU(cuMemMap(base, num_bytes, 0, mem, 0));
-    REQ_CU(cuMemRelease(mem));
+    REQ_CU(CudaDynamicLoader::cuMemMap(base, num_bytes, 0, mem, 0));
+    REQ_CU(CudaDynamicLoader::cuMemRelease(mem));
 
     CUmemAccessDesc access_ctrl;
     access_ctrl.location = alloc_prop.location;
     access_ctrl.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-    REQ_CU(cuMemSetAccess(base, num_bytes,
+    REQ_CU(CudaDynamicLoader::cuMemSetAccess(base, num_bytes,
                           &access_ctrl, 1));
 
 }
@@ -1636,10 +1686,10 @@ static void gpuVMAllocatorThread(HostChannel *channel, CUcontext cu_ctx,
     bool verbose_host_alloc =
         verbose_host_alloc_env && verbose_host_alloc_env[0] == '1';
 
-    REQ_CU(cuCtxSetCurrent(cu_ctx));
+    REQ_CU(CudaDynamicLoader::cuCtxSetCurrent(cu_ctx));
 
     CUdevice dev;
-    REQ_CU(cuCtxGetDevice(&dev));
+    REQ_CU(CudaDynamicLoader::cuCtxGetDevice(&dev));
 
     while (true) {
         while (channel->ready.load(memory_order_acquire) != 1) {
@@ -1652,7 +1702,7 @@ static void gpuVMAllocatorThread(HostChannel *channel, CUcontext cu_ctx,
             uint64_t num_alloc_bytes = channel->reserve.initNumBytes;
 
             CUdeviceptr dev_ptr;
-            REQ_CU(cuMemAddressReserve(&dev_ptr, num_reserve_bytes,
+            REQ_CU(CudaDynamicLoader::cuMemAddressReserve(&dev_ptr, num_reserve_bytes,
                                        0, 0, 0));
 
             if (verbose_host_alloc) {
@@ -1681,7 +1731,7 @@ static void gpuVMAllocatorThread(HostChannel *channel, CUcontext cu_ctx,
             }
         } else if (channel->op == HostChannel::Op::Alloc) {
             CUdeviceptr dev_ptr;
-            REQ_CU(cuMemAlloc(&dev_ptr, channel->alloc.numBytes));
+            REQ_CU(CudaDynamicLoader::cuMemAlloc(&dev_ptr, channel->alloc.numBytes));
             channel->alloc.result = (void *)dev_ptr;
 
             if (verbose_host_alloc) {
@@ -1738,13 +1788,15 @@ static GPUEngineState initEngineAndUserState(
     CUcontext cu_ctx,
     cudaStream_t strm)
 {
+    CudaDynamicLoader::ensureLoaded();
+
     int num_sms;
     int shared_mem_per_sm;
 
     { // Get properties about the GPU
-        REQ_CU(cuDeviceGetAttribute(
+        REQ_CU(CudaDynamicLoader::cuDeviceGetAttribute(
             &num_sms, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, cu_gpu));
-        REQ_CU(cuDeviceGetAttribute(
+        REQ_CU(CudaDynamicLoader::cuDeviceGetAttribute(
                &shared_mem_per_sm, 
                CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR,
                cu_gpu));
@@ -1755,7 +1807,7 @@ static GPUEngineState initEngineAndUserState(
     auto launchKernel = [strm](CUfunction f, uint32_t num_blocks,
                                uint32_t num_threads,
                                HeapArray<void *> &args) {
-        REQ_CU(cuLaunchKernel(f, num_blocks, 1, 1, num_threads, 1, 1,
+        REQ_CU(CudaDynamicLoader::cuLaunchKernel(f, num_blocks, 1, 1, num_threads, 1, 1,
                               0, strm, nullptr, args.data()));
     };
 
@@ -1779,14 +1831,14 @@ static GPUEngineState initEngineAndUserState(
         sizeof(void *) * num_exported);
 
     CUdeviceptr allocator_channel_devptr;
-    REQ_CU(cuMemAllocManaged(&allocator_channel_devptr,
+    REQ_CU(CudaDynamicLoader::cuMemAllocManaged(&allocator_channel_devptr,
                              sizeof(HostChannel), CU_MEM_ATTACH_GLOBAL));
-    REQ_CU(cuMemAdvise((CUdeviceptr)allocator_channel_devptr, sizeof(HostChannel),
+    REQ_CU(CudaDynamicLoader::cuMemAdvise((CUdeviceptr)allocator_channel_devptr, sizeof(HostChannel),
                        CU_MEM_ADVISE_SET_READ_MOSTLY, 0));
-    REQ_CU(cuMemAdvise((CUdeviceptr)allocator_channel_devptr, sizeof(HostChannel),
+    REQ_CU(CudaDynamicLoader::cuMemAdvise((CUdeviceptr)allocator_channel_devptr, sizeof(HostChannel),
                        CU_MEM_ADVISE_SET_ACCESSED_BY, CU_DEVICE_CPU));
 
-    REQ_CU(cuMemAdvise(allocator_channel_devptr, sizeof(HostChannel),
+    REQ_CU(CudaDynamicLoader::cuMemAdvise(allocator_channel_devptr, sizeof(HostChannel),
                        CU_MEM_ADVISE_SET_ACCESSED_BY, cu_gpu));
 
     HostChannel *allocator_channel = (HostChannel *)allocator_channel_devptr;
@@ -1797,7 +1849,7 @@ static GPUEngineState initEngineAndUserState(
         default_prop.type = CU_MEM_ALLOCATION_TYPE_PINNED;
         default_prop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
         default_prop.location.id = cu_gpu;
-        REQ_CU(cuMemGetAllocationGranularity(&cu_va_alloc_granularity,
+        REQ_CU(CudaDynamicLoader::cuMemGetAllocationGranularity(&cu_va_alloc_granularity,
             &default_prop, CU_MEM_ALLOC_GRANULARITY_RECOMMENDED));
     }
 
@@ -1916,9 +1968,9 @@ static GPUEngineState initEngineAndUserState(
 
     CUdeviceptr job_sys_consts_addr;
     size_t job_sys_consts_size;
-    REQ_CU(cuModuleGetGlobal(&job_sys_consts_addr, &job_sys_consts_size,
+    REQ_CU(CudaDynamicLoader::cuModuleGetGlobal(&job_sys_consts_addr, &job_sys_consts_size,
                              gpu_kernels.mod, "madronaMWGPUConsts"));
-    REQ_CU(cuMemcpyHtoD(job_sys_consts_addr, gpu_consts_readback,
+    REQ_CU(CudaDynamicLoader::cuMemcpyHtoD(job_sys_consts_addr, gpu_consts_readback,
                         job_sys_consts_size));
 
     if (exec_mode == ExecutorMode::JobSystem) {
@@ -1961,7 +2013,7 @@ static GPUEngineState initEngineAndUserState(
         // Address to the BVHParams struct
         CUdeviceptr bvh_consts_addr;
         size_t bvh_consts_size;
-        REQ_CU(cuModuleGetGlobal(&bvh_consts_addr, &bvh_consts_size,
+        REQ_CU(CudaDynamicLoader::cuModuleGetGlobal(&bvh_consts_addr, &bvh_consts_size,
                                  bvh_kernels.mod, "bvhParams"));
 
         // Setup the BVH parameters in the __constant__ block of the bvh module
@@ -1992,7 +2044,7 @@ static GPUEngineState initEngineAndUserState(
 
         REQ_CUDA(cudaStreamSynchronize(strm));
 
-        cuMemcpy(bvh_consts_addr, (CUdeviceptr)params_tmp, 
+        CudaDynamicLoader::cuMemcpy(bvh_consts_addr, (CUdeviceptr)params_tmp,
                  sizeof(mwGPU::madrona::BVHParams));
 
         cu::deallocGPU(params_tmp);
@@ -2023,7 +2075,7 @@ static GPUEngineState initEngineAndUserState(
         consts::numEntryQueueThreads);
 
     CUgraph run_graph;
-    REQ_CU(cuGraphCreate(&run_graph, 0));
+    REQ_CU(CudaDynamicLoader::cuGraphCreate(&run_graph, 0));
 
     CUDA_KERNEL_NODE_PARAMS kernel_node_params {
         .func = queue_run_kernel,
@@ -2041,7 +2093,7 @@ static GPUEngineState initEngineAndUserState(
     };
 
     CUgraphNode queue_node;
-    REQ_CU(cuGraphAddKernelNode(&queue_node, run_graph,
+    REQ_CU(CudaDynamicLoader::cuGraphAddKernelNode(&queue_node, run_graph,
         nullptr, 0, &kernel_node_params));
 
     kernel_node_params.func = job_sys_kernel;
@@ -2050,13 +2102,13 @@ static GPUEngineState initEngineAndUserState(
     kernel_node_params.extra = no_args.data();
 
     CUgraphNode job_sys_node;
-    REQ_CU(cuGraphAddKernelNode(&job_sys_node, run_graph,
+    REQ_CU(CudaDynamicLoader::cuGraphAddKernelNode(&job_sys_node, run_graph,
         &queue_node, 1, &kernel_node_params));
 
     CUgraphExec run_graph_exec;
-    REQ_CU(cuGraphInstantiate(&run_graph_exec, run_graph, 0));
+    REQ_CU(CudaDynamicLoader::cuGraphInstantiate(&run_graph_exec, run_graph, 0));
 
-    REQ_CU(cuGraphDestroy(run_graph));
+    REQ_CU(CudaDynamicLoader::cuGraphDestroy(run_graph));
 
     return run_graph_exec;
 }
@@ -2125,6 +2177,10 @@ static DynArray<int32_t> processExecConfigFile(
 {
     using namespace simdjson;
 
+    char *verbose_taskgraph_env = getenv("MADRONA_MWGPU_VERBOSE_TASKGRAPH");
+    bool verbose_taskgraph =
+        verbose_taskgraph_env && verbose_taskgraph_env[0] == '1';
+
     padded_string json_data;
     REQ_JSON(padded_string::load(file_path).get(json_data));
 
@@ -2161,8 +2217,11 @@ static DynArray<int32_t> processExecConfigFile(
         int64_t megakernel_idx = findMatchingMegakernelConfig(
             megakernel_cfgs, num_configs, node_cfg);
 
-        printf("Taskgraph node %lu: using config %d %d %d\n", node_idx,
-            node_cfg.numThreads, node_cfg.numBlocksPerSM, node_cfg.numSMs);
+        if (verbose_taskgraph)
+        {
+            printf("Taskgraph node %lu: using config %d %d %d\n", node_idx,
+                node_cfg.numThreads, node_cfg.numBlocksPerSM, node_cfg.numSMs);
+        }
 
         if ((CountT)node_idx >= node_megakernels.size()) {
             node_megakernels.resize(node_idx + 1, [&](int32_t *v) {
@@ -2185,7 +2244,7 @@ static CUgraphExec makeTaskGraphRunGraph(
     CUevent *start, CUevent *end)
 {
     CUgraph run_graph;
-    REQ_CU(cuGraphCreate(&run_graph, 0));
+    REQ_CU(CudaDynamicLoader::cuGraphCreate(&run_graph, 0));
 
     char *config_override_env = getenv("MADRONA_MWGPU_EXEC_CONFIG_OVERRIDE");
     char *config_file_env = getenv("MADRONA_MWGPU_EXEC_CONFIG_FILE");
@@ -2211,7 +2270,7 @@ static CUgraphExec makeTaskGraphRunGraph(
 
     if (stat_name) {
         CUgraphNode start_node;
-        REQ_CU(cuGraphAddEventRecordNode(&start_node,
+        REQ_CU(CudaDynamicLoader::cuGraphAddEventRecordNode(&start_node,
                     run_graph, nullptr, 0, *start));
         megakernel_launches.push_back(start_node);
     }
@@ -2239,7 +2298,7 @@ static CUgraphExec makeTaskGraphRunGraph(
         };
 
         CUgraphNode megakernel_node;
-        REQ_CU(cuGraphAddKernelNode(&megakernel_node, run_graph,
+        REQ_CU(CudaDynamicLoader::cuGraphAddKernelNode(&megakernel_node, run_graph,
             dependencies, num_dependencies, &kernel_node_params));
         megakernel_launches.push_back(megakernel_node);
     };
@@ -2283,15 +2342,15 @@ static CUgraphExec makeTaskGraphRunGraph(
 
     if (stat_name) {
         CUgraphNode end_node;
-        REQ_CU(cuGraphAddEventRecordNode(&end_node,
+        REQ_CU(CudaDynamicLoader::cuGraphAddEventRecordNode(&end_node,
                     run_graph, &megakernel_launches.back(), 1,
                     *end));
     }
 
     CUgraphExec run_graph_exec;
-    REQ_CU(cuGraphInstantiate(&run_graph_exec, run_graph, 0));
+    REQ_CU(CudaDynamicLoader::cuGraphInstantiate(&run_graph_exec, run_graph, 0));
 
-    REQ_CU(cuGraphDestroy(run_graph));
+    REQ_CU(CudaDynamicLoader::cuGraphDestroy(run_graph));
 
     return run_graph_exec;
 }
@@ -2314,20 +2373,21 @@ MWCudaLaunchGraph::~MWCudaLaunchGraph()
         return;
     }
 
-    REQ_CU(cuGraphExecDestroy(impl_->runGraph));
+    REQ_CU(CudaDynamicLoader::cuGraphExecDestroy(impl_->runGraph));
 }
 
 CUcontext MWCudaExecutor::initCUDA(int gpu_id)
 {
+    CudaDynamicLoader::ensureLoaded();
+
     REQ_CUDA(cudaSetDevice(gpu_id));
     REQ_CUDA(cudaFree(nullptr));
     CUdevice cu_dev;
-    REQ_CU(cuDeviceGet(&cu_dev, gpu_id));
+    REQ_CU(CudaDynamicLoader::cuDeviceGet(&cu_dev, gpu_id));
     CUcontext cu_ctx;
-    REQ_CU(cuDevicePrimaryCtxRetain(&cu_ctx, cu_dev));
+    REQ_CU(CudaDynamicLoader::cuDevicePrimaryCtxRetain(&cu_ctx, cu_dev));
     setCudaHeapSize();
-    REQ_CU(cuCtxSetCurrent(cu_ctx));
-
+    REQ_CU(CudaDynamicLoader::cuCtxSetCurrent(cu_ctx));
     return cu_ctx;
 }
 
@@ -2343,25 +2403,27 @@ MWCudaExecutor::MWCudaExecutor(
     : impl_(nullptr)
 {
     // Setup CUDA cache directory
-    if(!std::filesystem::exists("/tmp/madrona_cache")) {
-        std::filesystem::create_directories("/tmp/madrona_cache");
+    const char *root_cache_env = getenv("MADRONA_ROOT_CACHE_DIR");
+    std::filesystem::path root_cache_dir = root_cache_env ? root_cache_env : "/tmp/madrona_cache";
+    if(!std::filesystem::exists(root_cache_dir)) {
+        std::filesystem::create_directories(root_cache_dir);
     }
-    std::string kernel_cache_path = "/tmp/madrona_cache/kernel_cache";
-    std::string bvh_cache_path = "/tmp/madrona_cache/bvh_cache";
+    std::string kernel_cache_path = (root_cache_dir / "kernel_cache").string();
+    std::string bvh_cache_path = (root_cache_dir / "bvh_cache").string();
     setenv("MADRONA_MWGPU_KERNEL_CACHE", kernel_cache_path.c_str(), 1);
     setenv("MADRONA_BVH_KERNEL_CACHE", bvh_cache_path.c_str(), 1);
-    printf("Kernel cache directory set to: %s\n", kernel_cache_path.c_str());
-    printf("BVH cache directory set to: %s\n", bvh_cache_path.c_str());
+    // printf("Kernel cache directory set to: %s\n", kernel_cache_path.c_str());
+    // printf("BVH cache directory set to: %s\n", bvh_cache_path.c_str());
 
     const ExecutorMode exec_mode = ExecutorMode::TaskGraph;
 
     auto strm = cu::makeStream();
 
     CUdevice cu_gpu;
-    REQ_CU(cuCtxGetDevice(&cu_gpu));
+    REQ_CU(CudaDynamicLoader::cuCtxGetDevice(&cu_gpu));
 
     int num_sms;
-    REQ_CU(cuDeviceGetAttribute(
+    REQ_CU(CudaDynamicLoader::cuDeviceGetAttribute(
         &num_sms, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, cu_gpu));
 
     CountT max_megakernel_blocks_per_sm = 1;
@@ -2380,13 +2442,13 @@ MWCudaExecutor::MWCudaExecutor(
     }
 
     std::pair<int, int> cu_capability;
-    REQ_CU(cuDeviceGetAttribute(&cu_capability.first,
+    REQ_CU(CudaDynamicLoader::cuDeviceGetAttribute(&cu_capability.first,
         CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, cu_gpu));
-    REQ_CU(cuDeviceGetAttribute(&cu_capability.second,
+    REQ_CU(CudaDynamicLoader::cuDeviceGetAttribute(&cu_capability.second,
         CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, cu_gpu));
 
     int shared_mem_per_sm;
-    REQ_CU(cuDeviceGetAttribute(
+    REQ_CU(CudaDynamicLoader::cuDeviceGetAttribute(
            &shared_mem_per_sm, 
            CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR,
            cu_gpu));
@@ -2445,22 +2507,22 @@ MWCudaExecutor::~MWCudaExecutor()
 {
     if (!impl_) return;
 
-    REQ_CU(cuLaunchKernel(impl_->destroyKernel, 1, 1, 1, 1, 1, 1,
+    REQ_CU(CudaDynamicLoader::cuLaunchKernel(impl_->destroyKernel, 1, 1, 1, 1, 1, 1,
             0, impl_->cuStream, nullptr, nullptr));
     REQ_CUDA(cudaStreamSynchronize(impl_->cuStream));
 
     // Ok now, we go through the free queue
     auto *fq = impl_->engineState.freeQueue;
     for (int i = 0; i < (int)fq->toFree.size(); ++i) {
-        REQ_CU(cuMemFree((CUdeviceptr)fq->toFree[i]));
+        REQ_CU(CudaDynamicLoader::cuMemFree((CUdeviceptr)fq->toFree[i]));
     }
 
     for (int i = 0; i < (int)fq->reserveToFree.size(); ++i) {
         void *ptr = fq->reserveToFree[i].addr;
         uint64_t num_reserve_bytes = fq->reserveToFree[i].numReserveBytes;
 
-        REQ_CU(cuMemUnmap((CUdeviceptr)ptr, num_reserve_bytes));
-        REQ_CU(cuMemAddressFree((CUdeviceptr)ptr, num_reserve_bytes));
+        REQ_CU(CudaDynamicLoader::cuMemUnmap((CUdeviceptr)ptr, num_reserve_bytes));
+        REQ_CU(CudaDynamicLoader::cuMemAddressFree((CUdeviceptr)ptr, num_reserve_bytes));
     }
 
     // Free mesh bvh data
@@ -2499,32 +2561,37 @@ MWCudaExecutor::~MWCudaExecutor()
         1, cuda::std::memory_order_release);
     impl_->engineState.allocatorThread.join();
 
-    REQ_CU(cuModuleUnload(impl_->cuModule));
+    REQ_CU(CudaDynamicLoader::cuModuleUnload(impl_->cuModule));
     REQ_CUDA(cudaStreamDestroy(impl_->cuStream));
 
-    if (impl_->enableRaycasting) { // RT times
-        float avg_total_time = 0.f;
-        u32 num_times = impl_->bvhKernels.recordedTimings.size();
-        for (u32 i = 0; i < num_times; ++i) {
-            avg_total_time += impl_->bvhKernels.recordedTimings[i].totalTime /
-                (float)num_times;
+    char *verbose_stats_env = getenv("MADRONA_MWGPU_VERBOSE_STAT");
+    bool verbose_stats = verbose_stats_env && verbose_stats_env[0] == '1';
+    if (verbose_stats)
+    {
+        if (impl_->enableRaycasting) { // RT times
+            float avg_total_time = 0.f;
+            u32 num_times = impl_->bvhKernels.recordedTimings.size();
+            for (u32 i = 0; i < num_times; ++i) {
+                avg_total_time += impl_->bvhKernels.recordedTimings[i].totalTime /
+                    (float)num_times;
+            }
+
+            printf("rt avg total time = %f ms\n", avg_total_time);
         }
 
-        printf("rt avg total time = %f ms\n", avg_total_time);
-    }
+        // Other times
+        for (u32 g = 0; g < impl_->timingGroups.size(); ++g) {
+            TimingGroup &times = impl_->timingGroups[g];
 
-    // Other times
-    for (u32 g = 0; g < impl_->timingGroups.size(); ++g) {
-        TimingGroup &times = impl_->timingGroups[g];
+            float avg_total_time = 0.f;
+            for (u32 i = 0; i < times.recordedTimings.size(); ++i) {
+                avg_total_time += times.recordedTimings[i] /
+                    (float)times.recordedTimings.size();
+            }
 
-        float avg_total_time = 0.f;
-        for (u32 i = 0; i < times.recordedTimings.size(); ++i) {
-            avg_total_time += times.recordedTimings[i] /
-                (float)times.recordedTimings.size();
+            printf("%s avg total time = %f ms\n", times.statName,
+                    avg_total_time);
         }
-
-        printf("%s avg total time = %f ms\n", times.statName,
-                avg_total_time);
     }
 }
 
@@ -2537,7 +2604,7 @@ MWCudaLaunchGraph MWCudaExecutor::buildRenderGraph()
     auto &bvh_kernels = impl_->bvhKernels;
 
     CUgraph run_graph;
-    REQ_CU(cuGraphCreate(&run_graph, 0));
+    REQ_CU(CudaDynamicLoader::cuGraphCreate(&run_graph, 0));
 
     DynArray<CUgraphNode> nodes(0);
 
@@ -2559,7 +2626,7 @@ MWCudaLaunchGraph MWCudaExecutor::buildRenderGraph()
 
     push_new_node();
 
-    REQ_CU(cuGraphAddEventRecordNode(
+    REQ_CU(CudaDynamicLoader::cuGraphAddEventRecordNode(
                 get_new_node(), run_graph,
                 get_prev_node(), 0,
                 bvh_kernels.allocEvent));
@@ -2582,7 +2649,7 @@ MWCudaLaunchGraph MWCudaExecutor::buildRenderGraph()
 
     // Allocation node
     push_new_node();
-    REQ_CU(cuGraphAddKernelNode(get_new_node(), run_graph,
+    REQ_CU(CudaDynamicLoader::cuGraphAddKernelNode(get_new_node(), run_graph,
                 get_prev_node(), 1,
                 &bvh_launch_params));
 
@@ -2592,7 +2659,7 @@ MWCudaLaunchGraph MWCudaExecutor::buildRenderGraph()
 
     if (fast_bvh) {
         push_new_node();
-        REQ_CU(cuGraphAddEventRecordNode(
+        REQ_CU(CudaDynamicLoader::cuGraphAddEventRecordNode(
                     get_new_node(), run_graph,
                     get_prev_node(), 1,
                     bvh_kernels.buildEvent));
@@ -2607,19 +2674,19 @@ MWCudaLaunchGraph MWCudaExecutor::buildRenderGraph()
             num_blocks_per_sm_fast_build;
 
         push_new_node();
-        REQ_CU(cuGraphAddKernelNode(get_new_node(), run_graph,
+        REQ_CU(CudaDynamicLoader::cuGraphAddKernelNode(get_new_node(), run_graph,
                     get_prev_node(), 1, 
                     &bvh_launch_params));
 
         bvh_launch_params.func = bvh_kernels.constructAABBs;
 
         push_new_node();
-        REQ_CU(cuGraphAddKernelNode(get_new_node(), run_graph,
+        REQ_CU(CudaDynamicLoader::cuGraphAddKernelNode(get_new_node(), run_graph,
                     get_prev_node(), 1, 
                     &bvh_launch_params));
     } else {
         push_new_node();
-        REQ_CU(cuGraphAddEventRecordNode(
+        REQ_CU(CudaDynamicLoader::cuGraphAddEventRecordNode(
                     get_new_node(), run_graph,
                     get_prev_node(), 1,
                     bvh_kernels.buildEvent));
@@ -2633,13 +2700,13 @@ MWCudaLaunchGraph MWCudaExecutor::buildRenderGraph()
             num_blocks_per_sm_slow_build;
 
         push_new_node();
-        REQ_CU(cuGraphAddKernelNode(get_new_node(), run_graph,
+        REQ_CU(CudaDynamicLoader::cuGraphAddKernelNode(get_new_node(), run_graph,
                     get_prev_node(), 1, &bvh_launch_params));
     }
 
     { // Push the widen node
         push_new_node();
-        REQ_CU(cuGraphAddEventRecordNode(
+        REQ_CU(CudaDynamicLoader::cuGraphAddEventRecordNode(
                     get_new_node(), run_graph,
                     get_prev_node(), 1,
                     bvh_kernels.widenEvent));
@@ -2653,14 +2720,14 @@ MWCudaLaunchGraph MWCudaExecutor::buildRenderGraph()
             num_blocks_per_sm_slow_build;
 
         push_new_node();
-        REQ_CU(cuGraphAddKernelNode(get_new_node(), run_graph,
+        REQ_CU(CudaDynamicLoader::cuGraphAddKernelNode(get_new_node(), run_graph,
                     get_prev_node(), 1, &bvh_launch_params));
     }
 
     // We assign a 4x4 region of blocks per image/view
     // Each block processes 16x16 pixels and we have one thread per pixel.
     push_new_node();
-    REQ_CU(cuGraphAddEventRecordNode(
+    REQ_CU(CudaDynamicLoader::cuGraphAddEventRecordNode(
                 get_new_node(), run_graph,
                 get_prev_node(), 1,
                 bvh_kernels.traceEvent));
@@ -2687,20 +2754,20 @@ MWCudaLaunchGraph MWCudaExecutor::buildRenderGraph()
     };
 
     push_new_node();
-    REQ_CU(cuGraphAddKernelNode(get_new_node(), run_graph,
+    REQ_CU(CudaDynamicLoader::cuGraphAddKernelNode(get_new_node(), run_graph,
                 get_prev_node(), 1,
                 &bvh_launch_raycast));
 
     push_new_node();
-    REQ_CU(cuGraphAddEventRecordNode(
+    REQ_CU(CudaDynamicLoader::cuGraphAddEventRecordNode(
                 get_new_node(), run_graph,
                 get_prev_node(), 1,
                 bvh_kernels.stopEvent));
 
     CUgraphExec run_graph_exec;
-    REQ_CU(cuGraphInstantiate(&run_graph_exec, run_graph, 0));
+    REQ_CU(CudaDynamicLoader::cuGraphInstantiate(&run_graph_exec, run_graph, 0));
 
-    REQ_CU(cuGraphDestroy(run_graph));
+    REQ_CU(CudaDynamicLoader::cuGraphDestroy(run_graph));
 
     return MWCudaLaunchGraph(new MWCudaLaunchGraph::Impl {
         .runGraph = run_graph_exec,
@@ -2719,8 +2786,8 @@ MWCudaLaunchGraph MWCudaExecutor::buildLaunchGraph(
     CUevent start, end;
 
     if (stat_name) {
-        cuEventCreate(&start, CU_EVENT_DEFAULT);
-        cuEventCreate(&end, CU_EVENT_DEFAULT);
+        CudaDynamicLoader::cuEventCreate(&start, CU_EVENT_DEFAULT);
+        CudaDynamicLoader::cuEventCreate(&end, CU_EVENT_DEFAULT);
     }
 
     auto run_graph = makeTaskGraphRunGraph(
@@ -2759,29 +2826,29 @@ MWCudaLaunchGraph MWCudaExecutor::buildLaunchGraphAllTaskGraphs()
 
 void MWCudaExecutor::run(MWCudaLaunchGraph &launch_graph)
 {
-    REQ_CU(cuGraphLaunch(launch_graph.impl_->runGraph, impl_->cuStream));
+    REQ_CU(CudaDynamicLoader::cuGraphLaunch(launch_graph.impl_->runGraph, impl_->cuStream));
     REQ_CUDA(cudaStreamSynchronize(impl_->cuStream));
 #ifdef MADRONA_TRACING
     impl_->engineState.deviceTracing->transferLogToCPU();
 #endif
 
     if (launch_graph.impl_->statName) {
-        REQ_CU(cuEventSynchronize(launch_graph.impl_->start));
-        REQ_CU(cuEventSynchronize(launch_graph.impl_->end));
+        REQ_CU(CudaDynamicLoader::cuEventSynchronize(launch_graph.impl_->start));
+        REQ_CU(CudaDynamicLoader::cuEventSynchronize(launch_graph.impl_->end));
 
         float sort_ms = 0.f;
-        REQ_CU(cuEventElapsedTime(&sort_ms,
+        REQ_CU(CudaDynamicLoader::cuEventElapsedTime(&sort_ms,
                     launch_graph.impl_->start, 
                     launch_graph.impl_->end));
 
         impl_->timingGroups[launch_graph.impl_->timingGroupIndex].
             recordedTimings.push_back(sort_ms);
     } else if (launch_graph.impl_->enableRaytracing) {
-        REQ_CU(cuEventSynchronize(impl_->bvhKernels.allocEvent));
-        REQ_CU(cuEventSynchronize(impl_->bvhKernels.stopEvent));
+        REQ_CU(CudaDynamicLoader::cuEventSynchronize(impl_->bvhKernels.allocEvent));
+        REQ_CU(CudaDynamicLoader::cuEventSynchronize(impl_->bvhKernels.stopEvent));
 
         float total_time = 0.f;
-        REQ_CU(cuEventElapsedTime(&total_time, 
+        REQ_CU(CudaDynamicLoader::cuEventElapsedTime(&total_time,
                     impl_->bvhKernels.allocEvent,
                     impl_->bvhKernels.stopEvent));
 
@@ -2800,7 +2867,7 @@ void MWCudaExecutor::run(MWCudaLaunchGraph &launch_graph)
 void MWCudaExecutor::runAsync(MWCudaLaunchGraph &launch_graph,
                               cudaStream_t strm)
 {
-    REQ_CU(cuGraphLaunch(launch_graph.impl_->runGraph, strm));
+    REQ_CU(CudaDynamicLoader::cuGraphLaunch(launch_graph.impl_->runGraph, strm));
 }
 
 void * MWCudaExecutor::getExported(CountT slot) const

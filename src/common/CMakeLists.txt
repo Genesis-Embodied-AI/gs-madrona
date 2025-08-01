@@ -177,9 +177,8 @@ if (CUDAToolkit_FOUND)
 
     target_link_libraries(madrona_cuda
         PUBLIC
-            CUDA::cudart
+            CUDA::cudart_static
         PRIVATE
-            CUDA::cuda_driver
             madrona_err
             madrona_noexceptrtti
     )

@@ -1,5 +1,5 @@
 #pragma once
-#ifdef madmjx_mgr_EXPORTS
+#ifdef madgs_mgr_EXPORTS
 #define MGR_EXPORT MADRONA_EXPORT
 #else
 #define MGR_EXPORT MADRONA_IMPORT
@@ -12,14 +12,14 @@
 
 #include <madrona/render/render_mgr.hpp>
 
-namespace madMJX {
+namespace madGS {
 
 struct VisualizerGPUHandles {
     madrona::render::APIBackend *renderAPI;
     madrona::render::GPUDevice *renderDev;
 };
 
-struct MJXModelGeometry {
+struct GSModelGeometry {
     madrona::math::Vector3 *vertices;
     uint32_t *indices;
     uint32_t *vertexOffsets;
@@ -32,8 +32,8 @@ struct MJXModelGeometry {
     uint32_t numMeshes;
 };
 
-struct MJXModel {
-    MJXModelGeometry meshGeo;
+struct GSModel {
+    GSModelGeometry meshGeo;
     int32_t *geomTypes;
     int32_t *geomGroups;
     int32_t *geomDataIDs;
@@ -78,7 +78,7 @@ public:
 
     MGR_EXPORT Manager(
         const Config &cfg,
-        const MJXModel &mjx_model,
+        const GSModel &gs_model,
         madrona::Optional<VisualizerGPUHandles> viz_gpu_hdls =
             madrona::Optional<VisualizerGPUHandles>::none());
     MGR_EXPORT ~Manager();

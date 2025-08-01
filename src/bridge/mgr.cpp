@@ -27,7 +27,7 @@ using namespace madrona::phys;
 using namespace madrona::py;
 using namespace madrona::imp;
 
-namespace madMJX {
+namespace madGS {
 
 struct RenderGPUState {
     render::APILibHandle apiLib;
@@ -60,7 +60,7 @@ static inline Optional<RenderGPUState> initRenderGPUState(
 
 static inline Optional<render::RenderManager> initRenderManager(
     const Manager::Config &mgr_cfg,
-    const MJXModel &mjx_model,
+    const GSModel &gs_model,
     const Optional<VisualizerGPUHandles> &viz_gpu_hdls,
     const Optional<RenderGPUState> &render_gpu_state)
 {
@@ -77,9 +77,9 @@ static inline Optional<render::RenderManager> initRenderManager(
         render_dev = viz_gpu_hdls->renderDev;
     }
 
-    uint32_t max_instances_per_world = mjx_model.numGeoms;
+    uint32_t max_instances_per_world = gs_model.numGeoms;
     if (mgr_cfg.addCamDebugGeometry) {
-        max_instances_per_world += mjx_model.numCams;
+        max_instances_per_world += gs_model.numCams;
     }
 
     return render::RenderManager(render_api, render_dev, {
@@ -88,8 +88,8 @@ static inline Optional<render::RenderManager> initRenderManager(
         .agentViewWidth = mgr_cfg.batchRenderViewWidth,
         .agentViewHeight = mgr_cfg.batchRenderViewHeight,
         .numWorlds = mgr_cfg.numWorlds,
-        .maxViewsPerWorld = mjx_model.numCams,
-        .maxLightsPerWorld = mjx_model.numLights,
+        .maxViewsPerWorld = gs_model.numCams,
+        .maxLightsPerWorld = gs_model.numLights,
         .maxInstancesPerWorld = max_instances_per_world,
         .execMode = ExecMode::CUDA,
         .voxelCfg = {},
@@ -112,7 +112,7 @@ struct Manager::Impl {
 
     static inline Impl * make(
         const Config &cfg,
-        const MJXModel &mjx_model,
+        const GSModel &gs_model,
         const Optional<VisualizerGPUHandles> &viz_gpu_hdls);
 
     inline Impl(const Manager::Config &mgr_cfg,
@@ -371,16 +371,16 @@ struct RTAssets {
 };
 
 static RTAssets loadRenderObjects(
-    const MJXModel &model,
+    const GSModel &model,
     Optional<render::RenderManager> &render_mgr,
     bool use_rt)
 {
     StackAlloc tmp_alloc;
 
-    std::array<std::string, 1> 
-        render_asset_paths;
-    render_asset_paths[(size_t)RenderPrimObjectIDs::DebugCam] =
-        (std::filesystem::path(DATA_DIR) / "debugcam.obj").string();
+    std::array<std::string, 1> render_asset_paths;
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path data_dir = py_root_env ? (std::string(py_root_env) + "/data") : DATA_DIR;
+    render_asset_paths[(size_t)RenderPrimObjectIDs::DebugCam] = (data_dir / "debugcam.obj").string();
 
     std::array<const char *, render_asset_paths.size()> render_asset_cstrs;
     for (size_t i = 0; i < render_asset_paths.size(); i++) {
@@ -529,31 +529,31 @@ static RTAssets loadRenderObjects(
     
     for (CountT i = 0; i < model.numGeoms; i++) {
         int source_mesh_idx = -1;
-        switch ((MJXGeomType)model.geomTypes[i]) {
-        case MJXGeomType::Plane: {
+        switch ((GSGeomType)model.geomTypes[i]) {
+        case GSGeomType::Plane: {
             source_mesh_idx = (int)RenderPrimObjectIDs::Plane;
         } break;
-        case MJXGeomType::Sphere: {
+        case GSGeomType::Sphere: {
             source_mesh_idx = (int)RenderPrimObjectIDs::Sphere;
         } break;
-        case MJXGeomType::Capsule: {
+        case GSGeomType::Capsule: {
             dest_meshes[i] = CreateCapsule(
                 generated_assets,
                 model.geomSizes[i].x,
                 model.geomSizes[i].y * 2);
             dest_meshes[i].materialIDX = static_cast<uint32_t>(model.geomMatIDs[i]);
         } break;
-        case MJXGeomType::Box: {
+        case GSGeomType::Box: {
             source_mesh_idx = (int)RenderPrimObjectIDs::Box;
         } break;
-        case MJXGeomType::Cylinder: {
+        case GSGeomType::Cylinder: {
             source_mesh_idx = (int)RenderPrimObjectIDs::Cylinder;
         } break;
-        case MJXGeomType::Mesh: {
+        case GSGeomType::Mesh: {
             source_mesh_idx = (int)RenderPrimObjectIDs::NumPrims + model.geomDataIDs[i];
         } break;
-        case MJXGeomType::Heightfield:
-        case MJXGeomType::Ellipsoid:
+        case GSGeomType::Heightfield:
+        case GSGeomType::Ellipsoid:
         default:
             FATAL("Unsupported geom type");
             break;
@@ -616,7 +616,7 @@ static RTAssets loadRenderObjects(
 
 Manager::Impl * Manager::Impl::make(
     const Manager::Config &mgr_cfg,
-    const MJXModel &mjx_model,
+    const GSModel &gs_model,
     const Optional<VisualizerGPUHandles> &viz_gpu_hdls)
 {
     bool use_rt = mgr_cfg.useRT;
@@ -628,9 +628,9 @@ Manager::Impl * Manager::Impl::make(
     }
 
     Sim::Config sim_cfg;
-    sim_cfg.numGeoms = mjx_model.numGeoms;
-    sim_cfg.numCams = mjx_model.numCams;
-    sim_cfg.numLights = mjx_model.numLights;
+    sim_cfg.numGeoms = gs_model.numGeoms;
+    sim_cfg.numCams = gs_model.numCams;
+    sim_cfg.numLights = gs_model.numLights;
     sim_cfg.useDebugCamEntity = mgr_cfg.addCamDebugGeometry;
     sim_cfg.useRT = use_rt;
 
@@ -640,11 +640,11 @@ Manager::Impl * Manager::Impl::make(
         initRenderGPUState(mgr_cfg, viz_gpu_hdls);
 
     Optional<render::RenderManager> render_mgr =
-        initRenderManager(mgr_cfg, mjx_model,
+        initRenderManager(mgr_cfg, gs_model,
                           viz_gpu_hdls, render_gpu_state);
 
     RTAssets rt_assets = loadRenderObjects(
-            mjx_model, render_mgr, use_rt);
+            gs_model, render_mgr, use_rt);
     if (render_mgr.has_value()) {
         sim_cfg.renderBridge = render_mgr->bridge();
     } else {
@@ -652,27 +652,27 @@ Manager::Impl * Manager::Impl::make(
     }
 
     int32_t *geom_types_gpu = (int32_t *)cu::allocGPU(
-        sizeof(int32_t) * mjx_model.numGeoms);
+        sizeof(int32_t) * gs_model.numGeoms);
     int32_t *geom_data_ids_gpu = (int32_t *)cu::allocGPU(
-        sizeof(int32_t) * mjx_model.numGeoms);
+        sizeof(int32_t) * gs_model.numGeoms);
     Vector3 *geom_sizes_gpu = (Vector3 *)cu::allocGPU(
-        sizeof(Vector3) * mjx_model.numGeoms);
-    float *cam_fovy = (float *)cu::allocGPU(sizeof(float) * mjx_model.numCams);
-    float *cam_zfar = (float *)cu::allocGPU(sizeof(float) * mjx_model.numCams);
-    float *cam_znear = (float *)cu::allocGPU(sizeof(float) * mjx_model.numCams);
+        sizeof(Vector3) * gs_model.numGeoms);
+    float *cam_fovy = (float *)cu::allocGPU(sizeof(float) * gs_model.numCams);
+    float *cam_zfar = (float *)cu::allocGPU(sizeof(float) * gs_model.numCams);
+    float *cam_znear = (float *)cu::allocGPU(sizeof(float) * gs_model.numCams);
 
-    REQ_CUDA(cudaMemcpy(geom_types_gpu, mjx_model.geomTypes,
-        sizeof(int32_t) * mjx_model.numGeoms, cudaMemcpyHostToDevice));
-    REQ_CUDA(cudaMemcpy(geom_data_ids_gpu, mjx_model.geomDataIDs,
-        sizeof(int32_t) * mjx_model.numGeoms, cudaMemcpyHostToDevice));
-    REQ_CUDA(cudaMemcpy(geom_sizes_gpu, mjx_model.geomSizes,
-        sizeof(Vector3) * mjx_model.numGeoms, cudaMemcpyHostToDevice));
-    REQ_CUDA(cudaMemcpy(cam_fovy, mjx_model.camFovy,
-        sizeof(float) * mjx_model.numCams, cudaMemcpyHostToDevice));
-    REQ_CUDA(cudaMemcpy(cam_znear, mjx_model.camZNear,
-        sizeof(float) * mjx_model.numCams, cudaMemcpyHostToDevice));
-    REQ_CUDA(cudaMemcpy(cam_zfar, mjx_model.camZFar,
-        sizeof(float) * mjx_model.numCams, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(geom_types_gpu, gs_model.geomTypes,
+        sizeof(int32_t) * gs_model.numGeoms, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(geom_data_ids_gpu, gs_model.geomDataIDs,
+        sizeof(int32_t) * gs_model.numGeoms, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(geom_sizes_gpu, gs_model.geomSizes,
+        sizeof(Vector3) * gs_model.numGeoms, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(cam_fovy, gs_model.camFovy,
+        sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(cam_znear, gs_model.camZNear,
+        sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(cam_zfar, gs_model.camZFar,
+        sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
 
     sim_cfg.geomTypes = geom_types_gpu;
     sim_cfg.geomDataIDs = geom_data_ids_gpu;
@@ -695,6 +695,22 @@ Manager::Impl * Manager::Impl::make(
         };
     }
 
+    std::vector<std::string> hideseek_srcs = {
+            GPU_HIDESEEK_SRC_LIST
+        };
+    const char *py_root_env = getenv("MADRONA_ROOT_PATH");
+    std::filesystem::path root_dir = py_root_env ? py_root_env : std::filesystem::current_path();
+    std::for_each(
+        hideseek_srcs.begin(), hideseek_srcs.end(),
+        [&root_dir](std::string &src) {
+            src = std::filesystem::weakly_canonical(root_dir / src).string();
+        }
+    );
+    std::vector<const char*> hideseek_srcs_cstr{};
+    for (std::string const & src : hideseek_srcs) {
+        hideseek_srcs_cstr.push_back(src.c_str());
+    }
+
     MWCudaExecutor gpu_exec({
         .worldInitPtr = world_inits.data(),
         .numWorldInitBytes = sizeof(Sim::WorldInit),
@@ -706,7 +722,7 @@ Manager::Impl * Manager::Impl::make(
         .numTaskGraphs = (uint32_t)TaskGraphID::NumGraphs,
         .numExportedBuffers = (uint32_t)ExportID::NumExports, 
     }, {
-        { GPU_HIDESEEK_SRC_LIST },
+        hideseek_srcs_cstr,
         { GPU_HIDESEEK_COMPILE_FLAGS },
         CompileConfig::OptMode::LTO,
     }, cu_ctx, render_cfg);
@@ -727,9 +743,9 @@ Manager::Impl * Manager::Impl::make(
 
     return new Impl {
         mgr_cfg,
-        mjx_model.numGeoms,
-        mjx_model.numCams,
-        mjx_model.numLights,
+        gs_model.numGeoms,
+        gs_model.numCams,
+        gs_model.numLights,
         std::move(render_gpu_state),
         std::move(render_mgr),
         std::move(gpu_exec),
@@ -738,9 +754,9 @@ Manager::Impl * Manager::Impl::make(
 }
 
 Manager::Manager(const Config &cfg,
-                 const MJXModel &mjx_model,
+                 const GSModel &gs_model,
                  Optional<VisualizerGPUHandles> viz_gpu_hdls)
-    : impl_(Impl::make(cfg, mjx_model, viz_gpu_hdls))
+    : impl_(Impl::make(cfg, gs_model, viz_gpu_hdls))
 {}
 
 Manager::~Manager() {}
