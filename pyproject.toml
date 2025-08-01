@@ -37,6 +37,7 @@ ninja.make-fallback = true
 wheel.cmake = true
 editable.verbose = true
 editable.rebuild = false
+editable.mode = "redirect"
 build.verbose = true
 install.strip = false
 search.site-packages = true
