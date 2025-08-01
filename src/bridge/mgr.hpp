@@ -55,6 +55,8 @@ struct GSModel {
     uint32_t numLights;
     uint32_t numEnabledGeomGroups;
     float *camFovy;
+    float *camZNear;
+    float *camZFar;
 };
 
 // The Manager class encapsulates the linkage between the outside training
@@ -112,6 +114,8 @@ public:
 
     MGR_EXPORT madrona::py::Tensor rgbTensor() const;
     MGR_EXPORT madrona::py::Tensor depthTensor() const;
+    MGR_EXPORT madrona::py::Tensor normalTensor() const;
+    MGR_EXPORT madrona::py::Tensor segmentationTensor() const;
 
     MGR_EXPORT uint32_t numWorlds() const;
     MGR_EXPORT uint32_t numCams() const;

@@ -136,6 +136,8 @@ struct BVHParams {
 
     void *rgbOutput;
     void *depthOutput;
+    void *normalOutput;
+    void *segmentationOutput;
     uint32_t renderOutputWidth;
     uint32_t renderOutputHeight;
 
@@ -151,8 +153,6 @@ struct BVHParams {
 
     Material *materials;
     cudaTextureObject_t *textures;
-
-    float nearSphere;
 
     // Used to determine how many thread blocks per SM.
     uint32_t numSMs;

@@ -277,10 +277,7 @@ struct DrawData {
 };
 
 struct RenderOptions {
-    uint32_t outputRGB;
-    uint32_t outputDepth;
-    uint32_t outputNormal;
-    uint32_t outputSegmentation;
+    uint32_t outputs[4];
     uint32_t enableAntialiasing;
 };
 

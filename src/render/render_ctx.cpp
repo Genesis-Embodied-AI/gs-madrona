@@ -711,7 +711,6 @@ static EngineInterop setupEngineInterop(Device &dev,
         if (!gpu_input) {
             aabb_cpu = alloc.makeStagingBuffer(num_aabb_bytes);
             aabb_hdl = aabb_cpu->buffer;
-            // instances_base = instances_cpu->ptr;
             aabb_base = malloc(sizeof(render::shader::AABB) * num_worlds * max_instances_per_world);
         } else {
 #ifdef MADRONA_VK_CUDA_SUPPORT
@@ -1534,15 +1533,15 @@ RenderContext::RenderContext(
 #endif
 
     BatchRenderer::Config br_cfg = {
-         cfg.enableBatchRenderer,
-         (RenderManager::Config::RenderMode)cfg.renderMode,
-         br_width_,
-         br_height_,
-         cfg.numWorlds,
-         cfg.maxViewsPerWorld,
-         cfg.maxInstancesPerWorld,
-         cfg.maxLightsPerWorld,
-         1
+        cfg.enableBatchRenderer,
+        (RenderManager::Config::RenderMode)cfg.renderMode,
+        br_width_,
+        br_height_,
+        cfg.numWorlds,
+        cfg.maxViewsPerWorld,
+        cfg.maxInstancesPerWorld,
+        cfg.maxLightsPerWorld,
+        1
     };
 
     batchRenderer = std::make_unique<BatchRenderer>(br_cfg, *this);

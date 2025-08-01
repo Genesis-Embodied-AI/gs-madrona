@@ -281,10 +281,12 @@ struct Manager::Impl {
     inline render::RenderOptions makeRenderOptions(const uint32_t *render_options)
     {
         return render::RenderOptions{
-            .outputRGB = static_cast<bool>(render_options[0]),
-            .outputDepth = static_cast<bool>(render_options[1]),
-            .outputNormal = static_cast<bool>(render_options[2]),
-            .outputSegmentation = static_cast<bool>(render_options[3]),
+            .outputs = {
+                static_cast<bool>(render_options[0]),
+                static_cast<bool>(render_options[1]),
+                static_cast<bool>(render_options[2]),
+                static_cast<bool>(render_options[3]),
+            },
             .enableAntialiasing = static_cast<bool>(render_options[4]),
         };
     }
@@ -310,6 +312,15 @@ struct Manager::Impl {
         renderImpl(makeRenderOptions(render_options));
     }
 
+    inline const uint8_t * getRGBOut() const
+    {
+        if (cfg.useRT) {
+            return (uint8_t *)gpuExec.getExported((uint32_t)ExportID::RaycastRGB);
+        } else {
+            return renderMgr->batchRendererRGBOut();
+        }
+    }
+
     inline const float * getDepthOut() const
     {
         if (cfg.useRT) {
@@ -319,12 +330,21 @@ struct Manager::Impl {
         }
     }
 
-    inline const uint8_t * getRGBOut() const
+    inline const uint8_t * getNormalOut() const
     {
         if (cfg.useRT) {
-            return (uint8_t *)gpuExec.getExported((uint32_t)ExportID::RaycastRGB);
+            return (uint8_t *)gpuExec.getExported((uint32_t)ExportID::RaycastNormal);
         } else {
-            return renderMgr->batchRendererRGBOut();
+            return renderMgr->batchRendererNormalOut();
+        }
+    }
+
+    inline const int32_t * getSegmentationOut() const
+    {
+        if (cfg.useRT) {
+            return (int32_t *)gpuExec.getExported((uint32_t)ExportID::RaycastSegmentation);
+        } else {
+            return renderMgr->batchRendererSegmentationOut();
         }
     }
 
@@ -629,8 +649,9 @@ Manager::Impl * Manager::Impl::make(
         sizeof(int32_t) * gs_model.numGeoms);
     Vector3 *geom_sizes_gpu = (Vector3 *)cu::allocGPU(
         sizeof(Vector3) * gs_model.numGeoms);
-    float *cam_fovy = (float * )cu::allocGPU(
-        sizeof(float) * gs_model.numCams);
+    float *cam_fovy = (float *)cu::allocGPU(sizeof(float) * gs_model.numCams);
+    float *cam_zfar = (float *)cu::allocGPU(sizeof(float) * gs_model.numCams);
+    float *cam_znear = (float *)cu::allocGPU(sizeof(float) * gs_model.numCams);
 
     REQ_CUDA(cudaMemcpy(geom_types_gpu, gs_model.geomTypes,
         sizeof(int32_t) * gs_model.numGeoms, cudaMemcpyHostToDevice));
@@ -640,11 +661,17 @@ Manager::Impl * Manager::Impl::make(
         sizeof(Vector3) * gs_model.numGeoms, cudaMemcpyHostToDevice));
     REQ_CUDA(cudaMemcpy(cam_fovy, gs_model.camFovy,
         sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(cam_znear, gs_model.camZNear,
+        sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(cam_zfar, gs_model.camZFar,
+        sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
 
     sim_cfg.geomTypes = geom_types_gpu;
     sim_cfg.geomDataIDs = geom_data_ids_gpu;
     sim_cfg.geomSizes = geom_sizes_gpu;
     sim_cfg.camFovy = cam_fovy;
+    sim_cfg.camZNear = cam_znear;
+    sim_cfg.camZFar = cam_zfar;
 
     HeapArray<Sim::WorldInit> world_inits(mgr_cfg.numWorlds);
 
@@ -657,8 +684,6 @@ Manager::Impl * Manager::Impl::make(
             .materialData = rt_assets.matData,
             .renderWidth = mgr_cfg.batchRenderViewWidth,
             .renderHeight = mgr_cfg.batchRenderViewHeight,
-            .nearPlane = 0.001f,
-            .farPlane = 1000.0f,
         };
     }
 
@@ -705,6 +730,8 @@ Manager::Impl * Manager::Impl::make(
     cu::deallocGPU(geom_data_ids_gpu);
     cu::deallocGPU(geom_sizes_gpu);
     cu::deallocGPU(cam_fovy);
+    cu::deallocGPU(cam_znear);
+    cu::deallocGPU(cam_zfar);
 
     return new Impl {
         mgr_cfg,
@@ -815,6 +842,38 @@ Tensor Manager::depthTensor() const
     }
 
     return Tensor((void *)depth_ptr, TensorElementType::Float32, {
+        impl_->cfg.numWorlds,
+        impl_->numCams,
+        impl_->cfg.batchRenderViewHeight,
+        impl_->cfg.batchRenderViewWidth,
+        1,
+    }, impl_->cfg.gpuID);
+}
+
+Tensor Manager::normalTensor() const
+{
+    const uint8_t *normal_ptr = impl_->getNormalOut();
+    if(normal_ptr == nullptr) {
+        return Tensor::none();
+    }
+
+    return Tensor((void *)normal_ptr, TensorElementType::UInt8, {
+        impl_->cfg.numWorlds,
+        impl_->numCams,
+        impl_->cfg.batchRenderViewHeight,
+        impl_->cfg.batchRenderViewWidth,
+        4,
+    }, impl_->cfg.gpuID);
+}
+
+Tensor Manager::segmentationTensor() const
+{
+    const int32_t *segmentation_ptr = impl_->getSegmentationOut();
+    if(segmentation_ptr == nullptr) {
+        return Tensor::none();
+    }
+
+    return Tensor((void *)segmentation_ptr, TensorElementType::Int32, {
         impl_->cfg.numWorlds,
         impl_->numCams,
         impl_->cfg.batchRenderViewHeight,

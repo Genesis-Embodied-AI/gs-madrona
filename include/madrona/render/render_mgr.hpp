@@ -62,6 +62,8 @@ public:
 
     const uint8_t * batchRendererRGBOut() const;
     const float * batchRendererDepthOut() const;
+    const uint8_t * batchRendererNormalOut() const;
+    const int32_t * batchRendererSegmentationOut() const;
 
 private:
     std::unique_ptr<RenderContext> rctx_;
