@@ -477,11 +477,11 @@ static PipelineMP<1> makeShadowDrawPipeline(const vk::Device &dev,
 
     // Depth/Stencil
     VkPipelineDepthStencilStateCreateInfo depth_info {};
-    depth_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depth_info.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depth_info.depthTestEnable = VK_TRUE;
     depth_info.depthWriteEnable = VK_TRUE;
     depth_info.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
-    // depth_info.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
     depth_info.depthBoundsTestEnable = VK_FALSE;
     depth_info.stencilTestEnable = VK_FALSE;
     depth_info.back.compareOp = VK_COMPARE_OP_ALWAYS;
@@ -611,16 +611,19 @@ static vk::PipelineShaders makeShaders(const vk::Device &dev,
                                        VkSampler sampler = VK_NULL_HANDLE)
 {
     (void)sampler;
+
     const char *py_root_env = getenv("MADRONA_ROOT_PATH");
     std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
     std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
+
     ShaderCompiler compiler;
     SPIRVShader spirv = compiler.compileHLSLFileToSPV(
         (shader_dir / shader_file).string().c_str(), {},
         {}, {func_name, ShaderStage::Compute });
     
     StackAlloc tmp_alloc;
-    return vk::PipelineShaders(dev, tmp_alloc, Span<const SPIRVShader>(&spirv, 1), {});
+    return vk::PipelineShaders(dev, tmp_alloc,
+                               Span<const SPIRVShader>(&spirv, 1), {});
 }
 
 static vk::PipelineShaders makeShadersLighting(const vk::Device &dev,
@@ -631,6 +634,7 @@ static vk::PipelineShaders makeShadersLighting(const vk::Device &dev,
     const char *py_root_env = getenv("MADRONA_ROOT_PATH");
     std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
     std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
+
     ShaderCompiler compiler;
     SPIRVShader spirv = compiler.compileHLSLFileToSPV(
         (shader_dir / shader_file).string().c_str(), {},
@@ -917,7 +921,6 @@ static void makeBatchFrame(vk::Device& dev,
     assert(desc_index <= num_desc_updates);
     vk::DescHelper::update(dev, desc_updates.data(), desc_index);
 
-    // cfg.renderWidth, cfg.renderHeight, depthOnly;
     HeapArray<DrawCommandPackage> draw_packages(consts::numDrawCmdBuffers);
     for (int i = 0; i < (int)consts::numDrawCmdBuffers; ++i) {
         uint32_t max_image_dim_x = std::min(consts::maxTextureDim, consts::maxNumImagesX * cfg.renderWidth);
@@ -1278,11 +1281,14 @@ static void issueDeferred(vk::Device &dev,
                                  draw_descriptors.data(),
                                  0, nullptr);
 
-    uint32_t num_workgroups_x = utils::divideRoundUp(render_dims.width, 32_u32);
-    uint32_t num_workgroups_y = utils::divideRoundUp(render_dims.height, 32_u32);
+    uint32_t num_workgroups_x = utils::divideRoundUp(
+        render_dims.width, 32_u32);
+    uint32_t num_workgroups_y = utils::divideRoundUp(
+        render_dims.height, 32_u32);
     uint32_t num_workgroups_z = total_num_views;
 
-    dev.dt.cmdDispatch(draw_cmd, num_workgroups_x, num_workgroups_y, num_workgroups_z);
+    dev.dt.cmdDispatch(
+        draw_cmd, num_workgroups_x, num_workgroups_y, num_workgroups_z);
 }
 
 static void issueShadowGen(vk::Device &dev,
@@ -1325,8 +1331,7 @@ static void issueShadowGen(vk::Device &dev,
                             &push_const);
 
     // Descriptor sets
-    dev.dt.cmdBindDescriptorSets(
-        draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+    dev.dt.cmdBindDescriptorSets(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
         pipeline.layout, 0, 1, &frame.shadowGenSet, 0, nullptr);
 
     uint32_t num_workgroups_x = utils::divideRoundUp(max_num_views, 256_u32);
@@ -1672,7 +1677,8 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
     pool_create_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
     pool_create_info.queryCount = 2;
 
-    REQ_VK(dev.dt.createQueryPool(dev.hdl, &pool_create_info, nullptr, &timeQueryPool));
+    REQ_VK(dev.dt.createQueryPool(dev.hdl, &pool_create_info, 
+                                  nullptr, &timeQueryPool));
 
     for (uint32_t i = 0; i < dev.maxViewports; ++i) {
         uint32_t x_start = i * cfg.renderWidth;
@@ -1693,8 +1699,11 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
     }
 }
 
-BatchRenderer::BatchRenderer(const Config &cfg, RenderContext &rctx)
-    : impl(std::make_unique<Impl>(cfg, rctx)), didRender(false) {}
+BatchRenderer::BatchRenderer(const Config &cfg,
+                             RenderContext &rctx)
+    : impl(std::make_unique<Impl>(cfg, rctx)),
+      didRender(false)
+{}
 
 BatchRenderer::~BatchRenderer()
 {
@@ -1778,7 +1787,8 @@ static void issuePrepareViewsPipeline(vk::Device& dev,
 
     (void)num_views;
     (void)num_processed_batches;
-    dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, prepare_views.hdls[0]);
+    dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                           prepare_views.hdls[0]);
 
     { // Dispatch the compute shader
         std::array view_gen_descriptors = {
@@ -1823,7 +1833,9 @@ static void issuePrepareViewsPipeline(vk::Device& dev,
         dev.dt.cmdPipelineBarrier(
             draw_cmd,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+           VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+               VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
+               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
             0, 0, nullptr, 1, &draw_pckg_barrier,
             0, nullptr);
     }
@@ -1974,7 +1986,8 @@ void BatchRenderer::setRenderOptions(const render::RenderOptions &render_options
     this->renderOptions = render_options;
 }
 
-void BatchRenderer::prepareForRendering(BatchRenderInfo info, EngineInterop *interop)
+void BatchRenderer::prepareForRendering(BatchRenderInfo info,
+                                        EngineInterop *interop)
 {
     // Circles between 0 to number of frames (not anymore, there is only one frame now)
     uint32_t frame_index = impl->currentFrame;
@@ -2010,7 +2023,9 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info, EngineInterop *int
 
         if (interop->lightsCPU.has_value()) {
             *interop->bridge.totalNumLights = interop->bridge.totalNumLightsCPUInc->load_acquire();
+
             info.numLights = *interop->bridge.totalNumLights;
+
             interop->bridge.totalNumLightsCPUInc->store_release(0);
 
             // First, need to perform the sorts
@@ -2048,19 +2063,23 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info, EngineInterop *int
     }
 
     { // Import the views
-        VkDeviceSize num_views_bytes = info.numViews * sizeof(shader::PackedViewData);
+        VkDeviceSize num_views_bytes = info.numViews *
+            sizeof(shader::PackedViewData);
+
         VkBufferCopy view_data_copy = {
             .srcOffset = 0, .dstOffset = 0,
             .size = num_views_bytes
         };
 
-        impl->dev.dt.cmdCopyBuffer(
-            draw_cmd, interop->viewsHdl,
-            batch_buffers.views.buffer, 1, &view_data_copy);
+       impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->viewsHdl,
+                             batch_buffers.views.buffer,
+                             1, &view_data_copy);
     }
 
     { // Import the instances
-        VkDeviceSize num_instances_bytes = info.numInstances * sizeof(shader::PackedInstanceData);
+        VkDeviceSize num_instances_bytes = info.numInstances *
+            sizeof(shader::PackedInstanceData);
+
         VkBufferCopy instance_data_copy = {
             .srcOffset = 0, .dstOffset = 0,
             .size = num_instances_bytes
@@ -2072,42 +2091,47 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info, EngineInterop *int
     }
 
     { // Import the offsets for instances
-        VkDeviceSize num_offsets_bytes = info.numWorlds * sizeof(int32_t);
+        VkDeviceSize num_offsets_bytes = info.numWorlds *
+            sizeof(int32_t);
+
         VkBufferCopy offsets_data_copy = {
             .srcOffset = 0, .dstOffset = 0,
             .size = num_offsets_bytes
         };
 
-        impl->dev.dt.cmdCopyBuffer(
-            draw_cmd, interop->instanceOffsetsHdl,
-            batch_buffers.instanceOffsets.buffer, 1, &offsets_data_copy);
+        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->instanceOffsetsHdl,
+                             batch_buffers.instanceOffsets.buffer,
+                             1, &offsets_data_copy);
     }
 
 #if 0
     { // Import the aabbs for instances
-        VkDeviceSize num_aabbs_bytes = info.numInstances * sizeof(shader::AABB);
+        VkDeviceSize num_aabbs_bytes = info.numInstances *
+            sizeof(shader::AABB);
 
         VkBufferCopy aabb_data_copy = {
             .srcOffset = 0, .dstOffset = 0,
             .size = num_aabbs_bytes
         };
 
-        impl->dev.dt.cmdCopyBuffer(
-            draw_cmd, interop->aabbHdl, batch_buffers.aabbs.buffer, 1, &aabb_data_copy);
+        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->aabbHdl,
+                             batch_buffers.aabbs.buffer,
+                             1, &aabb_data_copy);
     }
 #endif
 
     { // Import the offsets for views
-        VkDeviceSize num_offsets_bytes = info.numWorlds * sizeof(int32_t);
+        VkDeviceSize num_offsets_bytes = info.numWorlds *
+            sizeof(int32_t);
 
         VkBufferCopy offsets_data_copy = {
             .srcOffset = 0, .dstOffset = 0,
             .size = num_offsets_bytes
         };
 
-        impl->dev.dt.cmdCopyBuffer(
-            draw_cmd, interop->viewOffsetsHdl,
-            batch_buffers.viewOffsets.buffer, 1, &offsets_data_copy);
+        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->viewOffsetsHdl,
+                             batch_buffers.viewOffsets.buffer,
+                             1, &offsets_data_copy);
     }
 
     REQ_VK(impl->dev.dt.endCommandBuffer(draw_cmd));
@@ -2160,12 +2184,17 @@ static void packSky( const vk::Device &dev,
     data->bottomRadius = 6360.0f / 2.0f;
     data->topRadius = 6420.0f / 2.0f;
 
-    data->rayleighDensity.layers[0] = render::shader::DensityLayer { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, {} };
-    data->rayleighDensity.layers[1] = render::shader::DensityLayer { 0.0f, 1.0f, -0.125f, 0.0f, 0.0f, {} };
-    data->rayleighScatteringCoef = math::Vector4{0.005802f, 0.013558f, 0.033100f, 0.0f};
+    data->rayleighDensity.layers[0] =
+        render::shader::DensityLayer { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, {} };
+    data->rayleighDensity.layers[1] =
+        render::shader::DensityLayer { 0.0f, 1.0f, -0.125f, 0.0f, 0.0f, {} };
+    data->rayleighScatteringCoef =
+        math::Vector4{0.005802f, 0.013558f, 0.033100f, 0.0f};
 
-    data->mieDensity.layers[0] = render::shader::DensityLayer { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, {} };
-    data->mieDensity.layers[1] = render::shader::DensityLayer { 0.0f, 1.0f, -0.833333f, 0.0f, 0.0f, {} };
+    data->mieDensity.layers[0] =
+        render::shader::DensityLayer { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, {} };
+    data->mieDensity.layers[1] =
+        render::shader::DensityLayer { 0.0f, 1.0f, -0.833333f, 0.0f, 0.0f, {} };
     data->mieScatteringCoef = math::Vector4{0.003996f, 0.003996f, 0.003996f, 0.0f};
     data->mieExtinctionCoef = math::Vector4{0.004440f, 0.004440f, 0.004440f, 0.0f};
 
@@ -2175,11 +2204,14 @@ static void packSky( const vk::Device &dev,
         render::shader::DensityLayer { 25.000000f, 0.000000f, 0.000000f, 0.066667f, -0.666667f, {} };
     data->absorptionDensity.layers[1] =
         render::shader::DensityLayer { 0.000000f, 0.000000f, 0.000000f, -0.066667f, 2.666667f, {} };
-    data->absorptionExtinctionCoef = math::Vector4{0.000650f, 0.001881f, 0.000085f, 0.0f};
+    data->absorptionExtinctionCoef =
+        math::Vector4{0.000650f, 0.001881f, 0.000085f, 0.0f};
     data->groundAlbedo = math::Vector4{0.050000f, 0.050000f, 0.050000f, 0.0f};
     data->muSunMin = -0.207912f;
-    data->wPlanetCenter = math::Vector4{0.0f, 0.0f, -data->bottomRadius, 0.0f};
-    data->sunSize = math::Vector4{0.0046750340586467079f, 0.99998907220740285f, 0.0f, 0.0f};
+    data->wPlanetCenter =
+      math::Vector4{0.0f, 0.0f, -data->bottomRadius, 0.0f};
+    data->sunSize = math::Vector4{
+            0.0046750340586467079f, 0.99998907220740285f, 0.0f, 0.0f};
 
     staging.flush(dev);
 }
@@ -2209,7 +2241,9 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
         // If we have a CPU backend, we need to import the lights and light offsets
         if (interop->lightsCPU.has_value()) {
             *interop->bridge.totalNumLights = interop->bridge.totalNumLightsCPUInc->load_acquire();
+
             info.numLights = *interop->bridge.totalNumLights;
+
             interop->bridge.totalNumLightsCPUInc->store_release(0);
 
             // First, need to perform the sorts
@@ -2236,31 +2270,35 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
     }
 
     impl->dev.dt.cmdResetQueryPool(draw_cmd, impl->timeQueryPool, 0, 2);
-    impl->dev.dt.cmdWriteTimestamp(draw_cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, impl->timeQueryPool, 0);
+
+    impl->dev.dt.cmdWriteTimestamp(draw_cmd, 
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, impl->timeQueryPool, 0);
 
     ////////////////////////////////////////////////////////////////
     { // Import the lights
-        VkDeviceSize num_lights_bytes = info.numLights * sizeof(shader::PackedLightData);
+        VkDeviceSize num_lights_bytes = info.numLights *
+            sizeof(shader::PackedLightData);
         VkBufferCopy lights_data_copy = {
             .srcOffset = 0,
             .dstOffset = 0,
             .size = num_lights_bytes
         };
-        impl->dev.dt.cmdCopyBuffer(
-            draw_cmd, interop->lightsHdl,
-            frame_data.buffers.lights.buffer, 1, &lights_data_copy);
+        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->lightsHdl,
+                             frame_data.buffers.lights.buffer,
+                             1, &lights_data_copy);
     }
 
     { // Import the light offsets
-        VkDeviceSize num_offsets_bytes = info.numWorlds * sizeof(int32_t);
+        VkDeviceSize num_offsets_bytes = info.numWorlds *
+            sizeof(int32_t);
         VkBufferCopy offsets_data_copy = {
             .srcOffset = 0,
             .dstOffset = 0,
             .size = num_offsets_bytes
         };
-        impl->dev.dt.cmdCopyBuffer(
-            draw_cmd, interop->lightOffsetsHdl,
-            frame_data.buffers.lightOffsets.buffer, 1, &offsets_data_copy);
+        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->lightOffsetsHdl,
+                             frame_data.buffers.lightOffsets.buffer,
+                             1, &offsets_data_copy);
     }
 
     { // Import sky information first
@@ -2270,9 +2308,9 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
             .dstOffset = 0,
             .size = sizeof(render::shader::SkyData)
         };
-        impl->dev.dt.cmdCopyBuffer(
-            draw_cmd, frame_data.skyInputStaging.buffer,
-            frame_data.skyInput.buffer, 1, &sky_copy);
+        impl->dev.dt.cmdCopyBuffer(draw_cmd, frame_data.skyInputStaging.buffer,
+                             frame_data.skyInput.buffer,
+                             1, &sky_copy);
     }
     
     {
@@ -2282,57 +2320,64 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
             .dstOffset = 0,
             .size = sizeof(render::shader::RenderOptions)
         };
-        impl->dev.dt.cmdCopyBuffer(
-            draw_cmd, frame_data.renderOptionsStagingBuffer.buffer,
-            frame_data.renderOptionsBuffer.buffer, 1, &render_options_copy);
+        impl->dev.dt.cmdCopyBuffer(draw_cmd, frame_data.renderOptionsStagingBuffer.buffer,
+                             frame_data.renderOptionsBuffer.buffer,
+                             1, &render_options_copy);
     }
 
     { // Prepare memory written to by ECS with barrier
         std::array barriers = {
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.buffers.views.buffer,
                 0, VK_WHOLE_SIZE
             },
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.buffers.instances.buffer,
                 0, VK_WHOLE_SIZE
             },
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.buffers.instanceOffsets.buffer,
                 0, VK_WHOLE_SIZE
             },
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.skyInput.buffer,
                 0, VK_WHOLE_SIZE
             },
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.renderOptionsBuffer.buffer,
                 0, VK_WHOLE_SIZE
             },
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.buffers.lights.buffer,
                 0, VK_WHOLE_SIZE
             },
             VkBufferMemoryBarrier{
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                nullptr,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                 VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                 frame_data.buffers.lightOffsets.buffer,
@@ -2348,6 +2393,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
 
         for (int i = 0; i < (int)consts::numDrawCmdBuffers; ++i) {
             auto &draw_pckg = frame_data.drawPackageSwapchain[i];
+
             impl->dev.dt.cmdFillBuffer(draw_cmd, draw_pckg.drawBuffer.buffer, 
                 0, sizeof(uint32_t) * draw_pckg.numDrawCounts, 0);
         }
@@ -2363,9 +2409,12 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-    issueShadowGen(
-        impl->dev, impl->shadowGen, frame_data, draw_cmd,
-        impl->maxNumViews, info.numLights / info.numWorlds);
+    issueShadowGen(impl->dev,
+                    impl->shadowGen,
+                    frame_data,
+                    draw_cmd,
+                    impl->maxNumViews,
+                    info.numLights / info.numWorlds);
 
     uint32_t num_processed_views = 0;
 
@@ -2445,13 +2494,17 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
         frame_data.targets[0].viewWidth,
         frame_data.targets[0].viewHeight);
 
-    impl->dev.dt.cmdWriteTimestamp(
-        draw_cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, impl->timeQueryPool, 1);
+    impl->dev.dt.cmdWriteTimestamp(draw_cmd, 
+                                   VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                                   impl->timeQueryPool,
+                                   1);
 
     // End the command buffer and stuff
     REQ_VK(impl->dev.dt.endCommandBuffer(draw_cmd));
 
-    VkPipelineStageFlags prepare_wait_flag = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    VkPipelineStageFlags prepare_wait_flag =
+        VK_PIPELINE_STAGE_TRANSFER_BIT;
+
     VkSubmitInfo submit_info = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .pNext = nullptr,
@@ -2466,9 +2519,11 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
 
     REQ_VK(impl->dev.dt.resetFences(impl->dev.hdl, 1, &frame_data.renderFence));
     REQ_VK(impl->dev.dt.queueSubmit(impl->renderQueue, 1, &submit_info, frame_data.renderFence));
+
     REQ_VK(impl->dev.dt.deviceWaitIdle(impl->dev.hdl));
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+
     double duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
     float duration_ms = (float)(duration / 1000000.0);
 

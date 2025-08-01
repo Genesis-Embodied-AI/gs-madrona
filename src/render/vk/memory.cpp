@@ -62,12 +62,6 @@ static constexpr VkImageUsageFlags depthAttachmentUsage =
     VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
     VK_IMAGE_USAGE_SAMPLED_BIT;
 
-// static constexpr VkImageUsageFlags normalAttachmentUsage =
-//     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
-
-// static constexpr VkImageUsageFlags segmentationAttachmentUsage =
-//     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
-
 #if 0
 static constexpr VkImageUsageFlags rtStorageUsage =
     VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -860,7 +854,9 @@ LocalImage MemoryAllocator::makeAttachment(
     );
 }
 
-LocalImage MemoryAllocator::makeConversionImage(uint32_t width, uint32_t height, VkFormat fmt)
+LocalImage MemoryAllocator::makeConversionImage(uint32_t width,
+                                                uint32_t height,
+                                                VkFormat fmt)
 {
     return makeDedicatedImage(width, height, 1, 1,
                               fmt,
