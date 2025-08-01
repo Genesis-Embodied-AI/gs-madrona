@@ -616,7 +616,8 @@ static vk::PipelineShaders makeShaders(const vk::Device &dev,
         {}, {func_name, ShaderStage::Compute });
     
     StackAlloc tmp_alloc;
-    return vk::PipelineShaders(dev, tmp_alloc, Span<const SPIRVShader>(&spirv, 1), {});
+    return vk::PipelineShaders(dev, tmp_alloc,
+                               Span<const SPIRVShader>(&spirv, 1), {});
 }
 
 static vk::PipelineShaders makeShadersLighting(const vk::Device &dev,
