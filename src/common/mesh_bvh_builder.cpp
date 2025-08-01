@@ -272,9 +272,7 @@ MeshBVH MeshBVHBuilder::build(
             assert(vert_idx + offsets[mesh_idx] < vertices.size());
 
 #ifdef MADRONA_COMPRESSED_DEINDEXED_TEX
-            vertices[vert_idx + offsets[mesh_idx]] = MeshBVH::BVHVertex{
-                .pos=v1, .uv=uv, .normal=normal, .tangentAndSign=tangentAndSign
-            };
+            vertices[vert_idx + offsets[mesh_idx]] = MeshBVH::BVHVertex{.pos=v1,.uv=uv,.normal=normal,.tangentAndSign=tangentAndSign};
 #else
             vertices[vert_idx + offsets[mesh_idx]] = MeshBVH::BVHVertex{.pos=v1};
 #endif

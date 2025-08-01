@@ -178,7 +178,6 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
                                                    uint32_t max_num_views,
                                                    const vk::Device &dev,
                                                    vk::MemoryAllocator &alloc)
-                                                //    bool depth_only)
 {
     uint32_t shadow_map_size = getShadowMapSize(width, height);
     uint32_t max_image_dim_x = std::min(consts::maxTextureDim, consts::maxNumImagesX * width);

@@ -47,12 +47,17 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     if (cfg.useDebugCamEntity) {
         registry.registerArchetype<DebugCameraEntity>();
 
-        registry.exportColumn<DebugCameraEntity, Position>((uint32_t)ExportID::CameraPositions);
-        registry.exportColumn<DebugCameraEntity, Rotation>((uint32_t)ExportID::CameraRotations);
+        registry.exportColumn<DebugCameraEntity, Position>(
+            (uint32_t)ExportID::CameraPositions);
+        registry.exportColumn<DebugCameraEntity, Rotation>(
+            (uint32_t)ExportID::CameraRotations);
     } else {
         registry.registerArchetype<CameraEntity>();
-        registry.exportColumn<CameraEntity, Position>((uint32_t)ExportID::CameraPositions);
-        registry.exportColumn<CameraEntity, Rotation>((uint32_t)ExportID::CameraRotations);
+
+        registry.exportColumn<CameraEntity, Position>(
+            (uint32_t)ExportID::CameraPositions);
+        registry.exportColumn<CameraEntity, Rotation>(
+            (uint32_t)ExportID::CameraRotations);
     }
 
     if (cfg.useRT) {
