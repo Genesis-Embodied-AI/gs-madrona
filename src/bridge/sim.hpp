@@ -30,6 +30,7 @@ enum class ExportID : uint32_t {
     LightTypes,
     LightShadows,
     LightCutoffAngles,
+    LightAttenuations,
     LightIntensities,
     NumExports,
 };

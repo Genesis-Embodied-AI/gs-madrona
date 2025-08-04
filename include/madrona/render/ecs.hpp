@@ -76,6 +76,9 @@ struct alignas(16) LightDesc {
     // Angle for the spotlight (default to pi/4).
     float cutoffAngle;
 
+    // Attenuation factor (default to 0.1).
+    float attenuation;
+
     // Intensity of the light. (1.f is default)
     float intensity;
 
@@ -94,7 +97,7 @@ struct alignas(16) LightDesc {
     uint8_t active;
 
     uint8_t padding1 = 0;
-    float padding2[2] = {0.f, 0.f};
+    float padding2 = 0.f;
 };
 
 struct LightDescDirection : math::Vector3 {
@@ -113,6 +116,10 @@ struct LightDescShadow {
 
 struct LightDescCutoffAngle {
     float cutoffAngle;
+};
+
+struct LightDescAttenuation {
+    float attenuation;
 };
 
 struct LightDescIntensity {

@@ -133,6 +133,15 @@ void vert(in uint vid : SV_VertexID,
     }
 }
 
+float calculateLightAttenuating(ShaderLightData light, float3 worldPos) {
+    if (light.isDirectional) { // Directional light
+        return 1.0f;
+    } else { // Spot light
+        float d = length(worldPos.xyz - light.position.xyz);
+        return 1.0f / (1.0f + light.attenuation * d * d);
+    }
+}
+
 float3 calculateRayDirection(ShaderLightData light, float3 worldPos) {
     if (light.isDirectional) { // Directional light
         return normalize(light.direction.xyz);
@@ -298,7 +307,8 @@ PixelOutput frag(in V2F v2f, in uint prim_id : SV_PrimitiveID)
                 }
 
                 float n_dot_l = max(0.0, dot(normal, -ray_dir));
-                totalLighting += hexToRgb(light.color).rgb * n_dot_l * light.intensity;
+                float attenuating_factor = calculateLightAttenuating(light, v2f.worldPos);
+                totalLighting += attenuating_factor * hexToRgb(light.color).rgb * n_dot_l * light.intensity;
 
                 // Apply shadow to the shadowed light. Only support one shadow per view for now. 
                 if (i == shadowViewDataBuffer[v2f.viewIdx].lightIdx) {

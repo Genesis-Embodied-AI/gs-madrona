@@ -215,6 +215,7 @@ struct ShaderLightData {
     float3 direction;
     uint32_t color;
     float cutoffAngle;
+    float attenuation;
     float intensity;
     uint32_t isDirectional;
     uint32_t castShadow;

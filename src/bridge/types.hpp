@@ -50,6 +50,7 @@ struct LightEntity : public madrona::Archetype<
     madrona::render::LightDescType,
     madrona::render::LightDescShadow,
     madrona::render::LightDescCutoffAngle,
+    madrona::render::LightDescAttenuation,
     madrona::render::LightDescIntensity,
     madrona::render::LightDescActive,
     madrona::render::LightCarrier

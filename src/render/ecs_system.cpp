@@ -192,6 +192,7 @@ inline void lightUpdate(Context &ctx,
                         const LightDescType &type,
                         const LightDescShadow &shadow,
                         const LightDescCutoffAngle &angle,
+                        const LightDescAttenuation &attenuation,
                         const LightDescIntensity &intensity,
                         const LightDescActive &active,
                         LightCarrier &carrier)
@@ -217,6 +218,7 @@ inline void lightUpdate(Context &ctx,
     desc.direction = dir;
     desc.color = color.color;
     desc.cutoffAngle = angle.cutoffAngle;
+    desc.attenuation = attenuation.attenuation;
     desc.intensity = intensity.intensity;
     desc.active = active.active;
 }
@@ -449,6 +451,7 @@ void registerTypes(ECSRegistry &registry,
     registry.registerComponent<LightDescType>();
     registry.registerComponent<LightDescShadow>();
     registry.registerComponent<LightDescCutoffAngle>();
+    registry.registerComponent<LightDescAttenuation>();
     registry.registerComponent<LightDescIntensity>();
     registry.registerComponent<LightDescActive>();
     registry.registerComponent<LightCarrier>();
@@ -569,6 +572,7 @@ TaskGraphNodeID setupTasks(TaskGraphBuilder &builder,
                 LightDescType,
                 LightDescShadow,
                 LightDescCutoffAngle,
+                LightDescAttenuation,
                 LightDescIntensity,
                 LightDescActive,
                 LightCarrier
@@ -779,6 +783,7 @@ void makeEntityLightCarrier(Context &ctx, Entity e)
         .direction = ctx.get<LightDescDirection>(e),
         .color = ctx.get<ColorOverride>(e).color,
         .cutoffAngle = ctx.get<LightDescCutoffAngle>(e).cutoffAngle,
+        .attenuation = ctx.get<LightDescAttenuation>(e).attenuation,
         .intensity = ctx.get<LightDescIntensity>(e).intensity,
         .type = ctx.get<LightDescType>(e).type,
         .castShadow = ctx.get<LightDescShadow>(e).castShadow,

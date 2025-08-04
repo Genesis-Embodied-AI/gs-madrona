@@ -91,8 +91,9 @@ ShaderLightData unpackLightData(PackedLightData packed)
     o.direction = float3(d0.w, d1.xy);
     o.color = asuint(d1.z);
     o.cutoffAngle = d1.w;
-    o.intensity = d2.x;
-    const uint32_t rest = asuint(d2.y);
+    o.attenuation = d2.x;
+    o.intensity = d2.y;
+    const uint32_t rest = asuint(d2.z);
     o.isDirectional = (rest & 0xFF) != 0;
     o.castShadow = (rest & 0xFF00) != 0;
     o.active = (rest & 0xFF0000) != 0;

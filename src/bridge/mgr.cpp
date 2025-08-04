@@ -186,6 +186,7 @@ struct Manager::Impl {
         bool *light_isdir,
         bool *light_castshadow,
         float *light_cutoff,
+        float *light_attenuation,
         float *light_intensity,
         cudaStream_t strm)
     {
@@ -237,6 +238,11 @@ struct Manager::Impl {
             sizeof(float) * numLights * cfg.numWorlds,
             cudaMemcpyDeviceToDevice, strm);
         cudaMemcpyAsync(
+            gpuExec.getExported((CountT)ExportID::LightAttenuations),
+            light_attenuation,
+            sizeof(float) * numLights * cfg.numWorlds,
+            cudaMemcpyDeviceToDevice, strm);
+        cudaMemcpyAsync(
             gpuExec.getExported((CountT)ExportID::LightIntensities),
             light_intensity,
             sizeof(float) * numLights * cfg.numWorlds,
@@ -256,6 +262,7 @@ struct Manager::Impl {
                      const bool *light_isdir,
                      const bool *light_castshadow,
                      const float *light_cutoff,
+                     const float *light_attenuation,
                      const float *light_intensity)
     {
         MWCudaLaunchGraph init_graph =
@@ -281,6 +288,7 @@ struct Manager::Impl {
             const_cast<bool *>(light_isdir),
             const_cast<bool *>(light_castshadow),
             const_cast<float *>(light_cutoff),
+            const_cast<float *>(light_attenuation),
             const_cast<float *>(light_intensity), 0);
 
         gpuExec.run(render_init_graph);
@@ -379,12 +387,15 @@ static RTAssets loadRenderObjects(
 
     std::array<std::string, 1> render_asset_paths;
     const char *py_root_env = getenv("MADRONA_ROOT_PATH");
-    std::filesystem::path data_dir = py_root_env ? (std::string(py_root_env) + "/data") : DATA_DIR;
+    std::filesystem::path data_dir = py_root_env ? (std::string(py_root_env) + "/src/data") : DATA_DIR;
     render_asset_paths[(size_t)RenderPrimObjectIDs::DebugCam] = (data_dir / "debugcam.obj").string();
 
     std::array<const char *, render_asset_paths.size()> render_asset_cstrs;
     for (size_t i = 0; i < render_asset_paths.size(); i++) {
         render_asset_cstrs[i] = render_asset_paths[i].c_str();
+
+        printf("%s\n", render_asset_cstrs[i]);
+
     }
 
     AssetImporter asset_importer;
@@ -767,12 +778,13 @@ void Manager::init(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
                    const math::Diag3x3 *geom_sizes, const math::Vector3 *light_pos,
                    const math::Vector3 *light_dir, const uint32_t *light_rgb,
                    const bool *light_isdir, const bool *light_castshadow,
-                   const float *light_cutoff, const float *light_intensity)
+                   const float *light_cutoff, const float *light_attenuation,
+                   const float *light_intensity)
 {
     impl_->init(
         geom_pos, geom_rot, cam_pos, cam_rot, mat_ids, geom_rgb, geom_sizes,
         light_pos, light_dir, light_rgb, light_isdir, light_castshadow, 
-        light_cutoff, light_intensity);
+        light_cutoff, light_attenuation, light_intensity);
 }
 
 void Manager::render(const math::Vector3 *geom_pos, const math::Quat *geom_rot,

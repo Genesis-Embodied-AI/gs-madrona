@@ -43,6 +43,8 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
         (uint32_t)ExportID::LightShadows);
     registry.exportColumn<LightEntity, render::LightDescCutoffAngle>(
         (uint32_t)ExportID::LightCutoffAngles);
+    registry.exportColumn<LightEntity, render::LightDescAttenuation>(
+        (uint32_t)ExportID::LightAttenuations);
     registry.exportColumn<LightEntity, render::LightDescIntensity>(
         (uint32_t)ExportID::LightIntensities);
      
@@ -183,11 +185,13 @@ Sim::Sim(Engine &ctx,
         Entity light = ctx.makeEntity<LightEntity>();
 
         ctx.get<Position>(light) = Vector3::zero();
-        ctx.get<render::LightDescDirection>(light) = Vector3{-1.f, -1.f, -1.8f};
+        ctx.get<render::LightDescDirection>(light) = Vector3{0.f, 0.f, -1.0f};
         ctx.get<ColorOverride>(light) = ColorOverride { 0 };
         ctx.get<render::LightDescType>(light).type = render::LightDesc::Type::Directional;
         ctx.get<render::LightDescShadow>(light).castShadow = false;
-        ctx.get<render::LightDescIntensity>(light).intensity = 3.f;
+        ctx.get<render::LightDescCutoffAngle>(light).cutoffAngle = 3.14f;
+        ctx.get<render::LightDescAttenuation>(light).attenuation = 0.1f;
+        ctx.get<render::LightDescIntensity>(light).intensity = 1.f;
         ctx.get<render::LightDescActive>(light).active = true;
 
         RenderingSystem::makeEntityLightCarrier(ctx, light);

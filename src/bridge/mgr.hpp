@@ -96,6 +96,7 @@ public:
                          const bool *light_isdir,
                          const bool *light_castshadow,
                          const float *light_cutoff,
+                         const float *light_attenuation,
                          const float *light_intensity);
     
 
