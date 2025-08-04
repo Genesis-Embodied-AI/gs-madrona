@@ -940,7 +940,7 @@ static __device__ FragmentResult computeFragment(
 
             // Make sure the surface is actually pointing to the light
             // when casting shadow.
-            if (light.castShadow) {
+            if (!light.castShadow) {
                 if (ray_dir.dot(first_hit.normal) < 0.f) {
                     // TODO: Definitely do some sort of ray fetching because there will
                     // be threads doing nothing potentially.
