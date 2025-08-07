@@ -195,9 +195,9 @@ class MadronaBatchRendererAdapter:
         )
         rgb_torch = self.madrona.rgb_tensor().to_torch()
         depth_torch = self.madrona.depth_tensor().to_torch()
-        normal_torch = self.madrona.normal_tensor().to_torch()
         segmentation_torch = self.madrona.segmentation_tensor().to_torch()
-        return rgb_torch, depth_torch, normal_torch, segmentation_torch
+        normal_torch = self.madrona.normal_tensor().to_torch()
+        return rgb_torch, depth_torch, segmentation_torch, normal_torch 
 
     def get_material_data(self, rigid):
         n_vgeom = rigid.n_vgeoms

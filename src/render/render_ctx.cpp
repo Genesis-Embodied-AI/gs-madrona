@@ -2064,29 +2064,22 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
                 Vector3 e1 = v2 - v0;
 
                 Vector3 face_normal = cross(e0, e1);
-                float face_len = face_normal.length();
 
-                if (face_len == 0.f) {
-                    // Degenerate triangle
-                    face_normal = math::up;
-                } else {
-                    face_normal /= face_len;
-                }
-
-                new_normals[i0] += face_normal;
+                new_normals[i0] += face_normal;     // align with pyrender
                 new_normals[i1] += face_normal;
                 new_normals[i2] += face_normal;
             }
 
             for (int64_t vert_idx = 0; vert_idx < num_mesh_verts;
                     vert_idx++) {
-                new_normals[vert_idx] =
-                    normalize(new_normals[vert_idx]);
+                if (new_normals[vert_idx].length() == 0.f) {
+                    new_normals[vert_idx] = math::up;
+                } else {
+                    new_normals[vert_idx] = normalize(new_normals[vert_idx]);
+                }
             }
 
             for (int32_t i = 0; i < num_mesh_verts; i++) {
-                // printf("%u ", vert_mat_index);
-
                 Vector3 pos = mesh.positions[i];
                 Vector3 normal = new_normals[i];
                 if(mesh.normals) {
