@@ -14,7 +14,7 @@ It is a renderer used in Genesis to provide native support of batched processing
 
 At present, batch rendering supports only basic materials, lighting, and shadows. However, we aim to expand its capabilities to include more advanced rendering features.
 
-While gs-madrona currently relies on Genesis-specific dependencies, we plan to decouple it in the near future to support broader use cases through a more generic interface.
+While gs-madrona currently depends on Genesis, we plan to decouple it in the near future to support broader use cases through a more generic interface.
 
 ## Features Added Since Fork
 - Support for non-square resolutions
@@ -78,11 +78,14 @@ pip install gs-madrona
 ```
 
 ### Build from source
+Please first install CUDA toolkit (>= 12.4) following the [official instructions](https://developer.nvidia.com/cuda-toolkit-archive).
 ```sh
 git clone --recurse-submodules https://github.com/Genesis-Embodied-AI/gs-madrona.git
 cd gs-madrona
-pip install .
+pip install --no-build-isolation -Cbuild-dir=build -v -e .
 ```
+
+Make sure that the version of `torch` installed on your system that has been pre-compiled against a version of CUDA Toolkit that is equal or newer than the one available on your system. Otherwise, gs-madrona will crash at import (segmentation fault). Please follow the [official instructions](https://pytorch.org/get-started/locally/).
 
 ### Testing (Optional)
 1. Clone Genesis Simulator repository if not already done

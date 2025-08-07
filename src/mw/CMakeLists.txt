@@ -28,7 +28,6 @@ target_link_libraries(madrona_mw_gpu
         madrona_hdrs madrona_cuda
     PRIVATE
         madrona_mw_core madrona_json
-        CUDA::nvrtc_static
         CUDA::nvJitLink  # FIXME: CUDA::nvJitLink_static
 )
 
