@@ -290,7 +290,7 @@ PixelOutput frag(in V2F v2f, in uint prim_id : SV_PrimitiveID)
                         linearSampler, v2f.uv);
             }
 
-            float3 totalLighting = 0.f;
+            float3 totalLighting = float3(0.f, 0.f, 0.f);
             uint numLights = pushConst.numLights;
             float shadowFactor = shadowFactorVSM(v2f.worldPos, v2f.viewIdx);
 

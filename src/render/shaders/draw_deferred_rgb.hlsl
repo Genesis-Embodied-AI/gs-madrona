@@ -7,7 +7,7 @@ DeferredLightingPushConstBR pushConst;
 
 // This is an array of all the textures
 [[vk::binding(0, 0)]]
-RWTexture2DArray<float4> rgbInBuffer[];
+Texture2D<float4> rgbInBuffer[];
 
 [[vk::binding(1, 0)]]
 Texture2D<float> depthInBuffer[];
@@ -16,7 +16,7 @@ Texture2D<float> depthInBuffer[];
 Texture2D<float4> normalInBuffer[];
 
 [[vk::binding(3, 0)]]
-RWTexture2DArray<int> segmentationInBuffer[];
+Texture2D<int> segmentationInBuffer[];
 
 
 [[vk::binding(4, 0)]]
@@ -86,7 +86,7 @@ uint32_t linearToSRGB8(float3 rgb)
     return float3ToUint32(srgb);
 }
 
-float3 getPixelOffset(uint view_idx) {
+uint3 getPixelOffset(uint view_idx) {
     uint num_views_per_image = pushConst.maxImagesXPerTarget * 
                                pushConst.maxImagesYPerTarget;
 
@@ -97,10 +97,10 @@ float3 getPixelOffset(uint view_idx) {
     uint target_view_idx_x = target_view_idx % pushConst.maxImagesXPerTarget;
     uint target_view_idx_y = target_view_idx / pushConst.maxImagesXPerTarget;
 
-    float x_pixel_offset = target_view_idx_x * pushConst.viewWidth;
-    float y_pixel_offset = target_view_idx_y * pushConst.viewHeight;
+    uint x_pixel_offset = target_view_idx_x * pushConst.viewWidth;
+    uint y_pixel_offset = target_view_idx_y * pushConst.viewHeight;
 
-    return float3(x_pixel_offset, y_pixel_offset, target_idx);
+    return uint3(x_pixel_offset, y_pixel_offset, target_idx);
 }
 
 // idx.x is the x coordinate of the image
@@ -111,14 +111,14 @@ float3 getPixelOffset(uint view_idx) {
 void lighting(uint3 idx : SV_DispatchThreadID)
 {
     uint view_idx = idx.z;
-    float3 pixel_offset = getPixelOffset(view_idx);
+    uint3 pixel_offset = getPixelOffset(view_idx);
 #if 1
     uint something = 0;
     something += engineInstanceBuffer[0].data[0].x;
     something += instanceOffsets[0];
     something += viewDataBuffer[0].data[0].x;
 
-    pixel_offset.x += float(min(0, something)) * 0.000000001;
+    pixel_offset.x += uint(min(0, something)) * 1;
 #endif
 
     uint target_idx = pixel_offset.z;
@@ -127,13 +127,12 @@ void lighting(uint3 idx : SV_DispatchThreadID)
         return;
     }
 
-    uint3 vbuffer_pixel = uint3(idx.x, idx.y, 0);
     uint32_t out_pixel_idx =
         view_idx * pushConst.viewWidth * pushConst.viewHeight +
         idx.y * pushConst.viewWidth + idx.x;
 
     if (renderOptionsBuffer[0].outputs[0]) {    // RGB
-        float4 color = rgbInBuffer[target_idx][vbuffer_pixel + uint3(pixel_offset.xy, 0)];
+        float4 color = rgbInBuffer[target_idx][idx.xy + pixel_offset.xy];
         float3 out_color = color.rgb;
         rgbOutputBuffer[out_pixel_idx] = linearToSRGB8(out_color); 
     }
@@ -141,9 +140,7 @@ void lighting(uint3 idx : SV_DispatchThreadID)
     if (renderOptionsBuffer[0].outputs[1]) {    // Depth
         uint2 depth_dim;
         depthInBuffer[target_idx].GetDimensions(depth_dim.x, depth_dim.y);
-        float2 depth_uv = float2(vbuffer_pixel.x + pixel_offset.x + 0.5, 
-                                 vbuffer_pixel.y + pixel_offset.y + 0.5) / 
-                        float2(depth_dim.x, depth_dim.y);
+        float2 depth_uv = (float2(idx.xy) + float2(pixel_offset.xy) + 0.5) / float2(depth_dim.xy);
 
         float depth_in = depthInBuffer[target_idx].SampleLevel(
                          linearSampler, depth_uv, 0).x;
@@ -157,17 +154,14 @@ void lighting(uint3 idx : SV_DispatchThreadID)
         uint2 normal_dim;
         normalInBuffer[target_idx].GetDimensions(normal_dim.x, normal_dim.y);
 
-        float2 normal_uv = (float2(vbuffer_pixel.xy) + float2(pixel_offset.xy) + 0.5) /
-                            float2(normal_dim.xy);
+        float2 normal_uv = (float2(idx.xy) + float2(pixel_offset.xy) + 0.5) / float2(normal_dim.xy);
         float3 normal_in = normalInBuffer[target_idx].SampleLevel(
                            linearSampler, normal_uv, 0).xyz;
         normalOutputBuffer[out_pixel_idx] = float3ToUint32(normal_in);
     }
     
     if (renderOptionsBuffer[0].outputs[3]) {    // Segmentation
-        int out_segmentation = segmentationInBuffer[target_idx][
-            vbuffer_pixel + uint3(pixel_offset.xy, 0)
-        ];
+        int out_segmentation = segmentationInBuffer[target_idx][idx.xy + pixel_offset.xy];
         segmentationOutputBuffer[out_pixel_idx] = out_segmentation;
     }
 }

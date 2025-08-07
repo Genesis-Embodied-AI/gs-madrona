@@ -36,7 +36,7 @@ inline constexpr VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
 
 inline constexpr uint32_t componentBytes[maxComponents] = {
     4,  // VK_FORMAT_R8G8B8A8_UNORM (4 bytes per pixel)
-    4,  // VK_FORMAT_R32_SFLOAT (depth: 4 bytes per float)
+    4,  // VK_FORMAT_D32_SFLOAT (depth: 4 bytes per float)
     4,  // VK_FORMAT_R8G8B8A8_UNORM (normals)
     4   // VK_FORMAT_R32_SINT (segmentation: 4 bytes per int32)
 };
@@ -46,16 +46,16 @@ inline constexpr VkFormat componentFormats[maxComponents] = {
     VK_FORMAT_R8G8B8A8_UNORM,   // normals
     VK_FORMAT_R32_SINT          // segmentation
 };
+inline constexpr VkFormat componentAttachFormats[maxComponents] = {
+    VK_FORMAT_R32G32B32A32_SFLOAT,  // RGB (float4)
+    VK_FORMAT_D32_SFLOAT,           // depth (float)
+    VK_FORMAT_R32G32B32A32_SFLOAT,  // normals (float4)
+    VK_FORMAT_R32_SINT              // segmentation (int)
+};
 inline constexpr bool isDepth[maxComponents] = {
     false,   // RGB
     true,    // depth
     false,   // normals
-    false    // segmentation
-};
-inline constexpr bool isTexture[maxComponents] = {
-    false,   // RGB
-    true,    // depth
-    true,    // normals
     false    // segmentation
 };
 

@@ -97,7 +97,7 @@ void BatchFrame::initComponent(
         targets[i].components[component] = std::make_unique<vk::LocalImage>(
             alloc.makeAttachment(
                 targets[i].pixelWidth, targets[i].pixelHeight, 1,
-                InternalConfig::componentFormats[component],
+                InternalConfig::componentAttachFormats[component],
                 InternalConfig::isDepth[component]
             ));
 
@@ -107,7 +107,7 @@ void BatchFrame::initComponent(
             .flags = 0,
             .image = targets[i].components[component]->image,
             .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
-            .format = InternalConfig::componentFormats[component],
+            .format = InternalConfig::componentAttachFormats[component],
             .components = {},
             .subresourceRange = {
                 .aspectMask = InternalConfig::isDepth[component] ? 
@@ -128,15 +128,9 @@ void BatchFrame::initComponent(
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         };
         
-        if (InternalConfig::isTexture[component]) {
-            vk::DescHelper::textures(
-                lighting_desc_updates[i], targetsSetLighting, &buffers_info[i], 1, component, i
-            );
-        } else {
-            vk::DescHelper::storageImage(
-                lighting_desc_updates[i], targetsSetLighting, &buffers_info[i], component, i
-            );
-        }
+        vk::DescHelper::textures(
+            lighting_desc_updates[i], targetsSetLighting, &buffers_info[i], 1, component, i
+        );
     }
     
     // Bind batch frame outputs

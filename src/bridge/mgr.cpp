@@ -393,9 +393,6 @@ static RTAssets loadRenderObjects(
     std::array<const char *, render_asset_paths.size()> render_asset_cstrs;
     for (size_t i = 0; i < render_asset_paths.size(); i++) {
         render_asset_cstrs[i] = render_asset_paths[i].c_str();
-
-        printf("%s\n", render_asset_cstrs[i]);
-
     }
 
     AssetImporter asset_importer;
