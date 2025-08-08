@@ -71,7 +71,7 @@ void BatchFrame::initComponent(
     vk::MemoryAllocator &alloc,
     bool allocate
 ) {
-    if (allocated[component]) return;
+    if (allocated[component] || (!allocate && componentOutputs[component])) return;
 #ifdef MADRONA_VK_CUDA_SUPPORT
     bool supports_cuda_export = true;
 #else
