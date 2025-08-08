@@ -387,7 +387,7 @@ static RTAssets loadRenderObjects(
 
     std::array<std::string, 1> render_asset_paths;
     const char *py_root_env = getenv("MADRONA_ROOT_PATH");
-    std::filesystem::path data_dir = py_root_env ? (std::string(py_root_env) + "/src/data") : DATA_DIR;
+    std::filesystem::path data_dir = py_root_env ? (std::string(py_root_env) + "/data") : DATA_DIR;
     render_asset_paths[(size_t)RenderPrimObjectIDs::DebugCam] = (data_dir / "debugcam.obj").string();
 
     std::array<const char *, render_asset_paths.size()> render_asset_cstrs;
