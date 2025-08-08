@@ -139,12 +139,12 @@ struct Manager::Impl {
 
     inline void renderImpl(const render::RenderOptions &render_options)
     {
-        if (renderMgr.has_value()) {
-            renderMgr->batchRender(render_options);
-        }
-
         if (cfg.useRT) {
             gpuExec.run(*raytraceGraph);
+        } else {
+            if (renderMgr.has_value()) {
+                renderMgr->batchRender(render_options);
+            }
         }
     }
 
