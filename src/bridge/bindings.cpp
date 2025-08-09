@@ -189,9 +189,11 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                         nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> geom_sizes,
                         nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> light_pos,
                         nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> light_dir,
+                        nb::ndarray<nb::pytorch, const uint32_t, nb::shape<-1, -1>> light_rgb,
                         nb::ndarray<nb::pytorch, const bool, nb::shape<-1, -1>> light_isdir,
                         nb::ndarray<nb::pytorch, const bool, nb::shape<-1, -1>> light_castshadow,
                         nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1>> light_cutoff,
+                        nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1>> light_attenuation,
                         nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1>> light_intensity)
 
         {
@@ -205,9 +207,11 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                      reinterpret_cast<const math::Diag3x3 *>(geom_sizes.data()),
                      reinterpret_cast<const math::Vector3 *>(light_pos.data()),
                      reinterpret_cast<const math::Vector3 *>(light_dir.data()),
+                     reinterpret_cast<const uint32_t *>(light_rgb.data()),
                      reinterpret_cast<const bool *>(light_isdir.data()),
                      reinterpret_cast<const bool *>(light_castshadow.data()),
                      reinterpret_cast<const float *>(light_cutoff.data()),
+                     reinterpret_cast<const float *>(light_attenuation.data()),
                      reinterpret_cast<const float *>(light_intensity.data()));
         })
         .def("render", [](Manager &mgr,

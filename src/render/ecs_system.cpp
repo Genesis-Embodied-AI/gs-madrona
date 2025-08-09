@@ -188,9 +188,11 @@ inline void lightUpdate(Context &ctx,
                         Entity e,
                         const Position &pos,
                         const LightDescDirection &dir,
+                        const ColorOverride &color,
                         const LightDescType &type,
                         const LightDescShadow &shadow,
                         const LightDescCutoffAngle &angle,
+                        const LightDescAttenuation &attenuation,
                         const LightDescIntensity &intensity,
                         const LightDescActive &active,
                         LightCarrier &carrier)
@@ -214,7 +216,9 @@ inline void lightUpdate(Context &ctx,
     desc.castShadow = shadow.castShadow;
     desc.position = pos;
     desc.direction = dir;
+    desc.color = color.color;
     desc.cutoffAngle = angle.cutoffAngle;
+    desc.attenuation = attenuation.attenuation;
     desc.intensity = intensity.intensity;
     desc.active = active.active;
 }
@@ -447,6 +451,7 @@ void registerTypes(ECSRegistry &registry,
     registry.registerComponent<LightDescType>();
     registry.registerComponent<LightDescShadow>();
     registry.registerComponent<LightDescCutoffAngle>();
+    registry.registerComponent<LightDescAttenuation>();
     registry.registerComponent<LightDescIntensity>();
     registry.registerComponent<LightDescActive>();
     registry.registerComponent<LightCarrier>();
@@ -563,9 +568,11 @@ TaskGraphNodeID setupTasks(TaskGraphBuilder &builder,
                 Entity,
                 Position,
                 LightDescDirection,
+                ColorOverride,
                 LightDescType,
                 LightDescShadow,
                 LightDescCutoffAngle,
+                LightDescAttenuation,
                 LightDescIntensity,
                 LightDescActive,
                 LightCarrier
@@ -774,7 +781,9 @@ void makeEntityLightCarrier(Context &ctx, Entity e)
     ctx.get<LightDesc>(light_e) = LightDesc {
         .position = ctx.get<Position>(e),
         .direction = ctx.get<LightDescDirection>(e),
+        .color = ctx.get<ColorOverride>(e).color,
         .cutoffAngle = ctx.get<LightDescCutoffAngle>(e).cutoffAngle,
+        .attenuation = ctx.get<LightDescAttenuation>(e).attenuation,
         .intensity = ctx.get<LightDescIntensity>(e).intensity,
         .type = ctx.get<LightDescType>(e).type,
         .castShadow = ctx.get<LightDescShadow>(e).castShadow,
