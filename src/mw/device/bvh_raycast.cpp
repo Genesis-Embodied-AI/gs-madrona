@@ -39,22 +39,6 @@ extern __shared__ uint8_t buffer[kBufSize];
 
 extern "C" __constant__ BVHParams bvhParams;
 
-inline Vector3 lighting(Vector3 diffuse,
-                        Vector3 normal,
-                        Vector3 light_dir)
-{
-    constexpr float ambient = 0.4;
-    return (fminf(fmaxf(normal.dot(light_dir),0.f)+ambient, 1.0f)) * diffuse;
-}
-
-inline Vector3 lightingShadow(
-        Vector3 diffuse,
-        Vector3 normal)
-{
-    constexpr float ambient = 0.4;
-    return ambient * diffuse;
-}
-
 inline Vector3 calculateOutRay(PerspectiveCameraData *view_data,
                                uint32_t pixel_x, uint32_t pixel_y)
 {
@@ -898,6 +882,10 @@ static __device__ Vector3 linearToSRGB(Vector3 color) {
     );
 }
 
+static __device__ float compute_attenuating(float d, float attenuation) {
+    return 1.0 / (1.0 + attenuation * d * d);
+}
+
 struct FragmentResult {
     bool hit;
     Vector3 color;
@@ -927,7 +915,7 @@ static __device__ FragmentResult computeFragment(
         Vector3 hit_pos = trace_info.rayOrigin +
                           first_hit.depth * trace_info.rayDirection;
 
-        float totalLighting = 0.f;
+        Vector3 totalLighting = {0.f, 0.f, 0.f};
 
         for (int i = 0; i < world_info.numLights; ++i) {
             const LightDesc& light = world_info.lights[i];
@@ -936,12 +924,14 @@ static __device__ FragmentResult computeFragment(
             }
 
             Vector3 ray_dir;
-            if(light.type == LightDesc::Type::Directional) {
+            float attenuating_factor = 1.f;
+            if (light.type == LightDesc::Type::Directional) {
                 ray_dir = light.direction.normalize();
             } else {
+                attenuating_factor = compute_attenuating((hit_pos - light.position).length(), light.attenuation);
                 ray_dir = (hit_pos - light.position).normalize();
                 if(light.cutoffAngle >= 0) {
-                    float angle = acosf(ray_dir.dot(light.direction));
+                    float angle = acosf(ray_dir.dot(light.direction.normalize()));
                     if (std::abs(angle) > light.cutoffAngle) {
                         continue;
                     }
@@ -969,13 +959,17 @@ static __device__ FragmentResult computeFragment(
             }
 
             float n_dot_l = max(0.0, dot(first_hit.normal, -ray_dir));
-            totalLighting += n_dot_l * light.intensity;
+            totalLighting += attenuating_factor * n_dot_l * hexToRgb(light.color) * light.intensity;
         }
 
-        Vector3 finalColor = totalLighting * first_hit.color;
+        Vector3 finalColor = {
+            totalLighting.x * first_hit.color.x,
+            totalLighting.y * first_hit.color.y,
+            totalLighting.z * first_hit.color.z
+        };
 
         // Add ambient term
-        float ambient = 0.2;
+        float ambient = 0.05;   // TODO: Ambient light is now hardcoded.
         finalColor += first_hit.color * ambient;
 
         // Convert to sRGB

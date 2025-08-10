@@ -46,9 +46,11 @@ enum class GSGeomType : uint32_t {
 struct LightEntity : public madrona::Archetype<
     Position,
     madrona::render::LightDescDirection,
+    ColorOverride,
     madrona::render::LightDescType,
     madrona::render::LightDescShadow,
     madrona::render::LightDescCutoffAngle,
+    madrona::render::LightDescAttenuation,
     madrona::render::LightDescIntensity,
     madrona::render::LightDescActive,
     madrona::render::LightCarrier

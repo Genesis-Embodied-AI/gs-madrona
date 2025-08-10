@@ -2313,7 +2313,9 @@ void RenderContext::configureLighting(Span<const LightDesc> lights)
         lights_.insert(i, LightDesc {
             .position = {lights[i].position.x, lights[i].position.y, lights[i].position.z},
             .direction = {lights[i].direction.x, lights[i].direction.y, lights[i].direction.z},
+            .color = lights[i].color,
             .cutoffAngle = lights[i].cutoffAngle,
+            .attenuation = lights[i].attenuation,
             .intensity = lights[i].intensity,
             .type = lights[i].type,
             .castShadow = lights[i].castShadow,

@@ -118,7 +118,7 @@ void lighting(uint3 idx : SV_DispatchThreadID)
     something += instanceOffsets[0];
     something += viewDataBuffer[0].data[0].x;
 
-    pixel_offset.x += float(min(0, something)) * 0.000000001;
+    pixel_offset.x += uint(min(0, something)) * 1;
 #endif
 
     uint target_idx = pixel_offset.z;
