@@ -328,16 +328,11 @@ inline void viewTransformUpdate(Context &ctx,
 
     float x_scale = cam.fovScale / aspect_ratio;
     float y_scale = -cam.fovScale;
-    // float fov_scale = 1.0f / tanf(toRadians(vfov_degrees * 0.5f));
-
-    printf("%.6lf %.6lf\n", x_scale, y_scale);
 
     cam_data.xScale = x_scale;
     cam_data.yScale = y_scale;
     cam_data.zNear = cam.zNear;
     cam_data.zFar = cam.zFar;
-
-    printf("%.6lf, %.6lf\n", cam_data.zNear, cam_data.zFar);
 
     Vector3 camera_pos = pos + cam.cameraOffset;
     cam_data.position = camera_pos;
