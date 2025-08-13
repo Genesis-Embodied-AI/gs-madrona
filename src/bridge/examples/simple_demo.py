@@ -70,8 +70,8 @@ def main():
         dir=(-1, 1, -1),
         directional=False,
         castshadow=False,
-        cutoff=90.0,
-        intensity=0.2,
+        cutoff=45.0,
+        intensity=0.3,
         attenuation=0.1,
     )
     ########################## build ##########################
