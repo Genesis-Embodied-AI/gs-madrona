@@ -141,8 +141,9 @@ def main():
         spp=512,
     )
     scene.add_light(
-        pos=[0.0, 0.0, 1.5],
-        dir=[-1.0, -1.0, -1.0],
+        pos=(0.0, 0.0, 1.5),
+        dir=(-1.0, -1.0, -1.0),
+        color=(1.0, 0.5, 0.0),
         directional=1,
         castshadow=1,
         cutoff=45.0,
@@ -160,8 +161,8 @@ def main():
 
     for i in range(horizon):
         scene.step()
-        rgb, depth, _, _ = scene.render_all_cameras()
-        exporter.export_frame_all_cameras(i, rgb=rgb, depth=depth)
+        rgb, depth, seg, normal = scene.render_all_cameras()
+        exporter.export_frame_all_cameras(i, rgb=rgb, depth=depth, segmentation=seg, normal=normal)
 
 
 if __name__ == "__main__":

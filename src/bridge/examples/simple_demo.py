@@ -57,20 +57,22 @@ def main():
         GUI=True,
     )
     scene.add_light(
-        pos=[0.0, 0.0, 1.5],
-        dir=[1.0, 1.0, -2.0],
+        pos=(0.0, 0.0, 1.5),
+        dir=(1.0, 1.0, -2.0),
+        color=(1.0, 1.0, 0.3),
         directional=1,
         castshadow=1,
         cutoff=45.0,
         intensity=0.8,
     )
     scene.add_light(
-        pos=[4, -4, 4],
-        dir=[-1, 1, -1],
+        pos=(4, -4, 4),
+        dir=(-1, 1, -1),
         directional=0,
         castshadow=0,
-        cutoff=45.0,
+        cutoff=180.0,
         intensity=0.2,
+        attenuation=0.1,
     )
     ########################## build ##########################
     n_envs = 3
@@ -94,11 +96,16 @@ def main():
     for i in range(n_steps):
         scene.step()
         if do_batch_dump:
-            rgb, depth, _, _ = scene.render_all_cameras(rgb=True, depth=True)
-            exporter.export_frame_all_cameras(i, rgb=rgb, depth=depth)
+            rgb, depth, seg, normal = scene.render_all_cameras(
+                rgb=True, depth=True, segmentation=True, normal=True)
+            exporter.export_frame_all_cameras(
+                i, rgb=rgb, depth=depth, segmentation=seg, normal=normal
+            )
         else:
-            rgb, depth, _, _ = cam_0.render()
-            exporter.export_frame_single_camera(i, cam_0.idx, rgb=rgb, depth=depth)
+            rgb, depth, seg, normal = cam_0.render()
+            exporter.export_frame_single_camera(
+                i, cam_0.idx, rgb=rgb, depth=depth, segmentation=seg, normal=normal
+            )
 
     end_time = time()
     print(f"n_envs: {n_envs}")
