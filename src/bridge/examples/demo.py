@@ -144,8 +144,8 @@ def main():
         pos=(0.0, 0.0, 1.5),
         dir=(-1.0, -1.0, -1.0),
         color=(1.0, 0.5, 0.0),
-        directional=1,
-        castshadow=1,
+        directional=True,
+        castshadow=True,
         cutoff=45.0,
         intensity=1.0,
     )

@@ -61,18 +61,18 @@ def init_gs(benchmark_args):
         fov=benchmark_args.camera_fov,
     )
     scene.add_light(
-        pos=[0.0, 0.0, 1.5],
-        dir=[1.0, 1.0, -2.0],
-        directional=1,
-        castshadow=1,
+        pos=(0.0, 0.0, 1.5),
+        dir=(1.0, 1.0, -2.0),
+        directional=True,
+        castshadow=True,
         cutoff=45.0,
         intensity=0.5,
     )
     scene.add_light(
-        pos=[4, -4, 4],
-        dir=[-1, 1, -1],
-        directional=0,
-        castshadow=1,
+        pos=(4, -4, 4),
+        dir=(-1, 1, -1),
+        directional=False,
+        castshadow=True,
         cutoff=45.0,
         intensity=1,
     )

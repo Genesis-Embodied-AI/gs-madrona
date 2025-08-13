@@ -60,17 +60,17 @@ def main():
         pos=(0.0, 0.0, 1.5),
         dir=(1.0, 1.0, -2.0),
         color=(1.0, 1.0, 0.3),
-        directional=1,
-        castshadow=1,
+        directional=True,
+        castshadow=True,
         cutoff=45.0,
         intensity=0.8,
     )
     scene.add_light(
         pos=(4, -4, 4),
         dir=(-1, 1, -1),
-        directional=0,
-        castshadow=0,
-        cutoff=180.0,
+        directional=False,
+        castshadow=False,
+        cutoff=90.0,
         intensity=0.2,
         attenuation=0.1,
     )
@@ -97,7 +97,8 @@ def main():
         scene.step()
         if do_batch_dump:
             rgb, depth, seg, normal = scene.render_all_cameras(
-                rgb=True, depth=True, segmentation=True, normal=True)
+                rgb=True, depth=True, segmentation=True, normal=True
+            )
             exporter.export_frame_all_cameras(
                 i, rgb=rgb, depth=depth, segmentation=seg, normal=normal
             )
