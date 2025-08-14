@@ -633,9 +633,6 @@ static __device__ TraceResult traceRay(
                 t_scale = ray_d.length();
                 t_max *= t_scale;
 
-                // mat_id_override = instance_data->matID;
-                // instance_idx = instance_idx;
-
                 ray_d /= t_scale;
                 inv_ray_d = Diag3x3::fromVec(ray_d).inv();
                 isect_info = computeRayIsectInfo(ray_o, ray_d, inv_ray_d);
