@@ -110,12 +110,14 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                 .geomTypes = (int32_t *)geom_types.data(),
                 .geomGroups = (int32_t *)geom_groups.data(),
                 .geomDataIDs = ptr_geom_data_ids,//(int32_t *)geom_data_ids.data(),
+
                 .geomMatIDs = ptr_geom_mat_ids,//(int32_t *)geom_mat_ids.data(),
                 .enabledGeomGroups = (int32_t *)enabled_geom_groups.data(),
                 .geomSizes = (math::Vector3 *)geom_sizes.data(),
                 .geomRGBA = ptr_geom_rgba,//(math::Vector4 *)geom_rgba.data(),
                 .matRGBA = (math::Vector4 *)mat_rgba.data(),
                 .matTexIDs = (int32_t *)mat_tex_ids.data(),
+                
                 .texData = (uint8_t *) tex_data.data(),
                 .texOffsets = (int32_t *)tex_offsets.data(),
                 .texWidths = (int32_t *)tex_widths.data(),
@@ -184,9 +186,11 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                         nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 4>> geom_rot,
                         nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> cam_pos,
                         nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 4>> cam_rot,
+
                         nb::ndarray<nb::pytorch, const int32_t, nb::shape<-1, -1>> mat_ids,
                         nb::ndarray<nb::pytorch, const uint32_t, nb::shape<-1, -1>> geom_rgb,
                         nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> geom_sizes,
+
                         nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> light_pos,
                         nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> light_dir,
                         nb::ndarray<nb::pytorch, const uint32_t, nb::shape<-1, -1>> light_rgb,

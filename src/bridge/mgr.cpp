@@ -533,6 +533,8 @@ static RTAssets loadRenderObjects(
 
     // Create a new mesh for each geom to avoid geoms that share the same mesh
     // from pointing to the same source mesh
+    // TODO: FIXME: We currently assume that model.meshGeo.numMeshes == model.numGeoms
+    //   and consider geomDataIDs as segmentation ID.
     HeapArray<SourceMesh> dest_meshes(model.numGeoms + 1);
     
     for (CountT i = 0; i < model.numGeoms; i++) {
@@ -559,6 +561,7 @@ static RTAssets loadRenderObjects(
         } break;
         case GSGeomType::Mesh: {
             source_mesh_idx = (int)RenderPrimObjectIDs::NumPrims + model.geomDataIDs[i];
+            // source_mesh_idx = (int)RenderPrimObjectIDs::NumPrims + i;
         } break;
         case GSGeomType::Heightfield:
         case GSGeomType::Ellipsoid:
@@ -587,6 +590,19 @@ static RTAssets loadRenderObjects(
             .meshes = Span<SourceMesh>(&dest_meshes[i], 1),
         };
 
+        // bool disabled = true;
+        // for (CountT geom_i = 0; geom_i < model.numEnabledGeomGroups; geom_i++)
+        // {
+        //     if (model.geomGroups[i] == model.enabledGeomGroups[geom_i])
+        //     {
+        //         disabled = false;
+        //         break;
+        //     }
+        // }
+        // if (disabled) {
+        //     model.geomDataIDs[i] = -1;
+        // }
+        // FIXME
         model.geomDataIDs[i] = -1;
         for (CountT geom_i = 0; geom_i < model.numEnabledGeomGroups; geom_i++)
         {
