@@ -1,6 +1,7 @@
 import os
 import ctypes
 from pathlib import Path
+from typing import Tuple
 
 import torch
 
@@ -11,23 +12,34 @@ os.environ['MADRONA_ROOT_PATH'] = str(Path(__file__).parent.absolute())
 os.environ['MADRONA_ROOT_CACHE_DIR'] = str(Path.home() / ".cache" / "madrona")
 
 
+class GeomRetriever:
+    def retrieve_rigid_meshes_static(self) -> dict:
+        raise NotImplementedError()
+    
+    def retrieve_rigid_property_torch(self, num_worlds) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        raise NotImplementedError()
+
+    def retrieve_rigid_state_torch(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        raise NotImplementedError()
+
+
 class MadronaBatchRendererAdapter:
     """Wraps Genesis Model around MadronaBatchRenderer."""
 
     def __init__(
         self,
-        geom_retriever,
-        gpu_id,
-        num_worlds,
-        num_cameras,
-        num_lights,
-        cam_fovs_tensor,
-        cam_znears_tensor,
-        cam_zfars_tensor,
-        batch_render_view_width=128,
-        batch_render_view_height=128,
-        add_cam_debug_geo=False,
-        use_rasterizer=False,
+        geom_retriever: GeomRetriever,
+        gpu_id: int,
+        num_worlds: int,
+        num_cameras: int,
+        num_lights: int,
+        cam_fovs_tensor: torch.Tensor,
+        cam_znears_tensor: torch.Tensor,
+        cam_zfars_tensor: torch.Tensor,
+        batch_render_view_width: int = 128,
+        batch_render_view_height: int = 128,
+        add_cam_debug_geo: bool = False,
+        use_rasterizer: bool = False,
     ):
         assert geom_retriever is not None, "GeomRetriever is required for MadronaBatchRendererAdapter"
         assert gpu_id >= 0, "GPU ID must be greater than or equal to 0"
@@ -40,8 +52,7 @@ class MadronaBatchRendererAdapter:
         self.geom_retriever = geom_retriever
         geom_args_static = self.geom_retriever.retrieve_rigid_meshes_static()
         for arg_name, arg_value in geom_args_static.items():
-            assert arg_value.flags['C_CONTIGUOUS'], f"{arg_name} data is not continuous."
-            assert arg_value.base is None, f"{arg_name} data is not self-owned."
+            assert arg_value.data.c_contiguous, f"{arg_name} data is not continuous."
         
         # TODO: Support mutable camera fov
         cam_fovy = cam_fovs_tensor.cpu().numpy()
@@ -74,16 +85,16 @@ class MadronaBatchRendererAdapter:
 
     def init(
         self,
-        cam_pos_tensor,
-        cam_rot_tensor,
-        lights_pos_tensor,
-        lights_dir_tensor,
-        lights_rgb_tensor,
-        lights_directional_tensor,
-        lights_castshadow_tensor,
-        lights_cutoff_tensor,
-        lights_attenuation_tensor,
-        lights_intensity_tensor,
+        cam_pos_tensor: torch.Tensor,
+        cam_rot_tensor: torch.Tensor,
+        lights_pos_tensor: torch.Tensor,
+        lights_dir_tensor: torch.Tensor,
+        lights_rgb_tensor: torch.Tensor,
+        lights_directional_tensor: torch.Tensor,
+        lights_castshadow_tensor: torch.Tensor,
+        lights_cutoff_tensor: torch.Tensor,
+        lights_attenuation_tensor: torch.Tensor,
+        lights_intensity_tensor: torch.Tensor,
     ):
         geom_pos, geom_rot = self.geom_retriever.retrieve_rigid_state_torch()
         geom_mat_ids, geom_rgb, geom_sizes = self.geom_retriever.retrieve_rigid_property_torch(self.num_worlds)
@@ -129,9 +140,9 @@ class MadronaBatchRendererAdapter:
 
     def render(
         self,
-        cam_pos_tensor,
-        cam_rot_tensor,
-        render_options,
+        cam_pos_tensor: torch.Tensor,
+        cam_rot_tensor: torch.Tensor,
+        render_options: torch.Tensor,
     ):
         # Assume execution on GPU
         # TODO: Need to check if the device is GPU or CPU, or assert if not GPU
@@ -159,14 +170,14 @@ class MadronaBatchRendererAdapter:
 
     def get_lights_properties_torch(
         self,
-        lights_pos_tensor,
-        lights_dir_tensor,
-        lights_rgb_tensor,
-        lights_directional_tensor,
-        lights_castshadow_tensor,
-        lights_cutoff_tensor,
-        lights_attenuation_tensor,
-        lights_intensity_tensor,
+        lights_pos_tensor: torch.Tensor,
+        lights_dir_tensor: torch.Tensor,
+        lights_rgb_tensor: torch.Tensor,
+        lights_directional_tensor: torch.Tensor,
+        lights_castshadow_tensor: torch.Tensor,
+        lights_cutoff_tensor: torch.Tensor,
+        lights_attenuation_tensor: torch.Tensor,
+        lights_intensity_tensor: torch.Tensor,
     ):
         light_pos = lights_pos_tensor.reshape(-1, 3).unsqueeze(0).repeat(self.num_worlds, 1, 1)
         light_dir = lights_dir_tensor.reshape(-1, 3).unsqueeze(0).repeat(self.num_worlds, 1, 1)
