@@ -1,6 +1,6 @@
 [project]
 name = "gs-madrona"
-version = "0.0.3"
+version = "0.0.4"
 description = "A fork from the official Madrona. The fork will be used for Genesis's own Madrona integration."
 readme = {file = "README.md", content-type = "text/markdown"}
 license = { text = "MIT" }
