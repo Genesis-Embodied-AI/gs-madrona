@@ -792,9 +792,32 @@ extern "C" __global__ void bvhBuildFast()
 
         if (tn_offset == 0) {
             nodes[tn_offset].parent = 0xFFFF'FFFF;
-            // printf("Root at %p\n", &nodes[tn_offset]);
         }
 
+        // Handle single instance case - create one internal node and one leaf
+        if (world_info.numLeaves == 1) {
+            if (tn_offset == 0) {
+                // Set up the internal node to point to the leaf
+                nodes[tn_offset].left = LBVHNode::childIdxToStoreIdx(0, true);  // Point to leaf 0
+                nodes[tn_offset].right = 0;  // No right child
+                nodes[tn_offset].instanceIdx = 0xFFFF'FFFF;
+                nodes[tn_offset].reachedCount.store_relaxed(0);
+                
+                // Set up the leaf node
+                leaves[0].parent = tn_offset;
+                leaves[0].instanceIdx = 0;
+                leaves[0].left = leaves[0].right = 0;
+                leaves[0].reachedCount.store_relaxed(0);
+                
+                // Set the leaf's AABB to the instance's AABB
+                uint32_t global_instance_idx = world_info.internalNodesOffset;
+                leaves[0].aabb = bvhParams.aabbs[global_instance_idx].aabb;
+            }
+            thread_offset += threads_per_grid;
+            continue;
+        }
+
+        // Skip if this thread is beyond the internal nodes
         if (tn_offset >= world_info.numInternalNodes) {
             thread_offset += threads_per_grid;
             continue;
@@ -1108,7 +1131,7 @@ extern "C" __global__ void bvhWidenTree()
 
                     if (node->right < 0) {
                         children_indices[num_children++] = node->right;
-                    } else if (node->left != 0) {
+                    } else if (node->right != 0) {
                         LBVHNode *child = 
                             &smem->internalNodesPtr[node->right - 1];
 
@@ -1122,7 +1145,7 @@ extern "C" __global__ void bvhWidenTree()
                         children_indices[num_children++] = current_node->left;
                     }
 
-                    if (current_node->left != 0) {
+                    if (current_node->right != 0) {
                         children_indices[num_children++] = current_node->right;
                     }
                 } else if constexpr (QBVHNode::NodeWidth == 4) {
@@ -1140,7 +1163,7 @@ extern "C" __global__ void bvhWidenTree()
 
                     if (current_node->right < 0) {
                         children_indices[num_children++] = current_node->right;
-                    } else if (current_node->left != 0) {
+                    } else if (current_node->right != 0) {
                         LBVHNode *child = 
                             &smem->internalNodesPtr[current_node->right - 1];
                         push_4wide(child);
@@ -1375,7 +1398,7 @@ static __device__ inline void formTreelet(uint32_t treelet_idx)
             // Normally, after each iteration of the while loop, the number of
             // leaves should increase by 1 (until we reach MADRONA_TREELET_SIZE)
             formed_treelet.leaves[argmax_sah] = replaced_node->left;
-            formed_treelet.leaves[num_leaves++] = repalced_node->right;
+            formed_treelet.leaves[num_leaves++] = replaced_node->right;
         }
 
         // Override the bytes in the Treelet struct to reflect the final
@@ -1420,7 +1443,6 @@ extern "C" __global__ void bvhOptimizeLBVH()
                                  bvhParams.instanceCounts[bvhParams.numWorlds-1];
         smem->totalNumInstances = num_instances;
         smem->treeletCounter.store_relaxed(0);
-        smem->consumerCounter.store_relaxed(0);
     }
 
     __syncthreads();
