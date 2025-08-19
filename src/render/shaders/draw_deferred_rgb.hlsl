@@ -52,10 +52,10 @@ StructuredBuffer<RenderOptions> renderOptionsBuffer;
 
 #include "lighting.h"
 
-float calculateLinearDepth(float depth_in)
+float calculateLinearDepth(float depth_in, uint view_idx)
 {
     // Calculate linear depth with reverse-z buffer
-    PerspectiveCameraData cam_data = unpackViewData(viewDataBuffer[0]);
+    PerspectiveCameraData cam_data = unpackViewData(viewDataBuffer[view_idx]);
     float z_near = cam_data.zNear;
     float z_far = cam_data.zFar;
     float linear_depth = (z_near * z_far) / (z_far + depth_in * (z_near - z_far));
@@ -145,7 +145,7 @@ void lighting(uint3 idx : SV_DispatchThreadID)
         float depth_in = depthInBuffer[target_idx].SampleLevel(
                          linearSampler, depth_uv, 0).x;
 
-        float linear_depth = calculateLinearDepth(depth_in);
+        float linear_depth = calculateLinearDepth(depth_in, view_idx);
 
         depthOutputBuffer[out_pixel_idx] = linear_depth;
     }
