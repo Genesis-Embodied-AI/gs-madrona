@@ -131,10 +131,11 @@ LoaderLib * LoaderLib::load()
         FATAL("Couldn't find vkGetInstanceProcAddr");
     }
     
-    get_inst_addr = (PFN_vkGetInstanceProcAddr)get_inst_addr(
+    auto get_inst_addr_refetched = (PFN_vkGetInstanceProcAddr)get_inst_addr(
         VK_NULL_HANDLE, "vkGetInstanceProcAddr");
-    if (get_inst_addr == VK_NULL_HANDLE) {
-        FATAL("Refetching vkGetInstanceProcAddr after dlsym failed");
+    if (get_inst_addr_refetched != VK_NULL_HANDLE) {
+        // Refetching should not be necessary and may even fail on some systems
+        get_inst_addr = get_inst_addr_refetched;
     }
 
     entry_fn = (void (*)())get_inst_addr;
