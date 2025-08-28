@@ -1,6 +1,55 @@
-import torch
-import numpy as np
 import time
+
+import numpy as np
+import psutil
+import torch
+import pynvml
+
+
+def get_utilization_percentages(reset: bool = False, max_values: list[float] = [0.0, 0.0, 0.0, 0.0]) -> list[float]:
+    """Get the maximum CPU, RAM, GPU utilization (processing), and
+    GPU memory usage percentages since the last time reset was true."""
+    if reset:
+        max_values[:] = [0, 0, 0, 0]  # Reset the max values
+
+    # CPU utilization
+    cpu_usage = psutil.cpu_percent(interval=0.1)
+    max_values[0] = max(max_values[0], cpu_usage)
+
+    # RAM utilization
+    memory_info = psutil.virtual_memory()
+    ram_usage = memory_info.percent
+    max_values[1] = max(max_values[1], ram_usage)
+
+    # GPU utilization using pynvml
+    if torch.cuda.is_available():
+        pynvml.nvmlInit()  # Initialize NVML
+        for i in range(torch.cuda.device_count()):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+
+            # GPU Utilization
+            gpu_utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            gpu_processing_utilization_percent = gpu_utilization.gpu  # GPU core utilization
+            max_values[2] = max(max_values[2], gpu_processing_utilization_percent)
+
+            # GPU Memory Usage
+            memory_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            gpu_memory_total = memory_info.total
+            gpu_memory_used = memory_info.used
+            gpu_memory_utilization_percent = (gpu_memory_used / gpu_memory_total) * 100
+            max_values[3] = max(max_values[3], gpu_memory_utilization_percent)
+
+        pynvml.nvmlShutdown()  # Shutdown NVML after usage
+    return max_values
+
+
+def print_system_utilization(analytics: list[float]) -> None:
+    print(
+        f"| CPU: {analytics[0]}% |"
+        f" RAM: {analytics[1]}% |"
+        f" GPU Compute: {analytics[2]}% |"
+        f" GPU Memory: {analytics[3]:.2f}% |"
+    )
 
 
 class BenchmarkProfiler:

@@ -27,25 +27,22 @@ While gs-madrona currently depends on Genesis, we plan to decouple it in the nea
 - CUDA kernel caching with dirty-check rebuild
 - Fixed vertex normal computation in the ray tracer
 - Benchmark scripts comparing Madrona with other batch renderers, including IsaacLab and ManiSkill
+- Support for normal and semantic/instance segmentation output
+- Per-camera dynamic FOV, near/far plane control
+- Light color specification and attenuation based on distance and angle
 
 ## Removed Features
 - Legacy depth-only rendering via color buffer
 - Batch rendering pipeline based on JAX
 
 ## Known Limitations
-- Only color and depth outputs are currently supported
 - Shadows are only cast from the first light with `castshadow=true`
 - When rendering multiple cameras with different resolutions, the first camera’s resolution is used for the entire batch
 
 ## Roadmap / Future Plans
 **gs-madrona** will continue evolving to support higher-quality rendering and broader functionality. Upcoming features include:
 - Batch rendering support for cameras with varying resolutions
-- Normal buffer and semantic/instance segmentation output
-- Per-camera dynamic FOV control
-- Camera-specific near/far plane configuration
-- Light color specification
 - Dynamic light parameters (position, direction, intensity, color, enable/disable)
-- Light attenuation based on distance and angle
 - Ambient lighting control (color and intensity)
 - PBR material and texture support
 - Output rendering results to video files

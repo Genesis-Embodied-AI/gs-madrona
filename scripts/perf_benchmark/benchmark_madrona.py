@@ -1,8 +1,9 @@
 import os
 
 import genesis as gs
+from genesis.utils.image_exporter import FrameImageExporter
 
-from batch_benchmark import BenchmarkArgs
+from batch_benchmark import BenchmarkArgs, write_benchmark_result_file
 from benchmark_profiler import BenchmarkProfiler
 
 
@@ -64,7 +65,7 @@ def init_gs(benchmark_args):
         pos=(0.0, 0.0, 1.5),
         dir=(1.0, 1.0, -2.0),
         directional=True,
-        castshadow=True,
+        castshadow=False,
         cutoff=45.0,
         intensity=0.5,
     )
@@ -72,9 +73,9 @@ def init_gs(benchmark_args):
         pos=(4, -4, 4),
         dir=(-1, 1, -1),
         directional=False,
-        castshadow=True,
+        castshadow=False,
         cutoff=45.0,
-        intensity=1,
+        intensity=0.5,
     )
     ########################## build ##########################
     scene.build(n_envs=benchmark_args.n_envs)
@@ -88,33 +89,38 @@ def run_benchmark(scene, benchmark_args):
 
         # warmup
         scene.step()
-        rgb, depth, _, _ = scene.render_all_cameras()
+        rgb, depth, _, _ = scene.render_all_cameras(rgb=True, depth=True)
 
         # Profiler
         profiler = BenchmarkProfiler(n_steps, n_envs)
+        output_dir = os.path.dirname(benchmark_args.benchmark_result_file)
+        os.makedirs(output_dir, exist_ok=True)
+        image_dirname = f"{benchmark_args.renderer}-{benchmark_args.rasterizer}-{benchmark_args.n_envs}-{benchmark_args.resX}"
+        image_dir = os.path.join(output_dir, image_dirname)
+        if n_steps < 10:
+            exporter = FrameImageExporter(image_dir)
+
         for i in range(n_steps):
             profiler.on_simulation_start()
             scene.step()
             profiler.on_rendering_start()
-            rgb, depth, _, _ = scene.render_all_cameras()
+            rgb, depth, _, _ = scene.render_all_cameras(rgb=True, depth=True)
             profiler.on_rendering_end()
-
+            if n_steps < 10:
+                exporter.export_frame_all_cameras(i, rgb=rgb)
         profiler.end()
         profiler.print_summary()
 
-        time_taken_gpu = profiler.get_total_rendering_gpu_time()
-        time_taken_cpu = profiler.get_total_rendering_cpu_time()
-        time_taken_per_env_gpu = profiler.get_total_rendering_gpu_time_per_env()
-        time_taken_per_env_cpu = profiler.get_total_rendering_cpu_time_per_env()
-        fps = profiler.get_rendering_fps()
-        fps_per_env = profiler.get_rendering_fps_per_env()
+        performance_results = {
+            "time_taken_gpu": profiler.get_total_rendering_gpu_time(),
+            "time_taken_cpu": profiler.get_total_rendering_cpu_time(),
+            "time_taken_per_env_gpu": profiler.get_total_rendering_gpu_time_per_env(),
+            "time_taken_per_env_cpu": profiler.get_total_rendering_cpu_time_per_env(),
+            "fps": profiler.get_rendering_fps(),
+            "fps_per_env": profiler.get_rendering_fps_per_env(),
+        }
+        write_benchmark_result_file(benchmark_args, performance_results)
 
-        # Append a line with all args and results in csv format
-        os.makedirs(os.path.dirname(benchmark_args.benchmark_result_file), exist_ok=True)
-        with open(benchmark_args.benchmark_result_file, "a") as f:
-            f.write(
-                f"succeeded,{benchmark_args.mjcf},{benchmark_args.renderer},{benchmark_args.rasterizer},{benchmark_args.n_envs},{benchmark_args.n_steps},{benchmark_args.resX},{benchmark_args.resY},{benchmark_args.camera_posX},{benchmark_args.camera_posY},{benchmark_args.camera_posZ},{benchmark_args.camera_lookatX},{benchmark_args.camera_lookatY},{benchmark_args.camera_lookatZ},{benchmark_args.camera_fov},{time_taken_gpu},{time_taken_per_env_gpu},{time_taken_cpu},{time_taken_per_env_cpu},{fps},{fps_per_env}\n"
-            )
     except Exception as e:
         print(f"Error during benchmark: {e}")
         raise

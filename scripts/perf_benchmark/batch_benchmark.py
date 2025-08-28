@@ -225,6 +225,21 @@ def create_benchmark_result_file(continue_from):
         return benchmark_result_file
 
 
+def write_benchmark_result_file(args: BenchmarkArgs, performance_results: dict):
+    os.makedirs(os.path.dirname(args.benchmark_result_file), exist_ok=True)
+    with open(args.benchmark_result_file, "a") as f:
+        f.write(
+            f"succeeded,{args.mjcf},{args.renderer},"
+            f"{args.rasterizer},{args.n_envs},{args.n_steps},"
+            f"{args.resX},{args.resY},"
+            f"{args.camera_posX},{args.camera_posY},{args.camera_posZ},"
+            f"{args.camera_lookatX},{args.camera_lookatY},{args.camera_lookatZ},"
+            f"{args.camera_fov},"
+            f"{performance_results['time_taken_gpu']},{performance_results['time_taken_per_env_gpu']},{performance_results['time_taken_cpu']},"
+            f"{performance_results['time_taken_per_env_cpu']},{performance_results['fps']},{performance_results['fps_per_env']}\n"
+        )
+
+
 def get_previous_runs(continue_from_file):
     if continue_from_file is None:
         return []

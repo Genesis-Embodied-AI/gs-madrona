@@ -29,6 +29,7 @@ perf_benchmark/
 │   ├── benchmark_config_smoke_test.yml # Quick test configuration
 │   ├── benchmark_config_madrona.yml    # Madrona-specific config
 │   ├── benchmark_config_omni.yml       # Omniverse-specific config
+│   ├── benchmark_config_maniskill.yml  # ManiSkill-specific config
 │   └── benchmark_config_full.yml       # Comprehensive test config
 ```
 
@@ -36,14 +37,24 @@ perf_benchmark/
 
 
 ### 1. Optional steps
-IsaacLab and Maniskill needs to be installed if they need to be benchmarked.
+To enable benchmarking with IsaacLab and ManiSkill, follow these optional setup steps:
 
-Install IsaacLab
--  Download and install IsaacLab from https://developer.nvidia.com/isaac-sim
--  Add IsaacLab to your PATH:
-
-Install Maniskill
--  Install ManiSkill2 following the [official instructions](https://github.com/haosulab/ManiSkill2)
+- Install IsaacLab
+    - Download and install IsaacLab from [NVIDIA IsaacLab Documentation](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html).
+    - Add the IsaacLab installation directory to your system `PATH`.
+- Install ManiSkill
+    - Install ManiSkill2 by following [ManiSkill Documentation](https://maniskill.readthedocs.io/en/latest/user_guide/).
+- Set Environment Variables
+    - Both IsaacLab and ManiSkill use the `ASSET_DIR` environment variable to locate the Genesis assets directory.
+    - Use `genesis.utils.misc.asset_dir()` in Genesis to retrieve the exact directory path and then set the environment variable:
+    ```
+    export ASSET_DIR=/path/to/genesis/asset_dir
+    ```
+- Preprocess Required Assets
+    - IsaacLab benchmarks require MJCF assets to be preprocessed for compatibility with Omniverse.
+    ```bash
+    python process_xml.py --file ./configs/benchmark_config_omni.yml
+    ```
 
 ### 2. Run a Quick Smoke Test
 
@@ -61,12 +72,6 @@ python batch_benchmark.py -f benchmark_config_full.yml
 
 ```bash
 python batch_benchmark.py -f benchmark_config_full.yml -c /name/of/previous/run/folder
-```
-
-### 5. Preprocess MUJUCO XML Assets to make it compatible with Omniverse (if needed)
-
-```bash
-python process_xml.py --file ./genesis/assets/xml/franka_emika_panda/panda.xml
 ```
 
 ## Configuration Files

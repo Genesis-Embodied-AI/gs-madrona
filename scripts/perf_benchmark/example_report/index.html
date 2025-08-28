@@ -56,11 +56,56 @@
         }
     </style>
     <table class='benchmark-table'>
-<tr><th>Renderer</th><th>1</th><th>2</th><th>4</th><th>8</th><th>16</th><th>32</th><th>64</th><th>128</th><th>256</th><th>512</th><th>768</th><th>1024</th><th>1536</th><th>2048</th><th>3072</th><th>4096</th><th>6144</th><th>8192</th></tr>
-<tr><td>madrona - rasterizer</td><td>554.1</td><td>1095.5</td><td>2224.4</td><td>4086.9</td><td>7020.5</td><td>11627.6</td><td>15647.1</td><td>17862.8</td><td>19456.8</td><td>22208.3</td><td>23533.1</td><td>24551.7</td><td>26077.3</td><td>26885.8</td><td>28884.4</td><td>29497.9</td><td>30696.3</td><td>31509.4</td></tr>
-<tr><td>madrona - raytracer</td><td>491.9</td><td>919.8</td><td>1730.9</td><td>3100.6</td><td>5565.0</td><td>8604.0</td><td>12626.7</td><td>15650.1</td><td>16656.6</td><td>18522.4</td><td>19175.6</td><td>19943.9</td><td>19366.2</td><td>20415.9</td><td>20077.0</td><td>21039.6</td><td>21619.4</td><td>21667.8</td></tr>
-<tr><td>Speedup</td><td>0.9x</td><td>0.8x</td><td>0.8x</td><td>0.8x</td><td>0.8x</td><td>0.7x</td><td>0.8x</td><td>0.9x</td><td>0.9x</td><td>0.8x</td><td>0.8x</td><td>0.8x</td><td>0.7x</td><td>0.8x</td><td>0.7x</td><td>0.7x</td><td>0.7x</td><td>0.7x</td></tr>
+<tr><th>Renderer</th><th>1</th><th>2</th><th>4</th><th>8</th><th>16</th><th>32</th><th>64</th><th>128</th><th>256</th><th>512</th><th>768</th><th>1024</th><th>1536</th><th>2048</th><th>3072</th></tr>
+<tr><td>madrona - rasterizer</td><td>550.0</td><td>1077.7</td><td>2099.9</td><td>4002.8</td><td>7210.4</td><td>12448.2</td><td>19639.1</td><td>27706.2</td><td>33683.3</td><td>33811.8</td><td>28812.2</td><td>28596.1</td><td>28518.2</td><td>28085.5</td><td>28065.9</td></tr>
+<tr><td>madrona - raytracer</td><td>526.1</td><td>1025.6</td><td>1980.4</td><td>3860.0</td><td>7022.6</td><td>13338.6</td><td>21824.8</td><td>32294.7</td><td>40519.2</td><td>49755.4</td><td>35023.3</td><td>35532.3</td><td>36919.2</td><td>37179.0</td><td>37510.0</td></tr>
+<tr><td>Speedup</td><td>1.0x</td><td>1.0x</td><td>0.9x</td><td>1.0x</td><td>1.0x</td><td>1.1x</td><td>1.1x</td><td>1.2x</td><td>1.2x</td><td>1.5x</td><td>1.2x</td><td>1.2x</td><td>1.3x</td><td>1.3x</td><td>1.3x</td></tr>
 </table><img src='panda_madrona rasterizer_ madrona raytracer_128x128_comparison_plot.png' alt='panda_madrona rasterizer_ madrona raytracer_128x128_comparison_plot.png'/><br/>
+</div>
+<h3>Resolution: 256x256</h3>
+<div class='plot-container'>
+
+    <style>
+        .benchmark-table {
+            margin: 20px auto;
+            border-collapse: collapse;
+            background-color: #f8f9fa;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        .benchmark-table th {
+            background-color: #495057;
+            color: white;
+            padding: 12px;
+            border: 1px solid #dee2e6;
+            text-align: center;
+            font-weight: bold;
+        }
+        .benchmark-table td:first-child {
+            background-color: #6c757d;
+            color: white;
+            font-weight: bold;
+        }
+        .benchmark-table td {
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            text-align: center;
+        }
+        .benchmark-table tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .benchmark-table tr:hover {
+            background-color: #e9ecef;
+        }
+        .benchmark-table tr:hover td:first-child {
+            background-color: #5a6268;
+        }
+    </style>
+    <table class='benchmark-table'>
+<tr><th>Renderer</th><th>1</th><th>2</th><th>4</th><th>8</th><th>16</th><th>32</th><th>64</th><th>128</th><th>256</th><th>512</th><th>768</th><th>1024</th><th>1536</th><th>2048</th><th>3072</th></tr>
+<tr><td>madrona - rasterizer</td><td>547.6</td><td>1066.1</td><td>2031.8</td><td>3771.6</td><td>6762.3</td><td>10946.5</td><td>16284.7</td><td>21487.8</td><td>13058.2</td><td>13682.1</td><td>13859.3</td><td>13990.2</td><td>13842.0</td><td>13674.6</td><td>13512.6</td></tr>
+<tr><td>madrona - raytracer</td><td>480.0</td><td>939.4</td><td>1748.3</td><td>3265.6</td><td>5704.6</td><td>8972.4</td><td>12211.4</td><td>15166.1</td><td>10396.8</td><td>10825.1</td><td>10909.5</td><td>11107.5</td><td>11148.2</td><td>11062.1</td><td>11146.5</td></tr>
+<tr><td>Speedup</td><td>0.9x</td><td>0.9x</td><td>0.9x</td><td>0.9x</td><td>0.8x</td><td>0.8x</td><td>0.7x</td><td>0.7x</td><td>0.8x</td><td>0.8x</td><td>0.8x</td><td>0.8x</td><td>0.8x</td><td>0.8x</td><td>0.8x</td></tr>
+</table><img src='panda_madrona rasterizer_ madrona raytracer_256x256_comparison_plot.png' alt='panda_madrona rasterizer_ madrona raytracer_256x256_comparison_plot.png'/><br/>
 </div>
 </div>
 <div class='section'>
