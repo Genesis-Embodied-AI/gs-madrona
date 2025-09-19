@@ -44,7 +44,7 @@ struct GSModel {
     madrona::math::Vector4 *matRGBA;
     int32_t *matTexIDs;
     uint8_t *texData;
-    int32_t *texOffsets;
+    int64_t *texOffsets;
     int32_t *texWidths;
     int32_t *texHeights;
     int32_t *texNChans;
