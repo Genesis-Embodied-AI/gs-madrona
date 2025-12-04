@@ -47,11 +47,8 @@ float4 vert(in uint vid : SV_VertexID,
     Vertex vert = unpackVertex(vertexDataBuffer[vid]);
     uint instance_id = draw_data.instanceID;
 
-    PerspectiveCameraData view_data =
-        unpackViewData(viewDataBuffer[draw_data.viewID]);
-
-    EngineInstanceData instance_data = unpackEngineInstanceData(
-        engineInstanceBuffer[instance_id]);
+    PerspectiveCameraData view_data = unpackViewData(viewDataBuffer[draw_data.viewID]);
+    EngineInstanceData instance_data = unpackEngineInstanceData(engineInstanceBuffer[instance_id]);
 
     float3 to_view_translation;
     float4 to_view_rotation;
@@ -96,13 +93,9 @@ struct PixelOutput {
 };
 
 [shader("pixel")]
-PixelOutput frag(in V2F v2f,
-          in uint prim_id : SV_PrimitiveID)
+PixelOutput frag(in V2F v2f, in uint prim_id : SV_PrimitiveID)
 {
     PixelOutput output;
-
-    output.depthOut = length(v2f.vsCoord) + 
-            min(0.0, abs(materialBuffer[0].color.x));
-
+    output.depthOut = length(v2f.vsCoord) + min(0.0, abs(materialBuffer[0].color.x));
     return output;
 }

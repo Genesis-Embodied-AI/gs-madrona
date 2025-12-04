@@ -35,15 +35,15 @@ Texture2D<float4> materialTexturesArray[];
 [[vk::binding(1, 2)]]
 SamplerState linearSampler;
 
+[[vk::binding(2, 2)]]
+StructuredBuffer<int> materialTexturesIndices;
+
 struct V2F {
     [[vk::location(0)]] float3 normal : TEXCOORD0;
     [[vk::location(1)]] float3 position : TEXCOORD1;
-    [[vk::location(2)]] float4 color : TEXCOORD2;
     [[vk::location(3)]] float dummy : TEXCOORD3;
     [[vk::location(4)]] float2 uv : TEXCOORD4;
-    [[vk::location(5)]] int texIdx : TEXCOORD5;
-    [[vk::location(6)]] float roughness : TEXCOORD6;
-    [[vk::location(7)]] float metalness : TEXCOORD7;
+    [[vk::location(3)]] int materialIdx : TEXCOORD2;
 };
 
 PerspectiveCameraData getCameraData()
@@ -72,24 +72,21 @@ float4 vert(in uint vid : SV_VertexID,
             out V2F v2f) : SV_Position
 {
     DrawData draw_data = drawDataBuffer[draw_id];
-
     Vertex vert = unpackVertex(vertexDataBuffer[vid]);
 
     uint instance_id = draw_data.instanceID;
-    EngineInstanceData instance_data = unpackEngineInstanceData(
-        engineInstanceBuffer[instance_id]);
-
+    EngineInstanceData instance_data = unpackEngineInstanceData(engineInstanceBuffer[instance_id]);
     PerspectiveCameraData view_data = getCameraData();
 
     float3 to_view_translation;
     float4 to_view_rotation;
-    computeCompositeTransform(instance_data.position, instance_data.rotation,
+    computeCompositeTransform(
+        instance_data.position, instance_data.rotation,
         view_data.pos, view_data.rot,
-        to_view_translation, to_view_rotation);
+        to_view_translation, to_view_rotation
+    );
 
-    float3 view_pos =
-        rotateVec(to_view_rotation, instance_data.scale * vert.position) +
-            to_view_translation;
+    float3 view_pos = rotateVec(to_view_rotation, instance_data.scale * vert.position) + to_view_translation;
 
 #if 0
     float4 clip_pos = float4(
@@ -135,34 +132,11 @@ float4 vert(in uint vid : SV_VertexID,
             view_pos.y);
     }
 
-    v2f.normal = normalize(
-        rotateVec(instance_data.rotation, (vert.normal / instance_data.scale)));
-    v2f.uv = vert.uv;
-
-    v2f.position = rotateVec(instance_data.rotation,
-                             instance_data.scale * vert.position) + instance_data.position;
+    v2f.normal = normalize(rotateVec(instance_data.rotation, (vert.normal / instance_data.scale)));
+    v2f.uv = float2(vert.uv.x, 1.0f - vert.uv.y);
+    v2f.position = rotateVec(instance_data.rotation, instance_data.scale * vert.position) + instance_data.position;
     v2f.dummy = shadowViewDataBuffer[0].viewProjectionMatrix[0][0];
-
-
-
-    v2f.texIdx = -1;
-    // Defaults for now
-    v2f.roughness = 0.8;
-    v2f.metalness = 0.2;
-
-    if (draw_data.materialID == -2) {
-        v2f.color = hexToRgb(draw_data.color);
-    } else {
-        int32_t material_id = draw_data.materialID;
-        
-        float4 color = materialBuffer[material_id].color;
-
-        // Material
-        v2f.color = color;
-        v2f.texIdx = materialBuffer[material_id].textureIdx;
-        v2f.roughness = materialBuffer[material_id].roughness;
-        v2f.metalness = materialBuffer[material_id].metalness;
-    }
+    v2f.materialIdx = draw_data.materialID;
 
     return clip_pos;
 }
@@ -177,18 +151,25 @@ struct PixelOutput {
 PixelOutput frag(in V2F v2f)
 {
     PixelOutput output;
-    output.color = v2f.color;
-    output.color.a = v2f.roughness;
-    output.normal = float4(normalize(v2f.normal), 1.f);
-    output.position = float4(v2f.position, v2f.dummy * 0.0000001f);
-    output.position.a += v2f.metalness;
 
-    // output.color.rgb = v2f.normal.xyz;
+    float metalness = mat_data.metalness;
+    float roughness = mat_data.roughness;
+    MaterialData mat_data = materialBuffer[v2f.materialIdx];
+    float4 color = mat_data.color;
 
-    if (v2f.texIdx != -1) {
-        output.color *= materialTexturesArray[v2f.texIdx].SampleLevel(
-            linearSampler, float2(v2f.uv.x, 1.f - v2f.uv.y), 0);
+    int texture_idx = -1;
+    uint texture_count = mat_data.textureCount;
+    if (texture_count > 0) {
+        uint texture_start = mat_data.textureOffset;
+        texture_idx = materialTexturesIndices[texture_start + v2f.worldID % texture_count];
     }
-
+    if (texture_idx != -1) {
+        color *= materialTexturesArray[texture_idx].SampleLevel(linearSampler, v2f.uv, 0);
+    }
+    
+    output.color = color;
+    output.color.a = roughness;
+    output.normal = float4(normalize(v2f.normal), 1.f);
+    output.position = float4(v2f.position, v2f.dummy * 0.0000001f + metalness);
     return output;
 }

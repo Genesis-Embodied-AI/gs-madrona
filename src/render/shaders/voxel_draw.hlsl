@@ -23,6 +23,9 @@ Texture2D<float4> materialTexturesArray[];
 [[vk::binding(1, 1)]]
 SamplerState linearSampler;
 
+[[vk::binding(2, 1)]]
+StructuredBuffer<int> materialTexturesIndices;
+
 struct V2F {
     [[vk::location(0)]] float3 normal : TEXCOORD0;
     [[vk::location(1)]] float3 position : TEXCOORD1;

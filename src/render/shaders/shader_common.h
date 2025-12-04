@@ -163,13 +163,11 @@ struct MeshData {
 struct MaterialData {
     // For now, just a color
     float4 color;
-
-    int32_t textureIdx;
+    int32_t textureOffset;
+    int32_t numTextures;
 
     float roughness;
     float metalness;
-
-    int32_t pad[1];
 };
 
 struct ObjectData {
@@ -192,7 +190,6 @@ struct EngineInstanceData {
     int32_t matID;
     int32_t objectID;
     int32_t worldID;
-    uint32_t color;
 };
 
 struct PackedViewData {
@@ -275,7 +272,6 @@ struct DrawCmd {
 struct DrawData {
     int instanceID;
     int materialID;
-    uint32_t color;
 };
 
 struct RenderOptions {

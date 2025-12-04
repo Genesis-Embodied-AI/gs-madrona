@@ -1744,16 +1744,11 @@ static bool gltfImportAssets(LoaderData &loader,
     }
 
     imported.geoData.meshArrays.resize(new_mesh_arrays_start, [](auto *) {});
-    imported.geoData.positionArrays.resize(new_vert_arrays_start,
-                                           [](auto *) {});
-    imported.geoData.normalArrays.resize(new_normal_arrays_start,
-                                         [](auto *) {});
-    imported.geoData.uvArrays.resize(new_uvs_arrays_start,
-                                         [](auto *) {});
-    imported.objects.resize(new_objects_start,
-                            [](auto *) {});
-    imported.instances.resize(new_instances_start,
-                              [](auto *) {});
+    imported.geoData.positionArrays.resize(new_vert_arrays_start, [](auto *) {});
+    imported.geoData.normalArrays.resize(new_normal_arrays_start, [](auto *) {});
+    imported.geoData.uvArrays.resize(new_uvs_arrays_start, [](auto *) {});
+    imported.objects.resize(new_objects_start, [](auto *) {});
+    imported.instances.resize(new_instances_start, [](auto *) {});
 
     imported.objects.push_back({
         .meshes = Span<SourceMesh>(
@@ -1816,14 +1811,23 @@ static bool gltfImportAssets(LoaderData &loader,
         int32_t texture_id = material.baseColorIdx;
         if (texture_id != -1) {
             texture_id += prev_tex_idx;
+            imported.materialTextures.push_back(uint32_t(texture_id));
+            imported.materials.emplace_back(SourceMaterial {
+                .color = material.baseColor,
+                .textureIdx = &imported.materialTextures[imported.materialTextures.size() - 1],
+                .numTextures = 1,
+                .roughness = material.roughness,
+                .metalness = material.metallic,
+            });
+        } else {
+            imported.materials.emplace_back(SourceMaterial {
+                .color = material.baseColor,
+                .textureIdx = nullptr,
+                .numTextures = 0,
+                .roughness = material.roughness,
+                .metalness = material.metallic,
+            });
         }
-        SourceMaterial s_mat = {
-            .color = material.baseColor,
-            .textureIdx = texture_id,
-            .roughness = material.roughness,
-            .metalness = material.metallic,
-        };
-        imported.materials.emplace_back(s_mat);
     }
 
     return true;

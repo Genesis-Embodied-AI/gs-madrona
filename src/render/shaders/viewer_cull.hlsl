@@ -79,9 +79,7 @@ void instanceCull(uint3 tid           : SV_DispatchThreadID,
 
         uint current_instance_idx = sm.instancesOffset + local_idx;
 
-        EngineInstanceData instance_data = unpackEngineInstanceData(
-            engineInstanceBuffer[current_instance_idx]);
-
+        EngineInstanceData instance_data = unpackEngineInstanceData(engineInstanceBuffer[current_instance_idx]);
         ObjectData obj = objectDataBuffer[instance_data.objectID];
 
         uint draw_offset;
@@ -105,9 +103,7 @@ void instanceCull(uint3 tid           : SV_DispatchThreadID,
             } else {
                 draw_data.materialID = instance_data.matID;
             }
-
             draw_data.instanceID = current_instance_idx;
-            draw_data.color = instance_data.color;
 
             drawCommandBuffer[draw_id] = draw_cmd;
             drawDataBuffer[draw_id] = draw_data;

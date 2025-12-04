@@ -327,7 +327,7 @@ static PipelineMP<1> makeDrawPipeline(const vk::Device &dev,
     blend_info.pAttachments = blend_attachments.data();
 
     // Dynamic
-    std::array dyn_enable {
+    std::array<VkDynamicState, 2> dyn_enable {{
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR,
     };
@@ -753,9 +753,7 @@ static DrawCommandPackage makeDrawCommandPackage(vk::Device& dev,
     };
     int64_t buffer_offsets[2];
 
-    int64_t num_draw_bytes = utils::computeBufferOffsets(
-        buffer_sizes, buffer_offsets, 256);
-
+    int64_t num_draw_bytes = utils::computeBufferOffsets(buffer_sizes, buffer_offsets, 256);
     vk::LocalBuffer drawBuffer = alloc.makeLocalBuffer(num_draw_bytes).value();
 
     std::array<VkWriteDescriptorSet, 6> desc_updates;
@@ -931,8 +929,7 @@ static void makeBatchFrame(vk::Device& dev,
     }
 
     uint32_t max_num_view = cfg.numWorlds * cfg.maxViewsPerWorld;
-    HeapArray<LayeredTarget> layered_targets = makeLayeredTargets(
-        cfg.renderWidth, cfg.renderHeight, max_num_view, dev, alloc);
+    HeapArray<LayeredTarget> layered_targets = makeLayeredTargets(cfg.renderWidth, cfg.renderHeight, max_num_view, dev, alloc);
     uint64_t num_pixels = static_cast<uint64_t>(max_num_view) * cfg.renderWidth * cfg.renderHeight; 
 
     {
@@ -1146,7 +1143,6 @@ static void issueRasterization(vk::Device &dev,
     rendering_info.pDepthAttachment = &depth_attach;
 
     dev.dt.cmdBeginRenderingKHR(draw_cmd, &rendering_info);
-
     dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw_pipeline.hdls[0]);
     dev.dt.cmdBindIndexBuffer(draw_cmd, loaded_assets[0].buf.buffer,
                               loaded_assets[0].idxBufferOffset,
@@ -1160,13 +1156,10 @@ static void issueRasterization(vk::Device &dev,
         batch_frame.shadowAssetSet,
     };
 
-    dev.dt.cmdBindDescriptorSets(draw_cmd,
-                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                 draw_pipeline.layout,
-                                 0, 
-                                 draw_descriptors.size(),
-                                 draw_descriptors.data(), 
-                                 0, nullptr);
+    dev.dt.cmdBindDescriptorSets(
+        draw_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw_pipeline.layout, 0, 
+        draw_descriptors.size(), draw_descriptors.data(), 0, nullptr
+    );
 
     uint32_t max_image_dim_x = std::min(consts::maxTextureDim, consts::maxNumImagesX * target.viewWidth);
     uint32_t max_num_image_x = max_image_dim_x / target.viewWidth;
@@ -1263,7 +1256,7 @@ static void issueDeferred(vk::Device &dev,
             sizeof(shader::DeferredLightingPushConstBR),
             &push_const);
 
-    std::array draw_descriptors = {
+    std::array<VkDescriptorSet, 3> draw_descriptors {
         batch_frame.targetsSetLighting,
         batch_frame.viewInstanceSetLighting,
         pbr_set
@@ -1275,14 +1268,10 @@ static void issueDeferred(vk::Device &dev,
                                  draw_descriptors.data(),
                                  0, nullptr);
 
-    uint32_t num_workgroups_x = utils::divideRoundUp(
-        render_dims.width, 32_u32);
-    uint32_t num_workgroups_y = utils::divideRoundUp(
-        render_dims.height, 32_u32);
+    uint32_t num_workgroups_x = utils::divideRoundUp(render_dims.width, 32_u32);
+    uint32_t num_workgroups_y = utils::divideRoundUp(render_dims.height, 32_u32);
     uint32_t num_workgroups_z = total_num_views;
-
-    dev.dt.cmdDispatch(
-        draw_cmd, num_workgroups_x, num_workgroups_y, num_workgroups_z);
+    dev.dt.cmdDispatch(draw_cmd, num_workgroups_x, num_workgroups_y, num_workgroups_z);
 }
 
 static void issueShadowGen(vk::Device &dev,
@@ -1325,8 +1314,10 @@ static void issueShadowGen(vk::Device &dev,
                             &push_const);
 
     // Descriptor sets
-    dev.dt.cmdBindDescriptorSets(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-        pipeline.layout, 0, 1, &frame.shadowGenSet, 0, nullptr);
+    dev.dt.cmdBindDescriptorSets(
+        draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+        pipeline.layout, 0, 1, &frame.shadowGenSet, 0, nullptr
+    );
 
     uint32_t num_workgroups_x = utils::divideRoundUp(max_num_views, 256_u32);
     dev.dt.cmdDispatch(draw_cmd, num_workgroups_x, 1, 1);
@@ -1436,27 +1427,21 @@ static void issueShadowDraw(vk::Device &dev,
     rendering_info.pDepthAttachment = &depth_attach;
 
     dev.dt.cmdBeginRenderingKHR(draw_cmd, &rendering_info);
+    dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.hdls[0]);
+    dev.dt.cmdBindIndexBuffer(
+        draw_cmd, loaded_assets[0].buf.buffer, loaded_assets[0].idxBufferOffset, VK_INDEX_TYPE_UINT32
+    );
 
-    dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-            pipeline.hdls[0]);
-
-    dev.dt.cmdBindIndexBuffer(draw_cmd, loaded_assets[0].buf.buffer,
-            loaded_assets[0].idxBufferOffset,
-            VK_INDEX_TYPE_UINT32);
-
-    std::array draw_descriptors {
+    std::array<VkDescriptorSet, 3> draw_descriptors {
         batch_frame.shadowDrawSet,
         view_batch.drawBufferSetDraw,
         asset_set,
     };
 
-    dev.dt.cmdBindDescriptorSets(draw_cmd,
-                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                 pipeline.layout,
-                                 0,
-                                 draw_descriptors.size(),
-                                 draw_descriptors.data(),
-                                 0, nullptr);
+    dev.dt.cmdBindDescriptorSets(
+        draw_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0,
+        draw_descriptors.size(), draw_descriptors.data(), 0, nullptr
+    );
 
     uint32_t max_image_dim_x = std::min(consts::maxTextureDim, consts::maxNumImagesX * target.viewWidth);
     uint32_t max_num_image_x = max_image_dim_x / target.viewWidth;
@@ -1651,7 +1636,7 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
     batchFrames(cfg.numFrames),
     assetSetPrepare(rctx.asset_set_cull_),
     assetSetDraw(rctx.asset_set_draw_),
-    assetSetTextureMat(rctx.asset_set_tex_compute_),
+    assetSetTextureMat(rctx.asset_set_mat_tex_),
     assetSetLighting(rctx.asset_batch_lighting_set_),
     renderExtent { cfg.renderWidth, cfg.renderHeight },
     selectedView(0),
@@ -1781,11 +1766,10 @@ static void issuePrepareViewsPipeline(vk::Device& dev,
 
     (void)num_views;
     (void)num_processed_batches;
-    dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                           prepare_views.hdls[0]);
+    dev.dt.cmdBindPipeline(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, prepare_views.hdls[0]);
 
     { // Dispatch the compute shader
-        std::array view_gen_descriptors = {
+        std::array<VkDescriptorSet, 4> view_gen_descriptors = {
             frame.viewInstanceSetPrepare,
             batch.drawBufferSetPrepare,
             assetSetPrepareView,
@@ -1793,11 +1777,13 @@ static void issuePrepareViewsPipeline(vk::Device& dev,
             rctx.loaded_assets_[0].aabbSet
         };
 
-        dev.dt.cmdBindDescriptorSets(draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                     prepare_views.layout, 0,
-                                     view_gen_descriptors.size(),
-                                     view_gen_descriptors.data(),
-                                     0, nullptr);
+        dev.dt.cmdBindDescriptorSets(
+            draw_cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+            prepare_views.layout, 0,
+            view_gen_descriptors.size(),
+            view_gen_descriptors.data(),
+            0, nullptr
+        );
 
         shader::PrepareViewPushConstant view_push_const = {
             num_views, view_start, num_worlds, num_instances,

@@ -76,7 +76,6 @@ struct RenderContext {
     VkDescriptorSetLayout asset_batch_draw_layout_;
 
     VkDescriptorPool asset_pool_;
-    VkDescriptorSet asset_set_tex_compute_;
     VkDescriptorSet asset_batch_lighting_set_;
 
     // This descriptor set contains information about the sky

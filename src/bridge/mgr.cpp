@@ -265,11 +265,8 @@ struct Manager::Impl {
                      const float *light_attenuation,
                      const float *light_intensity)
     {
-        MWCudaLaunchGraph init_graph =
-            gpuExec.buildLaunchGraph(TaskGraphID::Init);
-        
-        MWCudaLaunchGraph render_init_graph =
-            gpuExec.buildLaunchGraph(TaskGraphID::RenderInit);
+        MWCudaLaunchGraph init_graph = gpuExec.buildLaunchGraph(TaskGraphID::Init);
+        MWCudaLaunchGraph render_init_graph = gpuExec.buildLaunchGraph(TaskGraphID::RenderInit);
 
         gpuExec.run(init_graph);
 
@@ -418,16 +415,15 @@ static RTAssets loadRenderObjects(
         },
         .objects { 0 },
         .materials { 0 },
+        .materialTextures { 0 },
         .instances { 0 },
         .textures { 0 },
     };
 
-    HeapArray<SourceMesh> meshes(
-        model.meshGeo.numMeshes + (size_t)RenderPrimObjectIDs::NumPrims);
+    HeapArray<SourceMesh> meshes(model.meshGeo.numMeshes + (size_t)RenderPrimObjectIDs::NumPrims);
     const CountT num_meshes = (CountT)model.meshGeo.numMeshes;
 
-    meshes[(size_t)RenderPrimObjectIDs::DebugCam] = 
-        disk_render_assets->objects[(size_t)RenderPrimObjectIDs::DebugCam].meshes[0];
+    meshes[(size_t)RenderPrimObjectIDs::DebugCam] = disk_render_assets->objects[(size_t)RenderPrimObjectIDs::DebugCam].meshes[0];
     meshes[(size_t)RenderPrimObjectIDs::Plane] = CreatePlane(generated_assets);
     meshes[(size_t)RenderPrimObjectIDs::Sphere] = CreateSphere(generated_assets);
     meshes[(size_t)RenderPrimObjectIDs::Box] = CreateBox(generated_assets);
@@ -475,9 +471,10 @@ static RTAssets loadRenderObjects(
     SourceTexture *out_textures = tmp_alloc.allocN<SourceTexture>(model.numTextures);
 
     for (CountT i = 0; i < model.numTextures; i++) {
+        // TODO: NChans is not used.
         uint64_t tex_offset = model.texOffsets[i];
         Optional<SourceTexture> tex = SourceTexture {
-            .data = &model.texData[tex_offset],
+            .data = model.texData + tex_offset,
             .format = SourceTextureFormat::R8G8B8A8,
             .width = (uint32_t)model.texWidths[i],
             .height = (uint32_t)model.texHeights[i],
@@ -490,25 +487,30 @@ static RTAssets loadRenderObjects(
 
     std::vector<imp::SourceMaterial> materials;
     for (CountT i = 0; i < model.numMats; i++) {
-        int32_t tex_idx = model.matTexIDs[i * 10];
+        const math::Vector4 &rgba = model.matRGBA[i];
+        uint32_t mat_tex_offset = model.matTexOffsets[i];
+        uint32_t next_tex_offset = i < model.numMats - 1 ?
+            model.matTexOffsets[i + 1] : model.numMatTextures;
+        uint32_t mat_tex_num = next_tex_offset - mat_tex_offset;
+
         SourceMaterial mat = {
-            .color = math::Vector4{
-                model.matRGBA[i].x, model.matRGBA[i].y,
-                model.matRGBA[i].z, model.matRGBA[i].w},
-            .textureIdx = tex_idx,
+            .color = math::Vector4{rgba.x, rgba.y, rgba.z, rgba.w},
+            .textureIdx = model.matTexIDs + mat_tex_offset,
+            .numTextures = mat_tex_num,
             .roughness = 0.0f,
-            .metalness = 0.0f};
+            .metalness = 0.0f
+        };
         materials.push_back(mat);
     }
 
     // Create materials for geoms that do not have one assigned
     for (CountT i = 0; i < model.numGeoms; i++) {
         if (model.geomMatIDs[i] == -1) {
+            const math::Vector4 &rgba_i = model.geomRGBA[i];
             SourceMaterial mat = {
-                .color = math::Vector4{
-                    model.geomRGBA[i].x, model.geomRGBA[i].y,
-                    model.geomRGBA[i].z, model.geomRGBA[i].w},
-                .textureIdx = -1,
+                .color = math::Vector4{rgba_i.x, rgba_i.y, rgba_i.z, rgba_i.w},
+                .textureIdx = nullptr,
+                .numTextures = 0,
                 .roughness = 0.8f,
                 .metalness = 0.2f,
             };
@@ -517,12 +519,13 @@ static RTAssets loadRenderObjects(
 
             for (CountT j = i + 1; j < model.numGeoms; j++) {
                 // FIX: Should probably implement == op for Vector4
+                const math::Vector4 &rgba_j = model.geomRGBA[j];
                 if (model.geomMatIDs[j] == -1 && 
-                    model.geomRGBA[i].x == model.geomRGBA[j].x &&
-                    model.geomRGBA[i].y == model.geomRGBA[j].y &&
-                    model.geomRGBA[i].z == model.geomRGBA[j].z &&
-                    model.geomRGBA[i].w == model.geomRGBA[j].w) 
-                {
+                    rgba_i.x == rgba_j.x &&
+                    rgba_i.y == rgba_j.y &&
+                    rgba_i.z == rgba_j.z &&
+                    rgba_i.w == rgba_j.w
+                ) {
                     model.geomMatIDs[j] = materials.size() - 1;
                 }
             }
@@ -643,44 +646,30 @@ Manager::Impl * Manager::Impl::make(
     sim_cfg.useRT = use_rt;
 
     CUcontext cu_ctx = MWCudaExecutor::initCUDA(mgr_cfg.gpuID);
-
-    Optional<RenderGPUState> render_gpu_state =
-        initRenderGPUState(mgr_cfg, viz_gpu_hdls);
-
+    Optional<RenderGPUState> render_gpu_state = initRenderGPUState(mgr_cfg, viz_gpu_hdls);
     Optional<render::RenderManager> render_mgr =
-        initRenderManager(mgr_cfg, gs_model,
-                          viz_gpu_hdls, render_gpu_state);
+        initRenderManager(mgr_cfg, gs_model, viz_gpu_hdls, render_gpu_state);
 
-    RTAssets rt_assets = loadRenderObjects(
-            gs_model, render_mgr, use_rt);
+    RTAssets rt_assets = loadRenderObjects(gs_model, render_mgr, use_rt);
     if (render_mgr.has_value()) {
         sim_cfg.renderBridge = render_mgr->bridge();
     } else {
         sim_cfg.renderBridge = nullptr;
     }
 
-    int32_t *geom_types_gpu = (int32_t *)cu::allocGPU(
-        sizeof(int32_t) * gs_model.numGeoms);
-    int32_t *geom_data_ids_gpu = (int32_t *)cu::allocGPU(
-        sizeof(int32_t) * gs_model.numGeoms);
-    Vector3 *geom_sizes_gpu = (Vector3 *)cu::allocGPU(
-        sizeof(Vector3) * gs_model.numGeoms);
+    int32_t *geom_types_gpu = (int32_t *)cu::allocGPU(sizeof(int32_t) * gs_model.numGeoms);
+    int32_t *geom_data_ids_gpu = (int32_t *)cu::allocGPU(sizeof(int32_t) * gs_model.numGeoms);
+    Vector3 *geom_sizes_gpu = (Vector3 *)cu::allocGPU(sizeof(Vector3) * gs_model.numGeoms);
     float *cam_fovy = (float *)cu::allocGPU(sizeof(float) * gs_model.numCams);
     float *cam_zfar = (float *)cu::allocGPU(sizeof(float) * gs_model.numCams);
     float *cam_znear = (float *)cu::allocGPU(sizeof(float) * gs_model.numCams);
 
-    REQ_CUDA(cudaMemcpy(geom_types_gpu, gs_model.geomTypes,
-        sizeof(int32_t) * gs_model.numGeoms, cudaMemcpyHostToDevice));
-    REQ_CUDA(cudaMemcpy(geom_data_ids_gpu, gs_model.geomDataIDs,
-        sizeof(int32_t) * gs_model.numGeoms, cudaMemcpyHostToDevice));
-    REQ_CUDA(cudaMemcpy(geom_sizes_gpu, gs_model.geomSizes,
-        sizeof(Vector3) * gs_model.numGeoms, cudaMemcpyHostToDevice));
-    REQ_CUDA(cudaMemcpy(cam_fovy, gs_model.camFovy,
-        sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
-    REQ_CUDA(cudaMemcpy(cam_znear, gs_model.camZNear,
-        sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
-    REQ_CUDA(cudaMemcpy(cam_zfar, gs_model.camZFar,
-        sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(geom_types_gpu, gs_model.geomTypes, sizeof(int32_t) * gs_model.numGeoms, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(geom_data_ids_gpu, gs_model.geomDataIDs, sizeof(int32_t) * gs_model.numGeoms, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(geom_sizes_gpu, gs_model.geomSizes, sizeof(Vector3) * gs_model.numGeoms, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(cam_fovy, gs_model.camFovy, sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(cam_znear, gs_model.camZNear, sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
+    REQ_CUDA(cudaMemcpy(cam_zfar, gs_model.camZFar, sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
 
     sim_cfg.geomTypes = geom_types_gpu;
     sim_cfg.geomDataIDs = geom_data_ids_gpu;
@@ -690,9 +679,7 @@ Manager::Impl * Manager::Impl::make(
     sim_cfg.camZFar = cam_zfar;
 
     HeapArray<Sim::WorldInit> world_inits(mgr_cfg.numWorlds);
-
-    Optional<CudaBatchRenderConfig> render_cfg = 
-        Optional<CudaBatchRenderConfig>::none();
+    Optional<CudaBatchRenderConfig> render_cfg = Optional<CudaBatchRenderConfig>::none();
     if (use_rt) {
         render_cfg = {
             .renderMode = CudaBatchRenderConfig::RenderMode::RGBD,
@@ -703,9 +690,7 @@ Manager::Impl * Manager::Impl::make(
         };
     }
 
-    std::vector<std::string> hideseek_srcs = {
-            GPU_HIDESEEK_SRC_LIST
-        };
+    std::vector<std::string> hideseek_srcs = { GPU_HIDESEEK_SRC_LIST };
     const char *py_root_env = getenv("MADRONA_ROOT_PATH");
     std::filesystem::path root_dir = py_root_env ? py_root_env : std::filesystem::current_path();
     std::for_each(
@@ -735,8 +720,7 @@ Manager::Impl * Manager::Impl::make(
         CompileConfig::OptMode::LTO,
     }, cu_ctx, render_cfg);
 
-    Optional<MWCudaLaunchGraph> raytrace_graph =
-        Optional<MWCudaLaunchGraph>::none();
+    Optional<MWCudaLaunchGraph> raytrace_graph = Optional<MWCudaLaunchGraph>::none();
 
     if (use_rt) {
         raytrace_graph = gpu_exec.buildRenderGraph();

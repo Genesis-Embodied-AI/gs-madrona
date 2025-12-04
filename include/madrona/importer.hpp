@@ -47,8 +47,8 @@ struct SourceMaterial {
     // If this is -1, no texture will be applied. Otherwise,
     // the color gets multipled by color of the texture read in
     // at the UVs of the pixel.
-    int32_t textureIdx;
-
+    int32_t *textureIdx;
+    uint32_t numTextures;
     float roughness;
     float metalness;
 };
@@ -66,8 +66,7 @@ public:
     ImageImporter(ImageImporter &&);
     ~ImageImporter();
 
-    using ImportHandler =
-        Optional<SourceTexture> (*)(void *data, size_t num_bytes);
+    using ImportHandler = Optional<SourceTexture> (*)(void *data, size_t num_bytes);
 
     int32_t addHandler(const char *extension, ImportHandler fn);
 
@@ -106,9 +105,9 @@ struct ImportedAssets {
 
     DynArray<SourceObject> objects;
     DynArray<SourceMaterial> materials;
+    DynArray<uint32_t> materialTextures;
     DynArray<SourceInstance> instances;
     DynArray<SourceTexture> textures;
-
 };
 
 class AssetImporter {

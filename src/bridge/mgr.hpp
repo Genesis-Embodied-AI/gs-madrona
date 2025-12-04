@@ -26,7 +26,6 @@ struct GSModelGeometry {
     uint32_t *triOffsets;
     madrona::math::Vector2 *texCoords;
     int32_t *texCoordOffsets;
-    uint32_t *texCoordNum;
     uint32_t numVertices;
     uint32_t numTris;
     uint32_t numMeshes;
@@ -43,6 +42,7 @@ struct GSModel {
     madrona::math::Vector4 *geomRGBA;
     madrona::math::Vector4 *matRGBA;
     int32_t *matTexIDs;
+    int32_t *matTexOffsets;
     uint8_t *texData;
     int64_t *texOffsets;
     int32_t *texWidths;
@@ -50,6 +50,7 @@ struct GSModel {
     int32_t *texNChans;
     uint32_t numGeoms;
     uint32_t numMats;
+    uint32_t numMatTextures;
     uint32_t numTextures;
     uint32_t numCams;
     uint32_t numLights;

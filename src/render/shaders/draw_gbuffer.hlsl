@@ -29,6 +29,9 @@ Texture2D<float4> materialTexturesArray[];
 [[vk::binding(1, 2)]]
 SamplerState linearSampler;
 
+[[vk::binding(2, 2)]]
+StructuredBuffer<int> materialTexturesIndices;
+
 struct V2F {
     [[vk::location(0)]] float3 normal : TEXCOORD0;
     [[vk::location(1)]] float3 position : TEXCOORD1;
@@ -51,11 +54,8 @@ float4 vert(in uint vid : SV_VertexID,
     float4 color = materialBuffer[vert.materialIdx].color;
     uint instance_id = draw_data.instanceID;
 
-    PerspectiveCameraData view_data =
-        unpackViewData(viewDataBuffer[push_const.viewIdx]);
-
-    EngineInstanceData instance_data = unpackEngineInstanceData(
-        engineInstanceBuffer[instance_id]);
+    PerspectiveCameraData view_data =unpackViewData(viewDataBuffer[push_const.viewIdx]);
+    EngineInstanceData instance_data = unpackEngineInstanceData(engineInstanceBuffer[instance_id]);
 
     float3 to_view_translation;
     float4 to_view_rotation;

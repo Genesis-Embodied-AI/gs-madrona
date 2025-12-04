@@ -77,8 +77,7 @@ void initCommonDrawPipelineInfo(
     VkPipelineRasterizationStateCreateInfo &raster_info) 
 {
     // Disable auto vertex assembly
-    vert_info.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vert_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vert_info.pNext = nullptr;
     vert_info.flags = 0;
     vert_info.vertexBindingDescriptionCount = 0;
@@ -87,30 +86,26 @@ void initCommonDrawPipelineInfo(
     vert_info.pVertexAttributeDescriptions = nullptr;
 
     // Assembly (standard tri indices)
-    input_assembly_info.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    input_assembly_info.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     input_assembly_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     input_assembly_info.primitiveRestartEnable = VK_FALSE;
 
     // Viewport (fully dynamic)
-    viewport_info.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewport_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     viewport_info.viewportCount = 1;
     viewport_info.pViewports = nullptr;
     viewport_info.scissorCount = 1;
     viewport_info.pScissors = nullptr;
 
     // Multisample
-    multisample_info.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisample_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisample_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
     multisample_info.sampleShadingEnable = VK_FALSE;
     multisample_info.alphaToCoverageEnable = VK_FALSE;
     multisample_info.alphaToOneEnable = VK_FALSE;
 
     // Rasterization
-    raster_info.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    raster_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     raster_info.depthClampEnable = VK_FALSE;
     raster_info.rasterizerDiscardEnable = VK_FALSE;
     raster_info.polygonMode = VK_POLYGON_MODE_FILL;
@@ -285,12 +280,12 @@ static PipelineShaders makeDrawShaders(
 
     ShaderCompiler compiler;
     SPIRVShader vert_spirv = compiler.compileHLSLFileToSPV(
-        shader_path.c_str(), {}, {},
-        { "vert", ShaderStage::Vertex });
+        shader_path.c_str(), {}, {}, { "vert", ShaderStage::Vertex }
+    );
 
     SPIRVShader frag_spirv = compiler.compileHLSLFileToSPV(
-        shader_path.c_str(), {}, {},
-        { "frag", ShaderStage::Fragment });
+        shader_path.c_str(), {}, {}, { "frag", ShaderStage::Fragment }
+    );
 
 #if 0
             {0, 2, repeat_sampler, 1, 0},
@@ -349,9 +344,7 @@ static Pipeline<1> makeDrawPipeline(const Device &dev,
                                     VkSampler clamp_sampler,
                                     uint32_t num_frames)
 {
-    auto shaders =
-        makeDrawShaders(dev, repeat_sampler, clamp_sampler);
-
+    auto shaders = makeDrawShaders(dev, repeat_sampler, clamp_sampler);
     VkPipelineVertexInputStateCreateInfo vert_info {};
     VkPipelineInputAssemblyStateCreateInfo input_assembly_info {};
     VkPipelineViewportStateCreateInfo viewport_info {};
@@ -363,8 +356,7 @@ static Pipeline<1> makeDrawPipeline(const Device &dev,
 
     // Depth/Stencil
     VkPipelineDepthStencilStateCreateInfo depth_info {};
-    depth_info.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depth_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depth_info.depthTestEnable = VK_TRUE;
     depth_info.depthWriteEnable = VK_TRUE;
     depth_info.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
@@ -423,16 +415,13 @@ static Pipeline<1> makeDrawPipeline(const Device &dev,
     gfx_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     gfx_layout_info.pNext = nullptr;
     gfx_layout_info.flags = 0;
-    gfx_layout_info.setLayoutCount =
-        static_cast<uint32_t>(draw_desc_layouts.size());
+    gfx_layout_info.setLayoutCount = static_cast<uint32_t>(draw_desc_layouts.size());
     gfx_layout_info.pSetLayouts = draw_desc_layouts.data();
     gfx_layout_info.pushConstantRangeCount = 1;
     gfx_layout_info.pPushConstantRanges = &push_const;
 
     VkPipelineLayout draw_layout;
-    REQ_VK(dev.dt.createPipelineLayout(dev.hdl, &gfx_layout_info, nullptr,
-                                       &draw_layout));
-
+    REQ_VK(dev.dt.createPipelineLayout(dev.hdl, &gfx_layout_info, nullptr, &draw_layout));
     array<VkPipelineShaderStageCreateInfo, 2> gfx_stages {{
         {
             VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -755,12 +744,8 @@ static EngineInterop setupEngineInterop(Device &dev,
             view_offsets_base = view_offsets_cpu->ptr;
         } else {
 #ifdef MADRONA_VK_CUDA_SUPPORT
-            view_offsets_gpu = alloc.makeDedicatedBuffer(
-                num_offsets_bytes, false, true);
-
-            view_offsets_cuda.emplace(dev, view_offsets_gpu->mem,
-                num_offsets_bytes);
-
+            view_offsets_gpu = alloc.makeDedicatedBuffer(num_offsets_bytes, false, true);
+            view_offsets_cuda.emplace(dev, view_offsets_gpu->mem, num_offsets_bytes);
             view_offsets_hdl = view_offsets_gpu->buf.buffer;
             view_offsets_base = (char *)view_offsets_cuda->getDevicePointer();
 #endif
@@ -776,12 +761,8 @@ static EngineInterop setupEngineInterop(Device &dev,
             light_offsets_base = light_offsets_cpu->ptr;
         } else {
 #ifdef MADRONA_VK_CUDA_SUPPORT
-            light_offsets_gpu = alloc.makeDedicatedBuffer(
-                num_offsets_bytes, false, true);
-
-            light_offsets_cuda.emplace(dev, light_offsets_gpu->mem,
-                num_offsets_bytes);
-
+            light_offsets_gpu = alloc.makeDedicatedBuffer(num_offsets_bytes, false, true);
+            light_offsets_cuda.emplace(dev, light_offsets_gpu->mem, num_offsets_bytes);
             light_offsets_hdl = light_offsets_gpu->buf.buffer;
             light_offsets_base = (char *)light_offsets_cuda->getDevicePointer();
 #endif
@@ -807,15 +788,10 @@ static EngineInterop setupEngineInterop(Device &dev,
         voxel_buffer_hdl = voxel_cpu->buffer;
     } else {
 #ifdef MADRONA_VK_CUDA_SUPPORT
-        voxel_gpu = alloc.makeDedicatedBuffer(
-            staging_size, false, true);
-
-        voxel_cuda.emplace(
-            dev, voxel_gpu->mem, staging_size);
-
+        voxel_gpu = alloc.makeDedicatedBuffer(staging_size, false, true);
+        voxel_cuda.emplace(dev, voxel_gpu->mem, staging_size);
         voxel_buffer_hdl = voxel_gpu->buf.buffer;
-        voxel_buffer_ptr = num_voxels ?
-            (uint32_t *)voxel_cuda->getDevicePointer() : nullptr;
+        voxel_buffer_ptr = num_voxels ? (uint32_t *)voxel_cuda->getDevicePointer() : nullptr;
 #endif
     }
 
@@ -842,8 +818,7 @@ static EngineInterop setupEngineInterop(Device &dev,
         total_num_lights_cpu_inc->store_release(0);
     } else {
 #ifdef MADRONA_VK_CUDA_SUPPORT
-        total_num_views_readback = (uint32_t *)cu::allocReadback(
-            3*sizeof(uint32_t));
+        total_num_views_readback = (uint32_t *)cu::allocReadback(3*sizeof(uint32_t));
         total_num_instances_readback = total_num_views_readback + 1;
         total_num_lights_readback = total_num_instances_readback + 1;
 #endif
@@ -1294,56 +1269,51 @@ static Sky loadSky(const vk::Device &dev, MemoryAllocator &alloc, VkQueue queue)
 }
 
 RenderContext::RenderContext(
-        APIBackend *render_backend,
-        GPUDevice *render_dev,
-        const RenderManager::Config &cfg)
-    : backend(*static_cast<vk::Backend *>(render_backend)),
-      dev(static_cast<vk::Device &>(*render_dev)),
-      alloc(dev, backend),
-      renderQueue(makeGFXQueue(dev, 0)),
-      br_width_(cfg.agentViewWidth),
-      br_height_(cfg.agentViewHeight),
-      pipelineCache(getPipelineCache(dev)),
-      repeatSampler(
-          makeImmutableSampler(dev, VK_SAMPLER_ADDRESS_MODE_REPEAT)),
-      clampSampler(
-          makeImmutableSampler(dev, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)),
-      renderPass(makeRenderPass(
-          dev, VK_FORMAT_R8G8B8A8_UNORM, InternalConfig::gbufferFormat,
-          InternalConfig::gbufferFormat, InternalConfig::depthFormat)),
-      shadowPass(makeShadowRenderPass(
-          dev, InternalConfig::varianceFormat, InternalConfig::depthFormat)),
-      instanceCull(makeCullPipeline(
-          dev, pipelineCache, InternalConfig::numFrames)),
-      objectDraw(makeDrawPipeline(dev, pipelineCache,
-          renderPass, repeatSampler, clampSampler,
-          InternalConfig::numFrames)),
-      asset_desc_pool_cull_(dev, instanceCull.shaders, 1, 1),
-      asset_desc_pool_draw_(dev, objectDraw.shaders, 1, 1),
-      asset_desc_pool_mat_tx_(dev, objectDraw.shaders, 2, 1),
-      asset_set_cull_(asset_desc_pool_cull_.makeSet()),
-      asset_set_draw_(asset_desc_pool_draw_.makeSet()),
-      asset_set_mat_tex_(asset_desc_pool_mat_tx_.makeSet()),
-      load_cmd_pool_(makeCmdPool(dev, dev.gfxQF)),
-      load_cmd_(makeCmdBuffer(dev, load_cmd_pool_)),
-      load_fence_(makeFence(dev)),
-      engine_interop_(setupEngineInterop(
-          dev, alloc, cfg.execMode == ExecMode::CUDA, cfg.numWorlds,
-          cfg.maxViewsPerWorld, cfg.maxInstancesPerWorld,
-          cfg.maxLightsPerWorld,
-          br_width_, br_height_, cfg.voxelCfg)),
-      lights_(InternalConfig::maxLights),
-      loaded_assets_(0),
-      sky_(loadSky(dev, alloc, renderQueue)),
-      material_textures_(0),
-      voxel_config_(cfg.voxelCfg),
-      num_worlds_(cfg.numWorlds),
-      gpu_input_(cfg.execMode == ExecMode::CUDA)
+    APIBackend *render_backend,
+    GPUDevice *render_dev,
+    const RenderManager::Config &cfg
+):  backend(*static_cast<vk::Backend *>(render_backend)),
+    dev(static_cast<vk::Device &>(*render_dev)),
+    alloc(dev, backend),
+    renderQueue(makeGFXQueue(dev, 0)),
+    br_width_(cfg.agentViewWidth),
+    br_height_(cfg.agentViewHeight),
+    pipelineCache(getPipelineCache(dev)),
+    repeatSampler(makeImmutableSampler(dev, VK_SAMPLER_ADDRESS_MODE_REPEAT)),
+    clampSampler(makeImmutableSampler(dev, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)),
+    renderPass(makeRenderPass(
+        dev, VK_FORMAT_R8G8B8A8_UNORM, InternalConfig::gbufferFormat,
+        InternalConfig::gbufferFormat, InternalConfig::depthFormat)),
+    shadowPass(makeShadowRenderPass(
+        dev, InternalConfig::varianceFormat, InternalConfig::depthFormat)),
+    instanceCull(makeCullPipeline(dev, pipelineCache, InternalConfig::numFrames)),
+    objectDraw(makeDrawPipeline(dev, pipelineCache, renderPass, repeatSampler, clampSampler, InternalConfig::numFrames)),
+    asset_desc_pool_cull_(dev, instanceCull.shaders, 1, 1),
+    asset_desc_pool_draw_(dev, objectDraw.shaders, 1, 1),
+    asset_desc_pool_mat_tx_(dev, objectDraw.shaders, 2, 1),
+    asset_set_cull_(asset_desc_pool_cull_.makeSet()),
+    asset_set_draw_(asset_desc_pool_draw_.makeSet()),
+    asset_set_mat_tex_(asset_desc_pool_mat_tx_.makeSet()),
+    load_cmd_pool_(makeCmdPool(dev, dev.gfxQF)),
+    load_cmd_(makeCmdBuffer(dev, load_cmd_pool_)),
+    load_fence_(makeFence(dev)),
+    engine_interop_(setupEngineInterop(
+        dev, alloc, cfg.execMode == ExecMode::CUDA, cfg.numWorlds,
+        cfg.maxViewsPerWorld, cfg.maxInstancesPerWorld,
+        cfg.maxLightsPerWorld,
+        br_width_, br_height_, cfg.voxelCfg)),
+    lights_(InternalConfig::maxLights),
+    loaded_assets_(0),
+    sky_(loadSky(dev, alloc, renderQueue)),
+    material_textures_(0),
+    voxel_config_(cfg.voxelCfg),
+    num_worlds_(cfg.numWorlds),
+    gpu_input_(cfg.execMode == ExecMode::CUDA)
 {
     {
         VkDescriptorPoolSize pool_sizes[] = {
             { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 25 },
-            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, InternalConfig::maxTextures*2 },
+            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, InternalConfig::maxTextures * 2 },
             { VK_DESCRIPTOR_TYPE_SAMPLER, 1 }
         };
 
@@ -1353,8 +1323,7 @@ RenderContext::RenderContext(
         pool_info.maxSets = 10 + InternalConfig::maxTextures + 1;
         pool_info.poolSizeCount = 3;
         pool_info.pPoolSizes = pool_sizes;
-        REQ_VK(dev.dt.createDescriptorPool(dev.hdl,
-            &pool_info, nullptr, &asset_pool_));
+        REQ_VK(dev.dt.createDescriptorPool(dev.hdl, &pool_info, nullptr, &asset_pool_));
     }
 
     {
@@ -1488,16 +1457,22 @@ RenderContext::RenderContext(
                 .binding = 0,
                 .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
                 .descriptorCount = InternalConfig::maxTextures,
-                .stageFlags =  VK_SHADER_STAGE_FRAGMENT_BIT,
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                 .pImmutableSamplers = nullptr,
             },
-
             {
                 .binding = 1,
                 .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
                 .descriptorCount = 1,
-                .stageFlags =  VK_SHADER_STAGE_FRAGMENT_BIT,
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                 .pImmutableSamplers = &repeatSampler
+            },
+            {
+                .binding = 2,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .pImmutableSamplers = nullptr,
             }
         };
 
@@ -1505,7 +1480,7 @@ RenderContext::RenderContext(
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             .pNext = &flag_info,
             .flags = 0,
-            .bindingCount = 2,
+            .bindingCount = 3,
             .pBindings = bindings
         };
 
@@ -1518,12 +1493,8 @@ RenderContext::RenderContext(
             .pNext = nullptr,
             .descriptorPool = asset_pool_,
             .descriptorSetCount = 1,
-            .pSetLayouts = &asset_tex_layout_
+            .pSetLayouts = &asset_batch_lighting_layout_
         };
-
-        dev.dt.allocateDescriptorSets(dev.hdl, &alloc_info, &asset_set_tex_compute_);
-
-        alloc_info.pSetLayouts = &asset_batch_lighting_layout_;
         dev.dt.allocateDescriptorSets(dev.hdl, &alloc_info, &asset_batch_lighting_set_);
     }
 
@@ -1564,15 +1535,15 @@ RenderContext::~RenderContext()
     dev.dt.destroyImageView(dev.hdl, sky_.mieView, nullptr);
     dev.dt.destroyImageView(dev.hdl, sky_.scatteringView, nullptr);
 
-    dev.dt.freeMemory(dev.hdl, sky_.transmittanceBacking, nullptr);
-    dev.dt.freeMemory(dev.hdl, sky_.irradianceBacking, nullptr);
-    dev.dt.freeMemory(dev.hdl, sky_.mieBacking, nullptr);
-    dev.dt.freeMemory(dev.hdl, sky_.scatteringBacking, nullptr);
-
     dev.dt.destroyImage(dev.hdl, sky_.transmittance.image, nullptr);
     dev.dt.destroyImage(dev.hdl, sky_.irradiance.image, nullptr);
     dev.dt.destroyImage(dev.hdl, sky_.singleMieScattering.image, nullptr);
     dev.dt.destroyImage(dev.hdl, sky_.scattering.image, nullptr);
+
+    dev.dt.freeMemory(dev.hdl, sky_.transmittanceBacking, nullptr);
+    dev.dt.freeMemory(dev.hdl, sky_.irradianceBacking, nullptr);
+    dev.dt.freeMemory(dev.hdl, sky_.mieBacking, nullptr);
+    dev.dt.freeMemory(dev.hdl, sky_.scatteringBacking, nullptr);
 
     dev.dt.destroyFence(dev.hdl, load_fence_, nullptr);
     dev.dt.destroyCommandPool(dev.hdl, load_cmd_pool_, nullptr);
@@ -1774,42 +1745,32 @@ static DynArray<MaterialTexture> loadTextures(
 
     dev.dt.beginCommandBuffer(cmdbuf, &begin_info);
 
-    for (const imp::SourceTexture &tx : textures)
-    {
+    for (const imp::SourceTexture &tx : textures) {
         if (tx.format == imp::SourceTextureFormat::BC7) {
             void *pixel_data = tx.data;
             uint32_t pixel_data_size = tx.numBytes;
-
-            uint32_t width = tx.width,
-                     height = tx.height;
-
-            auto [texture, texture_reqs] = alloc.makeTexture2D(
-                    width, height, 1, VK_FORMAT_BC7_UNORM_BLOCK);
+            uint32_t width = tx.width;
+            uint32_t height = tx.height;
+            auto [texture, texture_reqs] = alloc.makeTexture2D(width, height, 1, VK_FORMAT_BC7_UNORM_BLOCK);
 
             HostBuffer texture_hb_staging = alloc.makeStagingBuffer(texture_reqs.size);
             memcpy(texture_hb_staging.ptr, pixel_data, pixel_data_size);
             texture_hb_staging.flush(dev);
-
             std::optional<VkDeviceMemory> texture_backing = alloc.alloc(texture_reqs.size);
-
             assert(texture_backing.has_value());
-
             dev.dt.bindImageMemory(dev.hdl, texture.image, texture_backing.value(), 0);
 
             VkImageMemoryBarrier copy_prepare {
                 VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                    nullptr,
-                    0,
-                    VK_ACCESS_MEMORY_WRITE_BIT,
-                    VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_QUEUE_FAMILY_IGNORED,
-                    VK_QUEUE_FAMILY_IGNORED,
-                    texture.image,
-                    {
-                        VK_IMAGE_ASPECT_COLOR_BIT,
-                        0, 1, 0, 1
-                    },
+                nullptr,
+                0,
+                VK_ACCESS_MEMORY_WRITE_BIT,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_QUEUE_FAMILY_IGNORED,
+                VK_QUEUE_FAMILY_IGNORED,
+                texture.image,
+                { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
             };
 
             dev.dt.cmdPipelineBarrier(cmdbuf,
@@ -1836,18 +1797,15 @@ static DynArray<MaterialTexture> loadTextures(
 
             VkImageMemoryBarrier finish_prepare {
                 VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                    nullptr,
-                    VK_ACCESS_MEMORY_WRITE_BIT,
-                    VK_ACCESS_SHADER_READ_BIT,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_QUEUE_FAMILY_IGNORED,
-                    VK_QUEUE_FAMILY_IGNORED,
-                    texture.image,
-                    {
-                        VK_IMAGE_ASPECT_COLOR_BIT,
-                        0, 1, 0, 1
-                    },
+                nullptr,
+                VK_ACCESS_MEMORY_WRITE_BIT,
+                VK_ACCESS_SHADER_READ_BIT,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_QUEUE_FAMILY_IGNORED,
+                VK_QUEUE_FAMILY_IGNORED,
+                texture.image,
+                { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
             };
 
 
@@ -1881,23 +1839,16 @@ static DynArray<MaterialTexture> loadTextures(
             uint32_t height = tx.height;
 
             uint32_t mip_levels = std::max(1, (int32_t)std::floor(std::log2(std::max(width, height))));
-
-            auto [texture, texture_reqs] = alloc.makeTexture2D(
-                    width, height, mip_levels, VK_FORMAT_R8G8B8A8_SRGB);
+            auto [texture, texture_reqs] = alloc.makeTexture2D(width, height, mip_levels, VK_FORMAT_R8G8B8A8_SRGB);
 
             HostBuffer texture_hb_staging = alloc.makeStagingBuffer(texture_reqs.size);
             memcpy(texture_hb_staging.ptr, pixels, width * height * 4 * sizeof(char));
             texture_hb_staging.flush(dev);
-
             std::optional<VkDeviceMemory> texture_backing = alloc.alloc(texture_reqs.size);
-
             assert(texture_backing.has_value());
-
             dev.dt.bindImageMemory(dev.hdl, texture.image, texture_backing.value(), 0);
-
             copyBufferToImage(dev, cmdbuf, texture_hb_staging, texture.image, width, height, mip_levels);
             host_buffers.push_back(std::move(texture_hb_staging));
-
             generateMipmaps(dev, cmdbuf, texture.image, width, height, mip_levels);
 
             VkImageViewCreateInfo view_info {};
@@ -1914,8 +1865,6 @@ static DynArray<MaterialTexture> loadTextures(
             view_info.image = texture.image;
             view_info.format = VK_FORMAT_R8G8B8A8_SRGB;
             REQ_VK(dev.dt.createImageView(dev.hdl, &view_info, nullptr, &view));
-
-
             dst_textures.emplace_back(std::move(texture), view, texture_backing.value());
         }
     }
@@ -1957,6 +1906,9 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
     int64_t num_total_vertices = 0;
     int64_t num_total_indices = 0;
     int64_t num_total_meshes = 0;
+    int64_t num_total_objs = src_objs.size();
+    int64_t num_total_materials = src_mats.size();
+    int64_t num_total_textures = 0;
 
     for (const SourceObject &obj : src_objs) {
         num_total_meshes += obj.meshes.size();
@@ -1968,41 +1920,32 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
 
             num_total_vertices += mesh.numVertices;
             num_total_indices += mesh.numFaces * 3;
+            num_total_textures += src_mats[mesh.materialIDX].numTextures;
         }
     }
 
-    int64_t num_total_objs = src_objs.size();
 
-    int64_t buffer_offsets[5];
-    int64_t buffer_sizes[6] = {
+    int64_t buffer_offsets[6];
+    int64_t buffer_sizes[7] = {
         (int64_t)sizeof(ObjectData) * num_total_objs,
         (int64_t)sizeof(MeshData) * num_total_meshes,
         (int64_t)sizeof(PackedVertex) * num_total_vertices,
         (int64_t)sizeof(uint32_t) * num_total_indices,
-        (int64_t)sizeof(MaterialDataShader) * src_mats.size(),
-        (int64_t)sizeof(ShaderAABB) * num_total_objs
+        (int64_t)sizeof(MaterialDataShader) * num_total_materials,
+        (int64_t)sizeof(ShaderAABB) * num_total_objs,
+        (int64_t)sizeof(uint32_t) * num_total_textures
     };
 
-    int64_t num_asset_bytes = utils::computeBufferOffsets(
-        buffer_sizes, buffer_offsets, 256);
-
+    int64_t num_asset_bytes = utils::computeBufferOffsets(buffer_sizes, buffer_offsets, 256);
     HostBuffer staging = alloc.makeStagingBuffer(num_asset_bytes);
     char *staging_ptr = (char *)staging.ptr;
     ObjectData *obj_ptr = (ObjectData *)staging_ptr;
-    MeshData *mesh_ptr = 
-        (MeshData *)(staging_ptr + buffer_offsets[0]);
-    PackedVertex *vertex_ptr =
-        (PackedVertex *)(staging_ptr + buffer_offsets[1]);
-    uint32_t *indices_ptr =
-        (uint32_t *)(staging_ptr + buffer_offsets[2]);
-    MaterialDataShader *materials_ptr =
-        (MaterialDataShader *)(staging_ptr + buffer_offsets[3]);
-    ShaderAABB *aabbs_ptr =
-        (ShaderAABB *)(staging_ptr + buffer_offsets[4]);
-
-    int32_t mesh_offset = 0;
-    int32_t vertex_offset = 0;
-    int32_t index_offset = 0;
+    MeshData *mesh_ptr = (MeshData *)(staging_ptr + buffer_offsets[0]);
+    PackedVertex *vertex_ptr = (PackedVertex *)(staging_ptr + buffer_offsets[1]);
+    uint32_t *indices_ptr = (uint32_t *)(staging_ptr + buffer_offsets[2]);
+    MaterialDataShader *materials_ptr = (MaterialDataShader *)(staging_ptr + buffer_offsets[3]);
+    ShaderAABB *aabbs_ptr = (ShaderAABB *)(staging_ptr + buffer_offsets[4]);
+    uint32_t *mat_textures_ptr = (uint32_t *)(staging_ptr + buffer_offsets[5]);
 
     auto packHalf2x16 = [](const Vector2 &v) {
 #if defined(MADRONA_MSVC)
@@ -2020,37 +1963,35 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
         y_half = v.y;
 #endif
 
-        return uint32_t(std::bit_cast<uint16_t>(y_half)) << 16 |
-            uint32_t(std::bit_cast<uint16_t>(x_half));
+        return uint32_t(std::bit_cast<uint16_t>(y_half)) << 16 | uint32_t(std::bit_cast<uint16_t>(x_half));
     };
 
+    int32_t obj_offset = 0;
+    int32_t mesh_offset = 0;
+    int32_t vertex_offset = 0;
+    int32_t index_offset = 0;
     for (const SourceObject &obj : src_objs) {
-        *obj_ptr++ = ObjectData {
-            .meshOffset = mesh_offset,
-            .numMeshes = (int32_t)obj.meshes.size(),
-        };
+        ObjectData *obj_data = obj_ptr + (obj_offset++);
+        obj_data->meshOffset = mesh_offset;
+        obj_data->numMeshes = (int32_t)obj.meshes.size();
 
         for (const SourceMesh &mesh : obj.meshes) {
             uint32_t material_idx = mesh.materialIDX;
-
             int32_t num_mesh_verts = (int32_t)mesh.numVertices;
             int32_t num_mesh_indices = (int32_t)mesh.numFaces * 3;
 
-            MeshData mesh_data = MeshData {};
-            mesh_data.vertexOffset = vertex_offset;
-            mesh_data.numVertices = num_mesh_verts;
-            mesh_data.indexOffset = index_offset;
-            mesh_data.numIndices = num_mesh_indices;
-            mesh_data.materialIndex = (int32_t)material_idx;
-
-            mesh_ptr[mesh_offset++] = mesh_data;
+            MeshData *mesh_data = mesh_ptr + (mesh_offset++);
+            mesh_data->vertexOffset = vertex_offset;
+            mesh_data->numVertices = num_mesh_verts;
+            mesh_data->indexOffset = index_offset;
+            mesh_data->numIndices = num_mesh_indices;
+            mesh_data->materialIndex = (int32_t)material_idx;
 
             // Compute new normals
             HeapArray<Vector3> new_normals(num_mesh_verts);
             memset(new_normals.data(), 0, num_mesh_verts * sizeof(Vector3));
 
-            for (CountT face_idx = 0; face_idx < (CountT)mesh.numFaces;
-                    face_idx++) {
+            for (CountT face_idx = 0; face_idx < (CountT)mesh.numFaces; face_idx++) {
                 CountT base_idx = face_idx * 3;
                 uint32_t i0 = mesh.indices[base_idx];
                 uint32_t i1 = mesh.indices[base_idx + 1];
@@ -2062,7 +2003,6 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
 
                 Vector3 e0 = v1 - v0;
                 Vector3 e1 = v2 - v0;
-
                 Vector3 face_normal = cross(e0, e1);
 
                 new_normals[i0] += face_normal;     // align with pyrender
@@ -2070,98 +2010,70 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
                 new_normals[i2] += face_normal;
             }
 
-            for (int64_t vert_idx = 0; vert_idx < num_mesh_verts;
-                    vert_idx++) {
-                if (new_normals[vert_idx].length() == 0.f) {
-                    new_normals[vert_idx] = math::up;
+            for (CountT vert_idx = 0; vert_idx < num_mesh_verts; vert_idx++) {
+                Vector3 pos = mesh.positions[vert_idx];
+
+                // set normals
+                Vector3 normal = new_normals[vert_idx];
+                if (normal.length() == 0.f) {
+                    normal = math::up;
                 } else {
-                    new_normals[vert_idx] = normalize(new_normals[vert_idx]);
+                    normal = normalize(normal);
                 }
-            }
-
-            for (int32_t i = 0; i < num_mesh_verts; i++) {
-                Vector3 pos = mesh.positions[i];
-                Vector3 normal = new_normals[i];
-                if(mesh.normals) {
-                    mesh.normals[i] = normal;
+                new_normals[vert_idx] = normal;
+                if (mesh.normals) {
+                    mesh.normals[vert_idx] = normal;
                 }
 
+                // set tangent and sign
                 Vector3 a, b;
                 normal.frame(&a, &b);
-                Vector4 tangent_sign = {
-                    a.x,
-                    a.y,
-                    a.z,
-                    1.f,
-                };
-                if(mesh.tangentAndSigns) {
-                    mesh.tangentAndSigns[i] = tangent_sign;
+                Vector4 tangent_sign = { a.x, a.y, a.z, 1.f };
+                if (mesh.tangentAndSigns) {
+                    mesh.tangentAndSigns[vert_idx] = tangent_sign;
                 }
 
-                Vector2 uv = mesh.uvs ? mesh.uvs[i] : Vector2 { 0, 0 };
-
-                Vector3 encoded_normal_tangent =
-                    encodeNormalTangent(normal, tangent_sign);
+                Vector2 uv = mesh.uvs ? mesh.uvs[vert_idx] : Vector2 { 0, 0 };
 
                 // Encode UVs into a uint32 (how bad will this look on small images??
                 // Let's see I guess.
-                float encoded_uvs = std::bit_cast<float>(packHalf2x16(uv));
-
-                vertex_ptr[vertex_offset++] = PackedVertex {
-                    Vector4 {
-                        pos.x,
-                        pos.y,
-                        pos.z,
-                        encoded_normal_tangent.x,
-                    },
-                    Vector4 {
-                        encoded_normal_tangent.y,
-                        encoded_normal_tangent.z,
-                        encoded_uvs,
-                        0
-                    },
-                };
+                Vector3 enc_nt = encodeNormalTangent(normal, tangent_sign);
+                float enc_uvs = std::bit_cast<float>(packHalf2x16(uv));
+                PackedVertex *vertex_data = vertex_ptr + (vertex_offset++);
+                vertex_data->data[0] = Vector4 { pos.x, pos.y, pos.z, enc_nt.x };
+                vertex_data->data[1] = Vector4 { enc_nt.y, enc_nt.z, enc_uv, 0 };
             }
 
-            memcpy(indices_ptr + index_offset,
-                   mesh.indices, sizeof(uint32_t) * num_mesh_indices);
-
+            memcpy(indices_ptr + index_offset, mesh.indices, sizeof(uint32_t) * num_mesh_indices);
             index_offset += num_mesh_indices;
         }
     }
 
-    uint32_t mat_idx = 0;
+    int32_t mat_offset = 0;
+    int32_t mat_texture_offset = 0;
     for (const SourceMaterial &mat : src_mats) {
-        materials_ptr[mat_idx].color = mat.color;
-        materials_ptr[mat_idx].roughness = mat.roughness;
-        materials_ptr[mat_idx].metalness = mat.metalness;
-        materials_ptr[mat_idx++].textureIdx = mat.textureIdx;
+        int32_t num_mat_textures = (int32_t)mat.numTextures;
+        MaterialData *mat_data = materials_ptr + (mat_offset++);
+        mat_data->color = mat.color;
+        mat_data->roughness = mat.roughness;
+        mat_data->metalness = mat.metalness;
+        mat_data->textureOffset = mat_texture_offset;
+        mat_data->numTextures = num_mat_textures;
+        memcpy(mat_textures_ptr + mat_texture_offset, mat.textureIdx, sizeof(uint32_t) * num_mat_textures);
+        mat_texture_offset += num_mat_textures;
     }
 
+    int32_t aabb_offset = 0;
     math::AABB *aabbs_src = AssetProcessor::makeAABBs(src_objs);
-
-    ShaderAABB *shader_aabbs_src = (ShaderAABB *)malloc(
-            sizeof(ShaderAABB) * src_objs.size());
-
-    for (int i = 0; i < src_objs.size(); ++i) {
-        math::AABB *src = aabbs_src + i;
-        ShaderAABB *current = shader_aabbs_src + i;
-
-        current->data[0].x = src->pMin.x;
-        current->data[0].y = src->pMin.y;
-        current->data[0].z = src->pMin.z;
-
-        current->data[0].w = src->pMax.x;
-        current->data[1].x = src->pMax.y;
-        current->data[1].y = src->pMax.z;
+    for (int i = 0; i < num_total_objs; ++i) {
+        math::AABB *aabb = aabbs_src + i;
+        ShaderAABB *shader_aabb = aabbs_ptr + (aabb_offset++);
+        shader_aabb->data[0] = Vector4 { aabb->pMin.x, aabb->pMin.y, aabb->pMin.z, aabb->pMax.x };
+        shader_aabb->data[1] = Vector4 { aabb->pMax.y, aabb->pMax.z, 0.f, 0.f };
     }
-
-    memcpy(aabbs_ptr, shader_aabbs_src, sizeof(ShaderAABB) * src_objs.size());
-
     free(aabbs_src);
 
     staging.flush(dev);
-
     LocalBuffer asset_buffer = *alloc.makeLocalBuffer(num_asset_bytes);
     GPURunUtil gpu_run {
         load_cmd_pool_,
@@ -2178,9 +2090,7 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
         .size = (VkDeviceSize)num_asset_bytes,
     };
 
-    dev.dt.cmdCopyBuffer(load_cmd_, staging.buffer, asset_buffer.buffer,
-                         1, &buffer_copy);
-    
+    dev.dt.cmdCopyBuffer(load_cmd_, staging.buffer, asset_buffer.buffer, 1, &buffer_copy);
 
     gpu_run.submit(dev);
 
@@ -2248,7 +2158,7 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
     VkDescriptorBufferInfo index_set_info;
     index_set_info.buffer = asset_buffer.buffer;
     index_set_info.offset = buffer_offsets[2];
-    index_set_info.range = buffer_offsets[3] - buffer_offsets[2];
+    index_set_info.range = buffer_sizes[3];
 
     desc_updates.push_back({});
     DescHelper::storage(desc_updates[4], index_buffer_set, &index_set_info, 0);
@@ -2274,21 +2184,25 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
         material_textures_ = loadTextures(dev, alloc, renderQueue, textures);
     }
 
-    DynArray<VkDescriptorImageInfo> tx_infos(material_textures_.size());
-    for (auto &tx : material_textures_) {
-        tx_infos.push_back({
-                VK_NULL_HANDLE,
-                tx.view,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                });
-    }
-
     if (material_textures_.size()) {
+        DynArray<VkDescriptorImageInfo> tx_infos(material_textures_.size());
+        for (auto &tx : material_textures_) {
+            tx_infos.push_back({
+                .sampler = VK_NULL_HANDLE,
+                .imageView = tx.view,
+                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            });
+        }
         desc_updates.push_back({});
         DescHelper::textures(desc_updates[9], asset_set_mat_tex_, tx_infos.data(), tx_infos.size(), 0);
+        
+        VkDescriptorBufferInfo mat_tx_info;
+        mat_tx_info.buffer = asset_buffer.buffer;
+        mat_tx_info.offset = buffer_offsets[5];
+        mat_tx_info.range = buffer_sizes[6];
 
         desc_updates.push_back({});
-        DescHelper::textures(desc_updates[10], asset_set_tex_compute_, tx_infos.data(), tx_infos.size(), 0);
+        DescHelper::storage(desc_updates[10], asset_set_mat_tex_, &mat_tx_info, 2);
     }
 
     DescHelper::update(dev, desc_updates.data(), desc_updates.size());
