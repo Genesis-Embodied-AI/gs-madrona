@@ -180,7 +180,7 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                 reinterpret_cast<const bool *>(light_castshadow.data()) if light_castshadow.shape(0) > 0 else nullptr,
                 reinterpret_cast<const float *>(light_cutoff.data()) if light_cutoff.shape(0) > 0 else nullptr,
                 reinterpret_cast<const float *>(light_attenuation.data()) if light_attenuation.shape(0) > 0 else nullptr,
-                reinterpret_cast<const float *>(light_intensity.data()) if light_intensity.shape(0) > 0 else nullptr,
+                reinterpret_cast<const float *>(light_intensity.data()) if light_intensity.shape(0) > 0 else nullptr
             );
         })
         .def("render", [](Manager &mgr,

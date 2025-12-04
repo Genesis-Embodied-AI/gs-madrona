@@ -330,14 +330,12 @@ MaterialData initMaterialData(
     }
 
     MaterialData cpu_mat_data = {
-        .textures = (cudaTextureObject_t *)
-            malloc(sizeof(cudaTextureObject_t) * num_textures),
-        .textureBuffers = (cudaArray_t *)
-            malloc(sizeof(cudaArray_t) * num_non_mipmap_textures),
-        .mipmapTextureBuffers = (cudaMipmappedArray_t *)
-            malloc(sizeof(cudaMipmappedArray_t) * num_mipmap_textures),
-        .materials = (Material *)
-            malloc(sizeof(Material) * num_materials)
+        .textures = (cudaTextureObject_t *) malloc(sizeof(cudaTextureObject_t) * num_textures),
+        .textureBuffers = (cudaArray_t *) malloc(sizeof(cudaArray_t) * num_non_mipmap_textures),
+        .numTextureBuffers = num_non_mipmap_textures,
+        .mipmapTextureBuffers = (cudaMipmappedArray_t *) malloc(sizeof(cudaMipmappedArray_t) * num_mipmap_textures),
+        .numMipmapTextureBuffers = num_mipmap_textures,
+        .materials = (Material *) malloc(sizeof(Material) * num_materials)
     };
 
     for (uint32_t i = 0; i < num_textures; ++i) {
@@ -349,12 +347,9 @@ MaterialData initMaterialData(
             width = tex.width;
             height = tex.height;
 
-            cudaChannelFormatDesc channel_desc =
-                    cudaCreateChannelDesc<cudaChannelFormatKindUnsignedBlockCompressed7>();
-
+            cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<cudaChannelFormatKindUnsignedBlockCompressed7>();
             cudaArray_t cuda_array;
-            REQ_CUDA(cudaMallocArray(&cuda_array, &channel_desc,
-                                     width, height, cudaArrayDefault));
+            REQ_CUDA(cudaMallocArray(&cuda_array, &channel_desc, width, height, cudaArrayDefault));
 
             REQ_CUDA(cudaMemcpy2DToArray(cuda_array, 0, 0, tex.data,
                                          16 * width / 4,
@@ -375,8 +370,7 @@ MaterialData initMaterialData(
             tex_desc.sRGB = 1;
 
             cudaTextureObject_t tex_obj = 0;
-            REQ_CUDA(cudaCreateTextureObject(&tex_obj,
-                                             &res_desc, &tex_desc, nullptr));
+            REQ_CUDA(cudaCreateTextureObject(&tex_obj, &res_desc, &tex_desc, nullptr));
 
             cpu_mat_data.textures[i] = tex_obj;
             cpu_mat_data.textureBuffers[i] = cuda_array;
@@ -443,13 +437,10 @@ MaterialData initMaterialData(
         }
     }
 
-    cpu_mat_data.numTextureBuffers = num_non_mipmap_textures;
-    cpu_mat_data.numMipmapTextureBuffers = num_mipmap_textures;
-
     for (uint32_t i = 0; i < num_materials; ++i) {
         Material mat = {
             .color = materials[i].color,
-            .textureIdx = materials[i].textureIdx,
+            .textureIdx = materials[i].numTextures > 0 ? *(materials[i].textureIdx) : -1, //TODO: support batch
             .roughness = materials[i].roughness,
             .metalness = materials[i].metalness,
         };
@@ -458,15 +449,13 @@ MaterialData initMaterialData(
     }
 
     cudaTextureObject_t *gpu_tex_buffer;
-    REQ_CUDA(cudaMalloc(&gpu_tex_buffer, 
-                sizeof(cudaTextureObject_t) * num_textures));
+    REQ_CUDA(cudaMalloc(&gpu_tex_buffer, sizeof(cudaTextureObject_t) * num_textures));
     REQ_CUDA(cudaMemcpy(gpu_tex_buffer, cpu_mat_data.textures, 
                 sizeof(cudaTextureObject_t) * num_textures,
                 cudaMemcpyHostToDevice));
 
     Material *mat_buffer;
-    REQ_CUDA(cudaMalloc(&mat_buffer, 
-                sizeof(Material) * num_materials));
+    REQ_CUDA(cudaMalloc(&mat_buffer, sizeof(Material) * num_materials));
     REQ_CUDA(cudaMemcpy(mat_buffer, cpu_mat_data.materials, 
                 sizeof(Material) * num_materials,
                 cudaMemcpyHostToDevice));
@@ -484,13 +473,10 @@ MaterialData initMaterialData(
 }
 #endif
 
-math::AABB *makeAABBs(
-        Span<const imp::SourceObject> src_objs)
+math::AABB *makeAABBs(Span<const imp::SourceObject> src_objs)
 {
     int num_objects = (int)src_objs.size();
-
-    math::AABB *aabbs = (math::AABB *)malloc(sizeof(math::AABB) *
-            num_objects);
+    math::AABB *aabbs = (math::AABB *)malloc(sizeof(math::AABB) * num_objects);
 
     for (int obj_idx = 0; obj_idx < num_objects; ++obj_idx) {
         auto &obj = src_objs[obj_idx];

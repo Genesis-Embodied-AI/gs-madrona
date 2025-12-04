@@ -327,7 +327,7 @@ static PipelineMP<1> makeDrawPipeline(const vk::Device &dev,
     blend_info.pAttachments = blend_attachments.data();
 
     // Dynamic
-    std::array<VkDynamicState, 2> dyn_enable {{
+    std::array<VkDynamicState, 2> dyn_enable {
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR,
     };
@@ -2043,11 +2043,10 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
     }
 
     { // Import the views
-        VkDeviceSize num_views_bytes = info.numViews *
-            sizeof(shader::PackedViewData);
-
+        VkDeviceSize num_views_bytes = info.numViews * sizeof(shader::PackedViewData);
         VkBufferCopy view_data_copy = {
-            .srcOffset = 0, .dstOffset = 0,
+            .srcOffset = 0,
+            .dstOffset = 0,
             .size = num_views_bytes
         };
 
@@ -2057,11 +2056,10 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
     }
 
     { // Import the instances
-        VkDeviceSize num_instances_bytes = info.numInstances *
-            sizeof(shader::PackedInstanceData);
-
+        VkDeviceSize num_instances_bytes = info.numInstances * sizeof(shader::PackedInstanceData);
         VkBufferCopy instance_data_copy = {
-            .srcOffset = 0, .dstOffset = 0,
+            .srcOffset = 0,
+            .dstOffset = 0,
             .size = num_instances_bytes
         };
 
@@ -2071,11 +2069,10 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
     }
 
     { // Import the offsets for instances
-        VkDeviceSize num_offsets_bytes = info.numWorlds *
-            sizeof(int32_t);
-
+        VkDeviceSize num_offsets_bytes = info.numWorlds * sizeof(int32_t);
         VkBufferCopy offsets_data_copy = {
-            .srcOffset = 0, .dstOffset = 0,
+            .srcOffset = 0,
+            .dstOffset = 0,
             .size = num_offsets_bytes
         };
 
@@ -2086,11 +2083,10 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
 
 #if 0
     { // Import the aabbs for instances
-        VkDeviceSize num_aabbs_bytes = info.numInstances *
-            sizeof(shader::AABB);
-
+        VkDeviceSize num_aabbs_bytes = info.numInstances * sizeof(shader::AABB);
         VkBufferCopy aabb_data_copy = {
-            .srcOffset = 0, .dstOffset = 0,
+            .srcOffset = 0,
+            .dstOffset = 0,
             .size = num_aabbs_bytes
         };
 
@@ -2101,11 +2097,10 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
 #endif
 
     { // Import the offsets for views
-        VkDeviceSize num_offsets_bytes = info.numWorlds *
-            sizeof(int32_t);
-
+        VkDeviceSize num_offsets_bytes = info.numWorlds * sizeof(int32_t);
         VkBufferCopy offsets_data_copy = {
-            .srcOffset = 0, .dstOffset = 0,
+            .srcOffset = 0,
+            .dstOffset = 0,
             .size = num_offsets_bytes
         };
 
