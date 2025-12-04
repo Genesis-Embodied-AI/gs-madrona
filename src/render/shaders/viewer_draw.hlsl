@@ -160,9 +160,9 @@ PixelOutput frag(in V2F v2f)
     float4 color = mat_data.color;
 
     int texture_idx = -1;
-    uint texture_count = mat_data.textureCount;
+    uint texture_count = mat_data.numTextures;
     if (texture_count > 0) {
-        uint texture_start = mat_data.numTextures;
+        uint texture_start = mat_data.textureOffset;
         texture_idx = materialTexturesIndices[texture_start + v2f.worldIdx % texture_count];
     }
     if (texture_idx != -1) {

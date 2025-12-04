@@ -40,12 +40,6 @@ inline constexpr uint32_t componentBytes[maxComponents] = {
     4,  // VK_FORMAT_R8G8B8A8_UNORM (normals)
     4   // VK_FORMAT_R32_SINT (segmentation: 4 bytes per int32)
 };
-inline constexpr VkFormat componentFormats[maxComponents] = {
-    VK_FORMAT_R8G8B8A8_UNORM,   // RGB
-    VK_FORMAT_D32_SFLOAT,       // depth
-    VK_FORMAT_R8G8B8A8_UNORM,   // normals
-    VK_FORMAT_R32_SINT          // segmentation
-};
 inline constexpr VkFormat componentAttachFormats[maxComponents] = {
     VK_FORMAT_R32G32B32A32_SFLOAT,  // RGB (float4)
     VK_FORMAT_D32_SFLOAT,           // depth (float)

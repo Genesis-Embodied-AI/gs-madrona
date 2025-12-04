@@ -372,7 +372,7 @@ float3 applyFXAA(uint32_t view_idx, int2 coord) {
 }
 
 // ------------------------------------------------------------------------------------------------
-[numThreads(16, 16, 1)]
+[numThreads(32, 32, 1)]
 [shader("compute")]
 void main(uint3 idx : SV_DispatchThreadID)
 {

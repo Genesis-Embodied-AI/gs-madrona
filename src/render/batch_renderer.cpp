@@ -378,15 +378,15 @@ static PipelineMP<1> makeDrawPipeline(const vk::Device &dev,
         },
     }};
     std::array<VkFormat, 3> colorFormats = {
-        InternalConfig::componentFormats[0],
-        InternalConfig::componentFormats[2],
-        InternalConfig::componentFormats[3]
+        InternalConfig::componentAttachFormats[0],
+        InternalConfig::componentAttachFormats[2],
+        InternalConfig::componentAttachFormats[3]
     };
     VkPipelineRenderingCreateInfo rendering_info = {};
     rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     rendering_info.colorAttachmentCount = 3;
     rendering_info.pColorAttachmentFormats = colorFormats.data();
-    rendering_info.depthAttachmentFormat = InternalConfig::componentFormats[1];
+    rendering_info.depthAttachmentFormat = InternalConfig::componentAttachFormats[1];
 
     VkGraphicsPipelineCreateInfo gfx_infos =
     {
@@ -471,8 +471,7 @@ static PipelineMP<1> makeShadowDrawPipeline(const vk::Device &dev,
 
     // Depth/Stencil
     VkPipelineDepthStencilStateCreateInfo depth_info {};
-    depth_info.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depth_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depth_info.depthTestEnable = VK_TRUE;
     depth_info.depthWriteEnable = VK_TRUE;
     depth_info.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;

@@ -1420,12 +1420,12 @@ RenderContext::RenderContext(
     }
 
     {
-        VkDescriptorBindingFlags flags[] = { VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, 0 };
+        VkDescriptorBindingFlags flags[] = { VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, 0, 0 };
 
         VkDescriptorSetLayoutBindingFlagsCreateInfo flag_info = {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
             .pNext = nullptr,
-            .bindingCount = 2,
+            .bindingCount = 3,
             .pBindingFlags = flags,
         };
 
@@ -2098,102 +2098,81 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
     }
 
     // DynArray<VkWriteDescriptorSet> desc_updates(9 + (material_textures_.size() > 0 ? 2 : 0));
-    DynArray<VkWriteDescriptorSet> desc_updates(100);
+    DynArray<VkWriteDescriptorSet> desc_updates(12);
 
     VkDescriptorBufferInfo obj_info;
     obj_info.buffer = asset_buffer.buffer;
     obj_info.offset = 0;
     obj_info.range = buffer_sizes[0];
-
-    desc_updates.push_back({});
-    DescHelper::storage(desc_updates[0], asset_set_cull_, &obj_info, 0);
+    DescHelper::storage(desc_updates.emplace_back(), asset_set_cull_, &obj_info, 0);
 
     VkDescriptorBufferInfo mesh_info;
     mesh_info.buffer = asset_buffer.buffer;
     mesh_info.offset = buffer_offsets[0];
     mesh_info.range = buffer_sizes[1];
-
-    desc_updates.push_back({});
-    DescHelper::storage(desc_updates[1], asset_set_cull_, &mesh_info, 1);
+    DescHelper::storage(desc_updates.emplace_back(), asset_set_cull_, &mesh_info, 1);
+    DescHelper::storage(desc_updates.emplace_back(), asset_batch_lighting_set_, &mesh_info, 1);
 
     VkDescriptorBufferInfo vert_info;
     vert_info.buffer = asset_buffer.buffer;
     vert_info.offset = buffer_offsets[1];
     vert_info.range = buffer_sizes[2];
-
-    desc_updates.push_back({});
-    DescHelper::storage(desc_updates[2], asset_set_draw_, &vert_info, 0);
+    DescHelper::storage(desc_updates.emplace_back(), asset_set_draw_, &vert_info, 0);
+    DescHelper::storage(desc_updates.emplace_back(), asset_batch_lighting_set_, &vert_info, 0);
 
     VkDescriptorBufferInfo mat_info;
     mat_info.buffer = asset_buffer.buffer;
     mat_info.offset = buffer_offsets[3];
     mat_info.range = buffer_sizes[4];
-
-    desc_updates.push_back({});
-    DescHelper::storage(desc_updates[3], asset_set_draw_, &mat_info, 1);
+    DescHelper::storage(desc_updates.emplace_back(), asset_set_draw_, &mat_info, 1);
+    DescHelper::storage(desc_updates.emplace_back(), asset_batch_lighting_set_, &mat_info, 2);
 
     VkDescriptorBufferInfo index_set_info;
     index_set_info.buffer = asset_buffer.buffer;
     index_set_info.offset = buffer_offsets[2];
     index_set_info.range = buffer_sizes[3];
-
-    desc_updates.push_back({});
-    DescHelper::storage(desc_updates[4], index_buffer_set, &index_set_info, 0);
-
-    desc_updates.push_back({});
-    DescHelper::storage(desc_updates[5], asset_batch_lighting_set_, &vert_info, 0);
-
-    desc_updates.push_back({});
-    DescHelper::storage(desc_updates[6], asset_batch_lighting_set_, &mesh_info, 1);
-
-    desc_updates.push_back({});
-    DescHelper::storage(desc_updates[7], asset_batch_lighting_set_, &mat_info, 2);
+    DescHelper::storage(desc_updates.emplace_back(), index_buffer_set, &index_set_info, 0);
 
     VkDescriptorBufferInfo aabb_set_info;
     aabb_set_info.buffer = asset_buffer.buffer;
     aabb_set_info.offset = buffer_offsets[4];
     aabb_set_info.range = buffer_sizes[5];
-
-    desc_updates.push_back({});
-    DescHelper::storage(desc_updates[8], aabb_buffer_set, &aabb_set_info, 0);
+    DescHelper::storage(desc_updates.emplace_back(), aabb_buffer_set, &aabb_set_info, 0);
 
     if (textures.size()) {
         material_textures_ = loadTextures(dev, alloc, renderQueue, textures);
     }
 
-    if (material_textures_.size()) {
-        DynArray<VkDescriptorImageInfo> tx_infos(material_textures_.size());
-        for (auto &tx : material_textures_) {
-            tx_infos.push_back({
-                .sampler = VK_NULL_HANDLE,
-                .imageView = tx.view,
-                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-            });
-        }
-        desc_updates.push_back({});
-        DescHelper::textures(desc_updates[9], asset_set_mat_tex_, tx_infos.data(), tx_infos.size(), 0);
-        
-        VkDescriptorBufferInfo mat_tx_info;
-        mat_tx_info.buffer = asset_buffer.buffer;
-        mat_tx_info.offset = buffer_offsets[5];
-        mat_tx_info.range = buffer_sizes[6];
-
-        desc_updates.push_back({});
-        DescHelper::storage(desc_updates[10], asset_set_mat_tex_, &mat_tx_info, 2);
+    DynArray<VkDescriptorImageInfo> tx_infos(material_textures_.size());
+    for (const auto &tx : material_textures_) {
+        tx_infos.push_back({
+            .sampler = VK_NULL_HANDLE,
+            .imageView = tx.view,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        });
+    }
+    if (tx_infos.size()) {
+        DescHelper::textures(desc_updates.emplace_back(), asset_set_mat_tex_, tx_infos.data(), tx_infos.size(), 0);
+    }
+    
+    VkDescriptorBufferInfo mat_tx_info;
+    mat_tx_info.buffer = asset_buffer.buffer;
+    mat_tx_info.offset = buffer_offsets[5];
+    mat_tx_info.range = buffer_sizes[6];
+    if (tx_infos.size()) {
+        DescHelper::storage(desc_updates.emplace_back(), asset_set_mat_tex_, &mat_tx_info, 2);
     }
 
     DescHelper::update(dev, desc_updates.data(), desc_updates.size());
 
-    AssetData asset_data {
+    loaded_assets_.emplace_back(AssetData {
         std::move(asset_buffer),
         (uint32_t)buffer_offsets[2],
         index_buffer_set,
         buffer_offsets[4],
         buffer_sizes[5],
         aabb_buffer_set
-    };
-
-    loaded_assets_.emplace_back(std::move(asset_data));
+    });
 
     return 0;
 }
