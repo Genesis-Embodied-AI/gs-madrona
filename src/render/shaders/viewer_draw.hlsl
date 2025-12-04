@@ -154,15 +154,15 @@ PixelOutput frag(in V2F v2f)
 {
     PixelOutput output;
 
+    MaterialData mat_data = materialBuffer[v2f.materialIdx];
     float metalness = mat_data.metalness;
     float roughness = mat_data.roughness;
-    MaterialData mat_data = materialBuffer[v2f.materialIdx];
     float4 color = mat_data.color;
 
     int texture_idx = -1;
     uint texture_count = mat_data.textureCount;
     if (texture_count > 0) {
-        uint texture_start = mat_data.textureOffset;
+        uint texture_start = mat_data.numTextures;
         texture_idx = materialTexturesIndices[texture_start + v2f.worldIdx % texture_count];
     }
     if (texture_idx != -1) {

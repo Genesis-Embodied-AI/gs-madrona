@@ -144,7 +144,6 @@ struct Vertex {
     float3 normal;
     float4 tangentAndSign;
     float2 uv;
-    uint32_t materialIdx;
 };
 
 struct PackedVertex {
