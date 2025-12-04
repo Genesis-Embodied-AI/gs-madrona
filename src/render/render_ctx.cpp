@@ -55,7 +55,7 @@ using namespace vk;
 using Vertex = render::shader::Vertex;
 using PackedVertex = render::shader::PackedVertex;
 using MeshData = render::shader::MeshData;
-using MaterialData = render::shader::MaterialData;
+using MaterialDataShader = render::shader::MaterialData;
 using ObjectData = render::shader::ObjectData;
 using DrawPushConst = render::shader::DrawPushConst;
 using CullPushConst = render::shader::CullPushConst;
@@ -2030,7 +2030,7 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
     int32_t mat_texture_offset = 0;
     for (const SourceMaterial &mat : src_mats) {
         int32_t num_mat_textures = (int32_t)mat.numTextures;
-        MaterialData *mat_data = materials_ptr + (mat_offset++);
+        MaterialDataShader *mat_data = materials_ptr + (mat_offset++);
         mat_data->color = mat.color;
         mat_data->roughness = mat.roughness;
         mat_data->metalness = mat.metalness;

@@ -114,7 +114,6 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                 viz_gpu_hdls != nullptr ? *viz_gpu_hdls : Optional<VisualizerGPUHandles>::none()
             );
 
-            free(ptr_geom_rgba);
             free(ptr_geom_mat_ids);
             free(ptr_geom_data_ids);
         }, nb::arg("gpu_id"),

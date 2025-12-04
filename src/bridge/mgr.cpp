@@ -167,7 +167,7 @@ struct Manager::Impl {
                 geom_rotations, sizeof(Quat) * total_geoms, cudaMemcpyDeviceToDevice, strm
             );
         }
-        
+
         uint32_t total_cams = numCams * cfg.numWorlds;
         if (cam_positions != nullptr) {
             cudaMemcpyAsync(
@@ -525,33 +525,33 @@ static RTAssets loadRenderObjects(
     }
 
     // Create materials for geoms that do not have one assigned
-    for (CountT i = 0; i < model.numGeoms; i++) {
-        if (model.geomMatIDs[i] == -1) {
-            const math::Vector4 &rgba_i = model.geomRGBA[i];
-            SourceMaterial mat = {
-                .color = math::Vector4{rgba_i.x, rgba_i.y, rgba_i.z, rgba_i.w},
-                .textureIdx = nullptr,
-                .numTextures = 0,
-                .roughness = 0.8f,
-                .metalness = 0.2f,
-            };
-            materials.push_back(mat);
-            model.geomMatIDs[i] = materials.size() - 1;
+    // for (CountT i = 0; i < model.numGeoms; i++) {
+    //     if (model.geomMatIDs[i] == -1) {
+    //         const math::Vector4 &rgba_i = model.geomRGBA[i];
+    //         SourceMaterial mat = {
+    //             .color = math::Vector4{rgba_i.x, rgba_i.y, rgba_i.z, rgba_i.w},
+    //             .textureIdx = nullptr,
+    //             .numTextures = 0,
+    //             .roughness = 0.8f,
+    //             .metalness = 0.2f,
+    //         };
+    //         materials.push_back(mat);
+    //         model.geomMatIDs[i] = materials.size() - 1;
 
-            for (CountT j = i + 1; j < model.numGeoms; j++) {
-                // FIX: Should probably implement == op for Vector4
-                const math::Vector4 &rgba_j = model.geomRGBA[j];
-                if (model.geomMatIDs[j] == -1 && 
-                    rgba_i.x == rgba_j.x &&
-                    rgba_i.y == rgba_j.y &&
-                    rgba_i.z == rgba_j.z &&
-                    rgba_i.w == rgba_j.w
-                ) {
-                    model.geomMatIDs[j] = materials.size() - 1;
-                }
-            }
-        }
-    }
+    //         for (CountT j = i + 1; j < model.numGeoms; j++) {
+    //             // FIX: Should probably implement == op for Vector4
+    //             const math::Vector4 &rgba_j = model.geomRGBA[j];
+    //             if (model.geomMatIDs[j] == -1 && 
+    //                 rgba_i.x == rgba_j.x &&
+    //                 rgba_i.y == rgba_j.y &&
+    //                 rgba_i.z == rgba_j.z &&
+    //                 rgba_i.w == rgba_j.w
+    //             ) {
+    //                 model.geomMatIDs[j] = materials.size() - 1;
+    //             }
+    //         }
+    //     }
+    // }
 
     HeapArray<SourceObject> objs(model.numGeoms + 1);
 
@@ -605,6 +605,7 @@ static RTAssets loadRenderObjects(
                 .numFaces = source_mesh.numFaces,
                 .materialIDX = static_cast<uint32_t>(model.geomMatIDs[i]),
             };
+            assert(model.geomMatIDs[i] >= 0);
         }
 
         objs[i] = {

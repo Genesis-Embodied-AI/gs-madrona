@@ -39,7 +39,6 @@ struct GSModel {
     int32_t *geomMatIDs;
     int32_t *enabledGeomGroups;
     madrona::math::Vector3 *geomSizes;
-    madrona::math::Vector4 *geomRGBA;
     madrona::math::Vector4 *matRGBA;
     int32_t *matTexIDs;
     int32_t *matTexOffsets;
