@@ -113,7 +113,7 @@ void vert(in uint vid : SV_VertexID,
 
     v2f.worldPos = rotateVec(instance_data.rotation, instance_data.scale * vert.position) + instance_data.position;
     v2f.position = clip_pos;
-    v2f.uv = float2(vert.uv.x, 1.0f - vert.uv.y);
+    v2f.uv = vert.uv;
     v2f.worldNormal = rotateVec(instance_data.rotation, vert.normal);
     v2f.worldIdx = instance_data.worldID;
     v2f.viewIdx = draw_data.viewID;

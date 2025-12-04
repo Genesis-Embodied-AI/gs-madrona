@@ -1054,8 +1054,8 @@ static void issueComputeLayoutTransitions(
         return VkImageMemoryBarrier{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             .pNext = nullptr,
-            .srcAccessMask = isDepth ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-                                     : VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .srcAccessMask = isDepth ? VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+                                     : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
             .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
             .oldLayout = isDepth ? VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL
                                  : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -1704,6 +1704,11 @@ BatchRenderer::~BatchRenderer()
     impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->shadowDraw.hdls[0], nullptr);
     impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->shadowDraw.layout, nullptr);
 
+    if (impl->postProcess.has_value()) {
+        impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->postProcess->hdls[0], nullptr);
+        impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->postProcess->layout, nullptr);
+    }
+
     for (CountT i = 0; i < impl->batchFrames.size(); i++) {
         impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].prepareCmdPool, nullptr);
         impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].renderCmdPool, nullptr);
@@ -1721,7 +1726,7 @@ BatchRenderer::~BatchRenderer()
             impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].shadowMapView, nullptr);
             impl->dev.dt.destroyImageView(impl->dev.hdl, impl->batchFrames[i].targets[j].shadowDepthView, nullptr);
         }
-    }        
+    }
 
     impl->dev.dt.destroyQueryPool(impl->dev.hdl, impl->timeQueryPool, nullptr);
 }
