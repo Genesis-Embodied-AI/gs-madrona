@@ -154,26 +154,33 @@ struct Manager::Impl {
                                  Quat *cam_rotations,
                                  cudaStream_t strm)
     {
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::InstancePositions),
-            geom_positions,
-            sizeof(Vector3) * numGeoms * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::InstanceRotations),
-            geom_rotations,
-            sizeof(Quat) * numGeoms * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::CameraPositions),
-            cam_positions,
-            sizeof(Vector3) * numCams * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::CameraRotations),
-            cam_rotations,
-            sizeof(Quat) * numCams * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
+        uint32_t total_geoms = numGeoms * cfg.numWorlds;
+        if (geom_positions != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::InstancePositions),
+                geom_positions, sizeof(Vector3) * total_geoms, cudaMemcpyDeviceToDevice, strm
+            );
+        }
+        if (geom_rotations != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::InstanceRotations),
+                geom_rotations, sizeof(Quat) * total_geoms, cudaMemcpyDeviceToDevice, strm
+            );
+        }
+        
+        uint32_t total_cams = numCams * cfg.numWorlds;
+        if (cam_positions != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::CameraPositions),
+                cam_positions, sizeof(Vector3) * total_cams, cudaMemcpyDeviceToDevice, strm
+            );
+        }
+        if (cam_rotations != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::CameraRotations),
+                cam_rotations, sizeof(Quat) * total_cams, cudaMemcpyDeviceToDevice, strm
+            );
+        }
     }
 
     inline void copyInProperties(
@@ -190,63 +197,77 @@ struct Manager::Impl {
         float *light_intensity,
         cudaStream_t strm)
     {
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::InstanceMatOverrides),
-            mat_overrides,
-            sizeof(MaterialOverride) * numGeoms * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::InstanceColorOverrides),
-            col_overrides,
-            sizeof(ColorOverride) * numGeoms * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::InstanceScales),
-            geom_sizes,
-            sizeof(Diag3x3) * numGeoms * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
+        uint32_t total_geoms = numGeoms * cfg.numWorlds;
+        if (mat_overrides != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::InstanceMatOverrides),
+                mat_overrides, sizeof(MaterialOverride) * total_geoms, cudaMemcpyDeviceToDevice, strm
+            );
+        }
+        // TODO: Remove ColorOverride from ECS
+        if (col_overrides != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::InstanceColorOverrides),
+                col_overrides, sizeof(ColorOverride) * total_geoms, cudaMemcpyDeviceToDevice, strm
+            );
+        }
+        if (geom_sizes != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::InstanceScales),
+                geom_sizes, sizeof(Diag3x3) * total_geoms, cudaMemcpyDeviceToDevice, strm
+            );
+        }
 
         // Copy light properties to GPU
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::LightPositions),
-            light_pos,
-            sizeof(Vector3) * numLights * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::LightDirections),
-            light_dir,
-            sizeof(Vector3) * numLights * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::LightColors),
-            light_color,
-            sizeof(ColorOverride) * numLights * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::LightTypes),
-            light_isdir,
-            sizeof(bool) * numLights * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::LightShadows),
-            light_castshadow,
-            sizeof(bool) * numLights * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::LightCutoffAngles),
-            light_cutoff,
-            sizeof(float) * numLights * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::LightAttenuations),
-            light_attenuation,
-            sizeof(float) * numLights * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
-        cudaMemcpyAsync(
-            gpuExec.getExported((CountT)ExportID::LightIntensities),
-            light_intensity,
-            sizeof(float) * numLights * cfg.numWorlds,
-            cudaMemcpyDeviceToDevice, strm);
+        uint32_t total_lights = numLights * cfg.numWorlds;
+        if (light_pos != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::LightPositions),
+                light_pos, sizeof(Vector3) * total_lights, cudaMemcpyDeviceToDevice, strm
+            );
+        }
+        if (light_dir != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::LightDirections),
+                light_dir, sizeof(Vector3) * total_lights, cudaMemcpyDeviceToDevice, strm
+            );
+        }
+        if (light_color != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::LightColors),
+                light_color, sizeof(ColorOverride) * total_lights, cudaMemcpyDeviceToDevice, strm
+            );
+        }
+        if (light_isdir != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::LightTypes),
+                light_isdir, sizeof(bool) * total_lights, cudaMemcpyDeviceToDevice, strm
+            );
+        }
+        if (light_castshadow != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::LightShadows),
+                light_castshadow, sizeof(bool) * total_lights, cudaMemcpyDeviceToDevice, strm
+            );
+        }
+        if (light_cutoff != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::LightCutoffAngles),
+                light_cutoff, sizeof(float) * total_lights, cudaMemcpyDeviceToDevice, strm
+            );
+        }
+        if (light_attenuation != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::LightAttenuations),
+                light_attenuation, sizeof(float) * total_lights, cudaMemcpyDeviceToDevice, strm
+            );
+        }
+        if (light_intensity != nullptr) {
+            cudaMemcpyAsync(
+                gpuExec.getExported((CountT)ExportID::LightIntensities),
+                light_intensity, sizeof(float) * total_lights, cudaMemcpyDeviceToDevice, strm
+            );
+        }
     }
 
     inline void init(const Vector3 *geom_positions,

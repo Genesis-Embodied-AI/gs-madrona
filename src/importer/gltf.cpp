@@ -1811,10 +1811,10 @@ static bool gltfImportAssets(LoaderData &loader,
         int32_t texture_id = material.baseColorIdx;
         if (texture_id != -1) {
             texture_id += prev_tex_idx;
-            imported.materialTextures.push_back(uint32_t(texture_id));
+            imported.materialTextures.push_back(texture_id);
             imported.materials.emplace_back(SourceMaterial {
                 .color = material.baseColor,
-                .textureIdx = &imported.materialTextures[imported.materialTextures.size() - 1],
+                .textureIdx = imported.materialTextures.data() + (imported.materialTextures.size() - 1),
                 .numTextures = 1,
                 .roughness = material.roughness,
                 .metalness = material.metallic,

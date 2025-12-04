@@ -55,7 +55,7 @@ using namespace vk;
 using Vertex = render::shader::Vertex;
 using PackedVertex = render::shader::PackedVertex;
 using MeshData = render::shader::MeshData;
-using MaterialDataShader = render::shader::MaterialData;
+using MaterialData = render::shader::MaterialData;
 using ObjectData = render::shader::ObjectData;
 using DrawPushConst = render::shader::DrawPushConst;
 using CullPushConst = render::shader::CullPushConst;
@@ -635,11 +635,8 @@ static EngineInterop setupEngineInterop(Device &dev,
             world_ids_views_base = malloc(sizeof(uint64_t) * num_worlds * max_views_per_world);
         } else {
 #ifdef MADRONA_VK_CUDA_SUPPORT
-            views_gpu = alloc.makeDedicatedBuffer(
-                num_views_bytes, false, true);
-            views_cuda.emplace(dev, views_gpu->mem,
-                num_views_bytes);
-
+            views_gpu = alloc.makeDedicatedBuffer(num_views_bytes, false, true);
+            views_cuda.emplace(dev, views_gpu->mem, num_views_bytes);
             views_hdl = views_gpu->buf.buffer;
             views_base = (char *)views_cuda->getDevicePointer();
 #endif
@@ -657,12 +654,8 @@ static EngineInterop setupEngineInterop(Device &dev,
             instances_base = malloc(sizeof(render::shader::PackedInstanceData) * num_worlds * max_instances_per_world);
         } else {
 #ifdef MADRONA_VK_CUDA_SUPPORT
-            instances_gpu = alloc.makeDedicatedBuffer(
-                num_instances_bytes, false, true);
-
-            instances_cuda.emplace(dev, instances_gpu->mem,
-                num_instances_bytes);
-
+            instances_gpu = alloc.makeDedicatedBuffer(num_instances_bytes, false, true);
+            instances_cuda.emplace(dev, instances_gpu->mem, num_instances_bytes);
             instances_hdl = instances_gpu->buf.buffer;
             instances_base = (char *)instances_cuda->getDevicePointer();
 #endif
@@ -678,15 +671,10 @@ static EngineInterop setupEngineInterop(Device &dev,
             lights_cpu = alloc.makeStagingBuffer(num_lights_bytes);
             lights_hdl = lights_cpu->buffer;
             lights_base = malloc(sizeof(render::shader::PackedLightData) * num_worlds * max_lights_per_world);
-        }
-        else
-        {
+        } else {
 #ifdef MADRONA_VK_CUDA_SUPPORT
-            lights_gpu = alloc.makeDedicatedBuffer(
-                num_lights_bytes, false, true);
-            lights_cuda.emplace(dev, lights_gpu->mem,
-                num_lights_bytes);
-
+            lights_gpu = alloc.makeDedicatedBuffer(num_lights_bytes, false, true);
+            lights_cuda.emplace(dev, lights_gpu->mem, num_lights_bytes);
             lights_hdl = lights_gpu->buf.buffer;
             lights_base = (char *)lights_cuda->getDevicePointer();
 #endif
@@ -703,11 +691,8 @@ static EngineInterop setupEngineInterop(Device &dev,
             aabb_base = malloc(sizeof(render::shader::AABB) * num_worlds * max_instances_per_world);
         } else {
 #ifdef MADRONA_VK_CUDA_SUPPORT
-            aabb_gpu = alloc.makeDedicatedBuffer(
-                num_aabb_bytes, false, true);
-            aabb_cuda.emplace(dev, aabb_gpu->mem,
-                num_aabb_bytes);
-
+            aabb_gpu = alloc.makeDedicatedBuffer(num_aabb_bytes, false, true);
+            aabb_cuda.emplace(dev, aabb_gpu->mem, num_aabb_bytes);
             aabb_hdl = aabb_gpu->buf.buffer;
             aabb_base = (char *)aabb_cuda->getDevicePointer();
 #endif
@@ -723,12 +708,8 @@ static EngineInterop setupEngineInterop(Device &dev,
             instance_offsets_base = instance_offsets_cpu->ptr;
         } else {
 #ifdef MADRONA_VK_CUDA_SUPPORT
-            instance_offsets_gpu = alloc.makeDedicatedBuffer(
-                num_offsets_bytes, false, true);
-
-            instance_offsets_cuda.emplace(dev, instance_offsets_gpu->mem,
-                num_offsets_bytes);
-
+            instance_offsets_gpu = alloc.makeDedicatedBuffer(num_offsets_bytes, false, true);
+            instance_offsets_cuda.emplace(dev, instance_offsets_gpu->mem, num_offsets_bytes);
             instance_offsets_hdl = instance_offsets_gpu->buf.buffer;
             instance_offsets_base = (char *)instance_offsets_cuda->getDevicePointer();
 #endif
@@ -769,8 +750,7 @@ static EngineInterop setupEngineInterop(Device &dev,
         }
     }
 
-    const uint32_t num_voxels = voxel_config.xLength
-        * voxel_config.yLength * voxel_config.zLength;
+    const uint32_t num_voxels = voxel_config.xLength * voxel_config.yLength * voxel_config.zLength;
     const uint32_t staging_size = num_voxels > 0 ? num_voxels * sizeof(int32_t) : 4;
 
     auto voxel_cpu = Optional<HostBuffer>::none();
@@ -804,8 +784,7 @@ static EngineInterop setupEngineInterop(Device &dev,
     AtomicU32 *total_num_lights_cpu_inc = nullptr;
 
     if (!gpu_input) {
-        total_num_views_readback = (uint32_t *)malloc(
-            3*sizeof(uint32_t));
+        total_num_views_readback = (uint32_t *)malloc(3*sizeof(uint32_t));
         total_num_instances_readback = total_num_views_readback + 1;
         total_num_lights_readback = total_num_instances_readback + 1;
 
@@ -855,10 +834,8 @@ static EngineInterop setupEngineInterop(Device &dev,
         gpu_bridge = nullptr;
     } else {
 #ifdef MADRONA_VK_CUDA_SUPPORT
-        gpu_bridge = (const RenderECSBridge *)cu::allocGPU(
-            sizeof(RenderECSBridge));
-        cudaMemcpy((void *)gpu_bridge, &bridge, sizeof(RenderECSBridge),
-                   cudaMemcpyHostToDevice);
+        gpu_bridge = (const RenderECSBridge *)cu::allocGPU(sizeof(RenderECSBridge));
+        cudaMemcpy((void *)gpu_bridge, &bridge, sizeof(RenderECSBridge), cudaMemcpyHostToDevice);
 #endif
     }
 
@@ -2041,7 +2018,7 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
                 float enc_uvs = std::bit_cast<float>(packHalf2x16(uv));
                 PackedVertex *vertex_data = vertex_ptr + (vertex_offset++);
                 vertex_data->data[0] = Vector4 { pos.x, pos.y, pos.z, enc_nt.x };
-                vertex_data->data[1] = Vector4 { enc_nt.y, enc_nt.z, enc_uv, 0 };
+                vertex_data->data[1] = Vector4 { enc_nt.y, enc_nt.z, enc_uvs, 0 };
             }
 
             memcpy(indices_ptr + index_offset, mesh.indices, sizeof(uint32_t) * num_mesh_indices);

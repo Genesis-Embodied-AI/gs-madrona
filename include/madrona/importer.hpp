@@ -105,7 +105,7 @@ struct ImportedAssets {
 
     DynArray<SourceObject> objects;
     DynArray<SourceMaterial> materials;
-    DynArray<uint32_t> materialTextures;
+    DynArray<int32_t> materialTextures;
     DynArray<SourceInstance> instances;
     DynArray<SourceTexture> textures;
 };
