@@ -31,7 +31,6 @@ class MadronaBatchRendererAdapter:
         geom_retriever: GeomRetriever,
         gpu_id: int,
         num_worlds: int,
-        num_cameras: int,
         num_lights: int,
         cam_fovs_tensor: torch.Tensor,
         cam_znears_tensor: torch.Tensor,
@@ -44,7 +43,7 @@ class MadronaBatchRendererAdapter:
         assert geom_retriever is not None, "GeomRetriever is required for MadronaBatchRendererAdapter"
         assert gpu_id >= 0, "GPU ID must be greater than or equal to 0"
         assert num_worlds > 0, "Number of worlds must be greater than 0"
-        assert num_cameras > 0, "Must have at least one camera for Madrona to work!"
+        assert cam_fovs_tensor.shape[0] > 0, "Must have at least one camera for Madrona to work!"
         assert batch_render_view_width > 0, "Batch render view width must be greater than 0"
         assert batch_render_view_height > 0, "Batch render view height must be greater than 0"
 
@@ -72,7 +71,6 @@ class MadronaBatchRendererAdapter:
             gpu_id=gpu_id,
             **geom_args_static,
             num_lights=num_lights,
-            num_cams=num_cameras,
             num_worlds=num_worlds,
             batch_render_view_width=batch_render_view_width,
             batch_render_view_height=batch_render_view_height,

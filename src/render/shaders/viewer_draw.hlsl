@@ -41,9 +41,10 @@ StructuredBuffer<int> materialTexturesIndices;
 struct V2F {
     [[vk::location(0)]] float3 normal : TEXCOORD0;
     [[vk::location(1)]] float3 position : TEXCOORD1;
-    [[vk::location(3)]] float dummy : TEXCOORD3;
-    [[vk::location(4)]] float2 uv : TEXCOORD4;
-    [[vk::location(3)]] int materialIdx : TEXCOORD2;
+    [[vk::location(2)]] float dummy : TEXCOORD3;
+    [[vk::location(3)]] float2 uv : TEXCOORD4;
+    [[vk::location(4)]] int materialIdx : TEXCOORD5;
+    [[vk::location(5)]] float worldIdx : TEXCOORD6;
 };
 
 PerspectiveCameraData getCameraData()
@@ -137,6 +138,7 @@ float4 vert(in uint vid : SV_VertexID,
     v2f.position = rotateVec(instance_data.rotation, instance_data.scale * vert.position) + instance_data.position;
     v2f.dummy = shadowViewDataBuffer[0].viewProjectionMatrix[0][0];
     v2f.materialIdx = draw_data.materialID;
+    v2f.worldIdx = instance_data.worldID;
 
     return clip_pos;
 }
@@ -161,7 +163,7 @@ PixelOutput frag(in V2F v2f)
     uint texture_count = mat_data.textureCount;
     if (texture_count > 0) {
         uint texture_start = mat_data.textureOffset;
-        texture_idx = materialTexturesIndices[texture_start + v2f.worldID % texture_count];
+        texture_idx = materialTexturesIndices[texture_start + v2f.worldIdx % texture_count];
     }
     if (texture_idx != -1) {
         color *= materialTexturesArray[texture_idx].SampleLevel(linearSampler, v2f.uv, 0);

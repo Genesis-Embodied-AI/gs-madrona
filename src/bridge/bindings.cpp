@@ -166,21 +166,21 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
             nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1>> light_intensity)
         {
             mgr.init(
-                reinterpret_cast<const math::Vector3 *>(geom_pos.data()) if geom_pos.shape(0) > 0 else nullptr,
-                reinterpret_cast<const math::Quat *>(geom_rot.data()) if geom_rot.shape(0) > 0 else nullptr,
-                reinterpret_cast<const math::Vector3 *>(cam_pos.data()) if cam_pos.shape(0) > 0 else nullptr,
-                reinterpret_cast<const math::Quat *>(cam_rot.data()) if cam_rot.shape(0) > 0 else nullptr,
-                reinterpret_cast<const int32_t *>(mat_ids.data()) if mat_ids.shape(0) > 0 else nullptr,
-                reinterpret_cast<const uint32_t *>(geom_rgb.data()) if geom_rgb.shape(0) > 0 else nullptr,
-                reinterpret_cast<const math::Diag3x3 *>(geom_sizes.data()) if geom_sizes.shape(0) > 0 else nullptr,
-                reinterpret_cast<const math::Vector3 *>(light_pos.data()) if light_pos.shape(0) > 0 else nullptr,
-                reinterpret_cast<const math::Vector3 *>(light_dir.data()) if light_dir.shape(0) > 0 else nullptr,
-                reinterpret_cast<const uint32_t *>(light_rgb.data()) if light_rgb.shape(0) > 0 else nullptr,
-                reinterpret_cast<const bool *>(light_isdir.data()) if light_isdir.shape(0) > 0 else nullptr,
-                reinterpret_cast<const bool *>(light_castshadow.data()) if light_castshadow.shape(0) > 0 else nullptr,
-                reinterpret_cast<const float *>(light_cutoff.data()) if light_cutoff.shape(0) > 0 else nullptr,
-                reinterpret_cast<const float *>(light_attenuation.data()) if light_attenuation.shape(0) > 0 else nullptr,
-                reinterpret_cast<const float *>(light_intensity.data()) if light_intensity.shape(0) > 0 else nullptr
+                geom_pos.shape(0) > 0 ? reinterpret_cast<const math::Vector3 *>(geom_pos.data()) : nullptr,
+                geom_rot.shape(0) > 0 ? reinterpret_cast<const math::Quat *>(geom_rot.data()) : nullptr,
+                cam_pos.shape(0) > 0 ? reinterpret_cast<const math::Vector3 *>(cam_pos.data()) : nullptr,
+                cam_rot.shape(0) > 0 ? reinterpret_cast<const math::Quat *>(cam_rot.data()) : nullptr,
+                mat_ids.shape(0) > 0 ? reinterpret_cast<const int32_t *>(mat_ids.data()) : nullptr,
+                geom_rgb.shape(0) > 0 ? reinterpret_cast<const uint32_t *>(geom_rgb.data()) : nullptr,
+                geom_sizes.shape(0) > 0 ? reinterpret_cast<const math::Diag3x3 *>(geom_sizes.data()) : nullptr,
+                light_pos.shape(0) > 0 ? reinterpret_cast<const math::Vector3 *>(light_pos.data()) : nullptr,
+                light_dir.shape(0) > 0 ? reinterpret_cast<const math::Vector3 *>(light_dir.data()) : nullptr,
+                light_rgb.shape(0) > 0 ? reinterpret_cast<const uint32_t *>(light_rgb.data()) : nullptr,
+                light_isdir.shape(0) > 0 ? reinterpret_cast<const bool *>(light_isdir.data()) : nullptr,
+                light_castshadow.shape(0) > 0 ? reinterpret_cast<const bool *>(light_castshadow.data()) : nullptr,
+                light_cutoff.shape(0) > 0 ? reinterpret_cast<const float *>(light_cutoff.data()) : nullptr,
+                light_attenuation.shape(0) > 0 ? reinterpret_cast<const float *>(light_attenuation.data()) : nullptr,
+                light_intensity.shape(0) > 0 ? reinterpret_cast<const float *>(light_intensity.data()) : nullptr
             );
         })
         .def("render", [](Manager &mgr,
