@@ -14,6 +14,7 @@
 #include <span>
 #include <array>
 #include <algorithm>
+#include <cstring>
 
 using bytes = std::span<const std::byte>;
 
@@ -441,7 +442,7 @@ MaterialData initMaterialData(
         }
     }
 
-    // Populate materials array
+    // Populate materials and material_textures array
     int32_t material_texture_offset = 0;
     for (uint32_t i = 0; i < num_materials; ++i) {
         const SourceMaterial &src_mat = materials[i];
@@ -452,6 +453,12 @@ MaterialData initMaterialData(
             .roughness = src_mat.roughness,
             .metalness = src_mat.metalness,
         };
+        
+        if (src_mat.textureIdx != nullptr && src_mat.numTextures > 0) {
+            memcpy(&cpu_mat_data.materialTextures[material_texture_offset],
+                   src_mat.textureIdx,
+                   sizeof(int32_t) * src_mat.numTextures);
+        }
         material_texture_offset += src_mat.numTextures;
     }
 
