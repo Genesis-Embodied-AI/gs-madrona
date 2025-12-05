@@ -401,8 +401,6 @@ static RTAssets loadRenderObjects(
     Optional<render::RenderManager> &render_mgr,
     bool use_rt)
 {
-    StackAlloc tmp_alloc;
-
     std::array<std::string, 1> render_asset_paths;
     const char *py_root_env = getenv("MADRONA_ROOT_PATH");
     std::filesystem::path data_dir = py_root_env ? (std::string(py_root_env) + "/data") : DATA_DIR;
@@ -489,9 +487,8 @@ static RTAssets loadRenderObjects(
         };
     }
 
-    // Use HeapArray with StackAlloc for consistency and better performance
-    // StackAlloc provides efficient temporary allocations that are automatically cleaned up
-    HeapArray<SourceTexture> textures(model.numTextures, tmp_alloc);
+    // Use HeapArray with default allocator - automatically cleaned up when it goes out of scope
+    HeapArray<SourceTexture> textures(model.numTextures);
 
     for (CountT i = 0; i < model.numTextures; i++) {
         // TODO: NChans is not used.
@@ -505,9 +502,9 @@ static RTAssets loadRenderObjects(
         };
     }
 
-    // Use HeapArray instead of std::vector since size is known upfront
+    // Use HeapArray with default allocator - automatically cleaned up when it goes out of scope
     // This avoids dynamic reallocation and provides better performance
-    HeapArray<imp::SourceMaterial> materials(model.numMats, tmp_alloc);
+    HeapArray<imp::SourceMaterial> materials(model.numMats);
     for (CountT i = 0; i < model.numMats; i++) {
         const math::Vector4 &rgba = model.matRGBA[i];
         uint32_t mat_tex_offset = model.matTexOffsets[i];
