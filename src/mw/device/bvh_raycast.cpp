@@ -602,22 +602,17 @@ static __device__ TraceResult traceRay(
             // Intersect with the children of the child to get a new node group
             // and calculate the present bits according to which were
             // intersected
-            uint32_t child_node_idx =
-                node_buffer[current_grp & 0xFFFF'FFFF].childrenIdx[child_idx];
+            uint32_t child_node_idx = node_buffer[current_grp & 0xFFFF'FFFF].childrenIdx[child_idx];
             bool child_is_leaf = (child_node_idx & 0x8000'0000);
             child_node_idx = child_node_idx & (~0x8000'0000);
 
             GroupType new_grp_type = GroupType::TopLevel;
 
-            if (parent_grp_type == GroupType::TopLevel &&
-                child_is_leaf) {
+            if (parent_grp_type == GroupType::TopLevel && child_is_leaf) {
                 // Need to compute new ray o/d/etc...
                 instance_idx = (int32_t)(child_node_idx & ~0x8000'0000);
-                InstanceData *instance_data = world_info.instances + 
-                                              instance_idx;
-
-                current_bvh = bvhParams.bvhs + 
-                              world_info.instances[instance_idx].objectID;
+                InstanceData *instance_data = world_info.instances + instance_idx;
+                current_bvh = bvhParams.bvhs + world_info.instances[instance_idx].objectID;
 
                 // Should be able to just do a continue in this case - we'll
                 // just resume processing the parent node
@@ -625,11 +620,9 @@ static __device__ TraceResult traceRay(
                     continue;
 
                 ray_o = instance_data->scale.inv() *
-                    instance_data->rotation.inv().rotateVec(
-                            (ray_o - instance_data->position));
+                    instance_data->rotation.inv().rotateVec(ray_o - instance_data->position);
                 ray_d = instance_data->scale.inv() *
-                    instance_data->rotation.inv().rotateVec(
-                            ray_d);
+                    instance_data->rotation.inv().rotateVec(ray_d);
                 t_scale = ray_d.length();
                 t_max *= t_scale;
 
@@ -682,12 +675,10 @@ static __device__ TraceResult traceRay(
                 }
             }
 
-            current_grp = encodeNodeGroup(
-                    child_node_idx, grp_present_bits, new_grp_type);
+            current_grp = encodeNodeGroup(child_node_idx, grp_present_bits, new_grp_type);
 
             if (tri_present_bits) {
-                triangle_grp = encodeNodeGroup(
-                        child_node_idx, tri_present_bits, GroupType::Triangles);
+                triangle_grp = encodeNodeGroup(child_node_idx, tri_present_bits, GroupType::Triangles);
             } else {
                 triangle_grp = invalidNodeGroup();
             }
@@ -701,28 +692,16 @@ static __device__ TraceResult traceRay(
             while (getTrianglePresentBits(triangle_grp) != 0) {
                 // TODO: check active mask against heuristic to exit if not enough
                 // threads are working on this
-                uint32_t local_node_tri_idx = 
-                    __ffs(getTrianglePresentBits(triangle_grp)) - 1;
-
-                uint32_t local_leaf_idx = 
-                    local_node_tri_idx / MeshBVH::numTrisPerLeaf;
-                uint32_t tri_idx = 
-                    local_node_tri_idx % MeshBVH::numTrisPerLeaf;
-
-                uint32_t glob_leaf_idx =
-                    parent.childrenIdx[local_leaf_idx] & (~0x8000'0000);
+                uint32_t local_node_tri_idx = __ffs(getTrianglePresentBits(triangle_grp)) - 1;
+                uint32_t local_leaf_idx = local_node_tri_idx / MeshBVH::numTrisPerLeaf;
+                uint32_t tri_idx = local_node_tri_idx % MeshBVH::numTrisPerLeaf;
+                uint32_t glob_leaf_idx = parent.childrenIdx[local_leaf_idx] & (~0x8000'0000);
 
                 TriHitInfo hit_info = triangleIntersect(
-                        glob_leaf_idx,
-                        tri_idx,
-                        isect_info,
-                        ray_o,
-                        t_max,
-                        current_bvh);
+                    glob_leaf_idx, tri_idx, isect_info, ray_o, t_max, current_bvh);
 
                 if (hit_info.hit) {
                     t_max = hit_info.tHit;
-
                     tri_hit = hit_info;
                     tri_hit.instanceIdx = instance_idx;
                 }
@@ -768,8 +747,7 @@ static __device__ TraceResult traceRay(
             int32_t material_idx = override_mat_id;
 
             if (override_mat_id == MaterialOverride::UseDefaultMaterial) {
-                material_idx = tri_hit.bvh->getMaterialIDX(
-                        tri_hit.leafMaterialIndex);
+                material_idx = tri_hit.bvh->getMaterialIDX(tri_hit.leafMaterialIndex);
             }
 
             Vector3 color = { 1.f, 1.f, 1.f };
@@ -778,9 +756,9 @@ static __device__ TraceResult traceRay(
                 color = hexToRgb(instance->color);
             } else if (material_idx != -1) {
                 Material *mat = &bvhParams.materials[material_idx];
-
-                if (mat->textureIdx != -1) {
-                    cudaTextureObject_t *tex = &bvhParams.textures[mat->textureIdx];
+                if (mat->numTextures > 0) {
+                    int32_t texture_idx = bvhParams.materialTextures[mat->textureOffset + instance->worldIDX % mat->numTextures];
+                    cudaTextureObject_t *tex = bvhParams.textures + texture_idx;
 
                     // --- Mipmap LOD selection ---
                     // Estimate LOD based on distance from camera and UV footprint
@@ -799,12 +777,13 @@ static __device__ TraceResult traceRay(
                     // Clamp LOD to [0, 8]
                     lod = fminf(fmaxf(lod, 0.0f), 8.0f);
 
-                    float4 sampled_color = tex2DLod<float4>(*tex,
-                            tri_hit.uv.x, tri_hit.uv.y, lod);
+                    float4 sampled_color = tex2DLod<float4>(*tex, tri_hit.uv.x, tri_hit.uv.y, lod);
 
-                    Vector3 tex_color = { sampled_color.x,
+                    Vector3 tex_color = {
+                        sampled_color.x,
                         sampled_color.y,
-                        sampled_color.z };
+                        sampled_color.z
+                    };
 
                     color.x = tex_color.x * mat->color.x;
                     color.y = tex_color.y * mat->color.y;
@@ -942,13 +921,13 @@ static __device__ FragmentResult computeFragment(
                     // TODO: Definitely do some sort of ray fetching because there will
                     // be threads doing nothing potentially.
                     TraceResult shadow_hit = traceRay(
-                            TraceInfo {
+                        TraceInfo {
                             .rayOrigin = hit_pos,
                             .rayDirection = -ray_dir,
                             .tMin = 0.000001f,
                             .tMax = 10000.f,
                             .dOnly = true
-                            }, world_info);
+                        }, world_info);
                     if(shadow_hit.hit) {
                         continue;
                     }
@@ -1004,28 +983,19 @@ extern "C" __global__ void bvhRaycastEntry()
     const uint32_t resident_view_offset = blockIdx.x;
 
     uint32_t current_view_offset = resident_view_offset;
-
-    uint32_t bytes_per_view =
-        bvhParams.renderOutputWidth * bvhParams.renderOutputHeight * 4;
-
+    uint32_t bytes_per_view = bvhParams.renderOutputWidth * bvhParams.renderOutputHeight * 4;
     uint32_t num_processed_pixels = 0;
-
     uint32_t pixel_x = blockIdx.y * pixels_per_block + threadIdx.x;
     uint32_t pixel_y = blockIdx.z * pixels_per_block + threadIdx.y;
 
     while (current_view_offset < total_num_views) {
         // While we still have views to generate, trace.
-        PerspectiveCameraData *view_data = 
-            &bvhParams.views[current_view_offset];
-
+        PerspectiveCameraData *view_data = &bvhParams.views[current_view_offset];
         uint32_t world_idx = (uint32_t)view_data->worldIDX;
-
         Vector3 ray_start = view_data->position;
         Vector3 ray_dir = calculateOutRay(view_data, pixel_x, pixel_y);
 
         uint32_t internal_nodes_offset = bvhParams.instanceOffsets[world_idx];
-
-
 
         // This does both the tracing / lighting, etc... just like a fragment
         // shader does in GLSL.
@@ -1038,22 +1008,15 @@ extern "C" __global__ void bvhRaycastEntry()
                 .dOnly = false
             },
             TraceWorldInfo {
-                .nodes = bvhParams.internalData->traversalNodes + 
-                         internal_nodes_offset,
+                .nodes = bvhParams.internalData->traversalNodes + internal_nodes_offset,
                 .instances = bvhParams.instances + internal_nodes_offset,
                 .lights = &bvhParams.lights[bvhParams.lightOffsets[world_idx]],
                 .numLights = (uint32_t)bvhParams.lightCounts[world_idx]
             }
         );
 
-
-
-
-        uint32_t linear_pixel_idx = 4 * 
-            (pixel_x + pixel_y * bvhParams.renderOutputWidth);
-
-        uint32_t global_pixel_byte_off = current_view_offset * bytes_per_view +
-            linear_pixel_idx;
+        uint32_t linear_pixel_idx = 4 * (pixel_x + pixel_y * bvhParams.renderOutputWidth);
+        uint32_t global_pixel_byte_off = current_view_offset * bytes_per_view + linear_pixel_idx;
 
         if (bvhParams.raycastRGBD) {
             // Write both depth and color information

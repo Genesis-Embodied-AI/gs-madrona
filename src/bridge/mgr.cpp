@@ -489,24 +489,25 @@ static RTAssets loadRenderObjects(
         };
     }
 
-    SourceTexture *out_textures = tmp_alloc.allocN<SourceTexture>(model.numTextures);
+    // Use HeapArray with StackAlloc for consistency and better performance
+    // StackAlloc provides efficient temporary allocations that are automatically cleaned up
+    HeapArray<SourceTexture> textures(model.numTextures, tmp_alloc);
 
     for (CountT i = 0; i < model.numTextures; i++) {
         // TODO: NChans is not used.
         uint64_t tex_offset = model.texOffsets[i];
-        Optional<SourceTexture> tex = SourceTexture {
+        textures[i] = SourceTexture {
             .data = model.texData + tex_offset,
             .format = SourceTextureFormat::R8G8B8A8,
             .width = (uint32_t)model.texWidths[i],
             .height = (uint32_t)model.texHeights[i],
             .numBytes = (size_t)(model.texWidths[i] * model.texHeights[i] * 4),
         };
-        out_textures[i] = *tex;
     }
 
-    Span<imp::SourceTexture> imported_textures = Span(out_textures, model.numTextures);
-
-    std::vector<imp::SourceMaterial> materials;
+    // Use HeapArray instead of std::vector since size is known upfront
+    // This avoids dynamic reallocation and provides better performance
+    HeapArray<imp::SourceMaterial> materials(model.numMats, tmp_alloc);
     for (CountT i = 0; i < model.numMats; i++) {
         const math::Vector4 &rgba = model.matRGBA[i];
         uint32_t mat_tex_offset = model.matTexOffsets[i];
@@ -514,14 +515,13 @@ static RTAssets loadRenderObjects(
             model.matTexOffsets[i + 1] : model.numMatTextures;
         uint32_t mat_tex_num = next_tex_offset - mat_tex_offset;
 
-        SourceMaterial mat = {
+        materials[i] = SourceMaterial {
             .color = math::Vector4{rgba.x, rgba.y, rgba.z, rgba.w},
             .textureIdx = model.matTexIDs + mat_tex_offset,
             .numTextures = mat_tex_num,
             .roughness = 0.0f,
             .metalness = 0.0f
         };
-        materials.push_back(mat);
     }
 
     // Create materials for geoms that do not have one assigned
@@ -629,16 +629,19 @@ static RTAssets loadRenderObjects(
     }
 
     if (render_mgr.has_value()) {
-        render_mgr->loadObjects(objs, materials, imported_textures);
+        // HeapArray automatically converts to Span via template constructor
+        render_mgr->loadObjects(objs, materials, textures);
     }
 
     if (use_rt) {
         auto ret = RTAssets {
             render::AssetProcessor::makeBVHData(objs),
-            render::AssetProcessor::initMaterialData(materials.data(),
-                                     materials.size(),
-                                     imported_textures.data(),
-                                     imported_textures.size())
+            render::AssetProcessor::initMaterialData(
+                materials.data(),
+                materials.size(),
+                textures.data(),
+                textures.size()
+            )
         };
 
         return ret;

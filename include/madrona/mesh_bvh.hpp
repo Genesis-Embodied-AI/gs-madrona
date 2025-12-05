@@ -149,7 +149,8 @@ struct Material {
     // For now, just a color
     math::Vector4 color;
 
-    int32_t textureIdx;
+    int32_t textureOffset;
+    int32_t numTextures;
 
     float roughness;
     float metalness;

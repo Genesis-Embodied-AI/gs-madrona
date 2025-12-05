@@ -318,15 +318,22 @@ MaterialData initMaterialData(
     uint32_t num_textures)
 {
     // TODO: Only generate mipmaps for RGBA textures
-    // Count number of BC7 textures and number of non-BC7 textures
+    // Count textures by type:
+    // - BC7 (compressed): uses non-mipmapped cudaArray_t → textureBuffers
+    // - RGBA (uncompressed): uses mipmapped cudaMipmappedArray_t → mipmapTextureBuffers
     uint32_t num_non_mipmap_textures = 0;
     uint32_t num_mipmap_textures = 0;
     for (uint32_t i = 0; i < num_textures; ++i) {
         if (textures[i].format == imp::SourceTextureFormat::BC7) {
-            num_mipmap_textures++;
-        } else {
             num_non_mipmap_textures++;
+        } else {
+            num_mipmap_textures++;
         }
+    }
+    
+    uint32_t num_material_textures = 0;
+    for (uint32_t i = 0; i < num_materials; ++i) {
+        num_material_textures += materials[i].numTextures;
     }
 
     MaterialData cpu_mat_data = {
@@ -335,65 +342,73 @@ MaterialData initMaterialData(
         .numTextureBuffers = num_non_mipmap_textures,
         .mipmapTextureBuffers = (cudaMipmappedArray_t *) malloc(sizeof(cudaMipmappedArray_t) * num_mipmap_textures),
         .numMipmapTextureBuffers = num_mipmap_textures,
+        .materialTextures = (int32_t *) malloc(sizeof(int32_t) * num_material_textures),
         .materials = (Material *) malloc(sizeof(Material) * num_materials)
+    };
+
+    // Separate indices for texture buffer arrays (they have different sizes)
+    uint32_t non_mipmap_idx = 0;
+    uint32_t mipmap_idx = 0;
+
+    // Helper function to create texture descriptor (reduces duplication)
+    auto createTextureDesc = [](bool use_mipmap, uint32_t max_mip_level = 0) {
+        cudaTextureDesc tex_desc = {};
+        tex_desc.addressMode[0] = cudaAddressModeWrap;
+        tex_desc.addressMode[1] = cudaAddressModeWrap;
+        tex_desc.filterMode = cudaFilterModeLinear;
+        tex_desc.readMode = cudaReadModeNormalizedFloat;
+        tex_desc.normalizedCoords = 1;
+        tex_desc.sRGB = 1;
+        if (use_mipmap) {
+            tex_desc.mipmapFilterMode = cudaFilterModeLinear;
+            tex_desc.maxMipmapLevelClamp = max_mip_level;
+        }
+        return tex_desc;
     };
 
     for (uint32_t i = 0; i < num_textures; ++i) {
         const auto &tex = textures[i];
-        int width, height;
-        void *pixels = nullptr;
 
         if (tex.format == imp::SourceTextureFormat::BC7) {
-            width = tex.width;
-            height = tex.height;
-
-            cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<cudaChannelFormatKindUnsignedBlockCompressed7>();
+            // BC7 compressed textures: use non-mipmapped array
+            cudaChannelFormatDesc channel_desc = 
+                cudaCreateChannelDesc<cudaChannelFormatKindUnsignedBlockCompressed7>();
             cudaArray_t cuda_array;
-            REQ_CUDA(cudaMallocArray(&cuda_array, &channel_desc, width, height, cudaArrayDefault));
+            REQ_CUDA(cudaMallocArray(&cuda_array, &channel_desc, 
+                                     tex.width, tex.height, cudaArrayDefault));
 
             REQ_CUDA(cudaMemcpy2DToArray(cuda_array, 0, 0, tex.data,
-                                         16 * width / 4,
-                                         16 * width / 4,
-                                         height / 4,
+                                         16 * tex.width / 4,
+                                         16 * tex.width / 4,
+                                         tex.height / 4,
                                          cudaMemcpyHostToDevice));
 
             cudaResourceDesc res_desc = {};
             res_desc.resType = cudaResourceTypeArray;
             res_desc.res.array.array = cuda_array;
 
-            cudaTextureDesc tex_desc = {};
-            tex_desc.addressMode[0] = cudaAddressModeWrap;
-            tex_desc.addressMode[1] = cudaAddressModeWrap;
-            tex_desc.filterMode = cudaFilterModeLinear;
-            tex_desc.readMode = cudaReadModeNormalizedFloat;
-            tex_desc.normalizedCoords = 1;
-            tex_desc.sRGB = 1;
-
+            cudaTextureDesc tex_desc = createTextureDesc(false);
             cudaTextureObject_t tex_obj = 0;
             REQ_CUDA(cudaCreateTextureObject(&tex_obj, &res_desc, &tex_desc, nullptr));
 
             cpu_mat_data.textures[i] = tex_obj;
-            cpu_mat_data.textureBuffers[i] = cuda_array;
+            cpu_mat_data.textureBuffers[non_mipmap_idx++] = cuda_array;
         } else {
-            pixels = tex.data;
-            width = tex.width;
-            height = tex.height; 
-
             // TODO: Only generate mipmaps for RGBA textures
-            // Generate mipmaps
-            const uint32_t MAX_MIPS = 16; // Should be enough for any reasonable texture size
-            void* mip_data[MAX_MIPS];
-            memset(mip_data, 0, sizeof(mip_data));
+            // RGBA uncompressed textures: generate mipmaps
+            const uint32_t MAX_MIPS = 16;
+            void* mip_data[MAX_MIPS] = {};
             uint32_t mip_widths[MAX_MIPS];
             uint32_t mip_heights[MAX_MIPS];
             uint32_t num_mips;
             
-            generateMipmaps(pixels, width, height, mip_data, mip_widths, mip_heights, num_mips);
+            generateMipmaps(tex.data, tex.width, tex.height, 
+                            mip_data, mip_widths, mip_heights, num_mips);
 
-            // Create CUDA array with mipmaps
+            // Create CUDA mipmapped array
             cudaMipmappedArray_t mipArray;
             cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<uchar4>();
-            cudaExtent extent = make_cudaExtent(width, height, 0);
+            cudaExtent extent = make_cudaExtent(tex.width, tex.height, 0);
             REQ_CUDA(cudaMallocMipmappedArray(&mipArray, &channelDesc, extent, num_mips));
 
             // Copy each mip level
@@ -418,56 +433,59 @@ MaterialData initMaterialData(
             res_desc.resType = cudaResourceTypeMipmappedArray;
             res_desc.res.mipmap.mipmap = mipArray;
 
-            cudaTextureDesc tex_desc = {};
-            tex_desc.addressMode[0] = cudaAddressModeWrap;
-            tex_desc.addressMode[1] = cudaAddressModeWrap;
-            tex_desc.filterMode = cudaFilterModeLinear;
-            tex_desc.readMode = cudaReadModeNormalizedFloat;
-            tex_desc.normalizedCoords = 1;
-            tex_desc.sRGB = 1;
-            tex_desc.mipmapFilterMode = cudaFilterModeLinear;
-            tex_desc.maxMipmapLevelClamp = num_mips - 1;
-
+            cudaTextureDesc tex_desc = createTextureDesc(true, num_mips - 1);
             cudaTextureObject_t tex_obj = 0;
-            REQ_CUDA(cudaCreateTextureObject(&tex_obj,
-                        &res_desc, &tex_desc, nullptr));
-
+            REQ_CUDA(cudaCreateTextureObject(&tex_obj, &res_desc, &tex_desc, nullptr));
             cpu_mat_data.textures[i] = tex_obj;
-            cpu_mat_data.mipmapTextureBuffers[i] = mipArray;
+            cpu_mat_data.mipmapTextureBuffers[mipmap_idx++] = mipArray;
         }
     }
 
+    // Populate materials array
+    int32_t material_texture_offset = 0;
     for (uint32_t i = 0; i < num_materials; ++i) {
-        Material mat = {
-            .color = materials[i].color,
-            .textureIdx = materials[i].numTextures > 0 ? *(materials[i].textureIdx) : -1, //TODO: support batch
-            .roughness = materials[i].roughness,
-            .metalness = materials[i].metalness,
+        const SourceMaterial &src_mat = materials[i];
+        cpu_mat_data.materials[i] = Material {
+            .color = src_mat.color,
+            .textureOffset = material_texture_offset,
+            .numTextures = src_mat.numTextures,
+            .roughness = src_mat.roughness,
+            .metalness = src_mat.metalness,
         };
-
-        cpu_mat_data.materials[i] = mat;
+        material_texture_offset += src_mat.numTextures;
     }
 
+    // Copy texture objects and materials to GPU
     cudaTextureObject_t *gpu_tex_buffer;
     REQ_CUDA(cudaMalloc(&gpu_tex_buffer, sizeof(cudaTextureObject_t) * num_textures));
     REQ_CUDA(cudaMemcpy(gpu_tex_buffer, cpu_mat_data.textures, 
                 sizeof(cudaTextureObject_t) * num_textures,
                 cudaMemcpyHostToDevice));
 
-    Material *mat_buffer;
-    REQ_CUDA(cudaMalloc(&mat_buffer, sizeof(Material) * num_materials));
-    REQ_CUDA(cudaMemcpy(mat_buffer, cpu_mat_data.materials, 
+    Material *gpu_mat_buffer;
+    REQ_CUDA(cudaMalloc(&gpu_mat_buffer, sizeof(Material) * num_materials));
+    REQ_CUDA(cudaMemcpy(gpu_mat_buffer, cpu_mat_data.materials, 
                 sizeof(Material) * num_materials,
                 cudaMemcpyHostToDevice));
 
+    int32_t *gpu_mat_texs;
+    REQ_CUDA(cudaMalloc(&gpu_mat_texs, sizeof(int32_t) * num_material_textures));
+    REQ_CUDA(cudaMemcpy(gpu_mat_texs, cpu_mat_data.materialTextures, 
+                sizeof(int32_t) * num_material_textures,
+                cudaMemcpyHostToDevice));
+
+    // Free CPU-side temporary buffers
     free(cpu_mat_data.textures);
     free(cpu_mat_data.materials);
-    free(cpu_mat_data.textureBuffers);
-    free(cpu_mat_data.mipmapTextureBuffers);
-
-    auto gpu_mat_data = cpu_mat_data;
+    free(cpu_mat_data.materialTextures);
+    
+    // Note: textureBuffers and mipmapTextureBuffers are CUDA arrays that remain on GPU
+    // They are not freed here as they're part of the returned MaterialData
+    // Return GPU-side MaterialData
+    MaterialData gpu_mat_data = cpu_mat_data;
     gpu_mat_data.textures = gpu_tex_buffer;
-    gpu_mat_data.materials = mat_buffer;
+    gpu_mat_data.materials = gpu_mat_buffer;
+    gpu_mat_data.materialTextures = gpu_mat_texs;
 
     return gpu_mat_data;
 }

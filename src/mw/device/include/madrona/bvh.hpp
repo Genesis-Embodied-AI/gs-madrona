@@ -153,6 +153,7 @@ struct BVHParams {
 
     Material *materials;
     cudaTextureObject_t *textures;
+    int32_t *materialTextures;
 
     // Used to determine how many thread blocks per SM.
     uint32_t numSMs;

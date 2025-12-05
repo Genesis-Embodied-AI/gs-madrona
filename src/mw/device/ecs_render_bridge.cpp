@@ -10,6 +10,7 @@ extern "C" __global__ void initBVHParams(madrona::BVHParams *params,
                                          void *timings,
                                          void *materials,
                                          void *textures,
+                                         void *material_textures,
                                          uint32_t num_sms,
                                          uint32_t sm_shared_memory)
 {
@@ -20,44 +21,22 @@ extern "C" __global__ void initBVHParams(madrona::BVHParams *params,
     StateManager *mgr = mwGPU::getStateManager();
     mwGPU::HostAllocator *host_alloc = mwGPU::getHostAllocator();
     mwGPU::TmpAllocator *tmp_alloc = &mwGPU::TmpAllocator::get();
-    mwGPU::HostPrint *host_print = 
-        (mwGPU::HostPrint *)mwGPU::GPUImplConsts::get().hostPrintAddr;
+    mwGPU::HostPrint *host_print = (mwGPU::HostPrint *)mwGPU::GPUImplConsts::get().hostPrintAddr;
     uint32_t raycast_rgbd = mwGPU::GPUImplConsts::get().raycastRGBD;
 
     params->numWorlds = num_worlds;
 
-    params->instances = mgr->getArchetypeComponent<
-        RenderableArchetype, InstanceData>();
-
-    params->views = mgr->getArchetypeComponent<
-        RenderCameraArchetype, PerspectiveCameraData>();
-
-    params->lights = mgr->getArchetypeComponent<
-        LightArchetype, LightDesc>();
-
-    params->instanceOffsets = (int32_t *)mgr->getArchetypeWorldOffsets<
-        RenderableArchetype>();
-
-    params->instanceCounts = (int32_t *)mgr->getArchetypeWorldCounts<
-        RenderableArchetype>();
-
-    params->aabbs = (TLBVHNode *)mgr->getArchetypeComponent<
-        RenderableArchetype, TLBVHNode>();
-
-    params->viewOffsets = (int32_t *)mgr->getArchetypeWorldOffsets<
-        RenderCameraArchetype>();
-
-    params->viewCounts = (int32_t *)mgr->getArchetypeWorldCounts<
-        RenderCameraArchetype>();
-
-    params->lightOffsets = (int32_t *)mgr->getArchetypeWorldOffsets<
-        LightArchetype>();
-
-    params->lightCounts = (int32_t *)mgr->getArchetypeWorldCounts<
-        LightArchetype>();
-
-    params->mortonCodes = (uint32_t *)mgr->getArchetypeComponent<
-        RenderableArchetype, MortonCode>();
+    params->instances = mgr->getArchetypeComponent<RenderableArchetype, InstanceData>();
+    params->views = mgr->getArchetypeComponent<RenderCameraArchetype, PerspectiveCameraData>();
+    params->lights = mgr->getArchetypeComponent<LightArchetype, LightDesc>();
+    params->instanceOffsets = (int32_t *)mgr->getArchetypeWorldOffsets<RenderableArchetype>();
+    params->instanceCounts = (int32_t *)mgr->getArchetypeWorldCounts<RenderableArchetype>();
+    params->aabbs = (TLBVHNode *)mgr->getArchetypeComponent<RenderableArchetype, TLBVHNode>();
+    params->viewOffsets = (int32_t *)mgr->getArchetypeWorldOffsets<RenderCameraArchetype>();
+    params->viewCounts = (int32_t *)mgr->getArchetypeWorldCounts<RenderCameraArchetype>();
+    params->lightOffsets = (int32_t *)mgr->getArchetypeWorldOffsets<LightArchetype>();
+    params->lightCounts = (int32_t *)mgr->getArchetypeWorldCounts<LightArchetype>();
+    params->mortonCodes = (uint32_t *)mgr->getArchetypeComponent<RenderableArchetype, MortonCode>();
 
     params->bvhs = (MeshBVH *)bvhs;
 
@@ -65,20 +44,15 @@ extern "C" __global__ void initBVHParams(madrona::BVHParams *params,
 
     params->rgbOutput = (void *)mgr->getArchetypeComponent<
         RaycastOutputArchetype, render::RGBOutputBuffer>();
-
     params->depthOutput = (void *)mgr->getArchetypeComponent<
         RaycastOutputArchetype, render::DepthOutputBuffer>();
-
     params->normalOutput = (void *)mgr->getArchetypeComponent<
         RaycastOutputArchetype, render::NormalOutputBuffer>();
-
     params->segmentationOutput = (void *)mgr->getArchetypeComponent<
         RaycastOutputArchetype, render::SegmentationOutputBuffer>();
 
-    params->renderOutputWidth = 
-        mwGPU::GPUImplConsts::get().raycastOutputWidth;
-    params->renderOutputHeight = 
-        mwGPU::GPUImplConsts::get().raycastOutputHeight;
+    params->renderOutputWidth = mwGPU::GPUImplConsts::get().raycastOutputWidth;
+    params->renderOutputHeight = mwGPU::GPUImplConsts::get().raycastOutputHeight;
 
     params->internalData = (BVHInternalData *)internal_data;
 
@@ -87,8 +61,8 @@ extern "C" __global__ void initBVHParams(madrona::BVHParams *params,
     params->hostPrintAddr = (void *)host_print;
 
     params->materials = (Material *)materials;
-
     params->textures = (cudaTextureObject_t *)textures;
+    params->materialTextures = (int32_t *)material_textures;
 
     params->raycastRGBD = raycast_rgbd;
 
