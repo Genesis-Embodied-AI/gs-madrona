@@ -65,7 +65,7 @@ class MadronaBatchRendererAdapter:
         try:
             dist = distribution("nvidia_cuda_nvrtc_cu12")
         
-            for file in dist.files:  # file is a importlib.metadata.PackagePath
+            for file in dist.files:
                 if file.name.startswith("libnvrtc.so.1"):
                     ctypes.CDLL(dist.locate_file(file), ctypes.RTLD_LOCAL)
                     break
