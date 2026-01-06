@@ -64,14 +64,11 @@ class MadronaBatchRendererAdapter:
         # Preload Nvidia compiler runtime if available (i.e. torch is not built from source)
         try:
             dist = distribution("nvidia_cuda_nvrtc_cu12")
-        
             for file in dist.files:
                 if file.name.startswith("libnvrtc.so.1"):
                     ctypes.CDLL(dist.locate_file(file), ctypes.RTLD_LOCAL)
                     break
-            else:
-                raise FileNotFoundError
-        except (PackageNotFoundError, FileNotFoundError):
+        except PackageNotFoundError:
             pass
 
         self.madrona = MadronaBatchRenderer(
