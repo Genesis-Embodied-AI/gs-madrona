@@ -38,6 +38,9 @@ struct GSModel {
     int32_t *geomDataIDs;
     int32_t *geomMatIDs;
     int32_t *enabledGeomGroups;
+    // Optional per-(world, geom) visibility mask [numWorlds, numGeoms], row-major:
+    // 0 hides that geom in that world; nullptr = all geoms visible everywhere.
+    const int32_t *geomEnvMask;
     madrona::math::Vector3 *geomSizes;
     madrona::math::Vector4 *matRGBA;
     int32_t *matTexIDs;

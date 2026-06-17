@@ -142,8 +142,15 @@ Sim::Sim(Engine &ctx,
 
     for (CountT geom_idx = 0; geom_idx < (CountT)cfg.numGeoms; geom_idx++) {
 
+        // Hide geoms not active in this world (heterogeneous entities). The
+        // instance is still created so the exported [numWorlds, numGeoms]
+        // columns stay aligned, but left non-renderable.
+        bool env_visible = (cfg.geomEnvMask == nullptr) ||
+            (cfg.geomEnvMask[(CountT)ctx.worldID().idx * (CountT)cfg.numGeoms +
+                             geom_idx] != 0);
+
         Entity instance;
-        if (cfg.geomDataIDs[geom_idx] == -1) {
+        if (cfg.geomDataIDs[geom_idx] == -1 || !env_visible) {
             instance = ctx.makeEntity<RenderEntity>();
             render::RenderingSystem::disableEntityRenderable(ctx, instance);
             ctx.get<ObjectID>(instance) = ObjectID {0};

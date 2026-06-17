@@ -54,6 +54,8 @@ struct Sim : public madrona::WorldBase {
         int32_t *geomTypes;
         int32_t *geomDataIDs;
         Vector3 *geomSizes;
+        // Optional device-side [numWorlds, numGeoms] visibility mask (see GSModel::geomEnvMask).
+        const int32_t *geomEnvMask;
         uint32_t numGeoms;
         uint32_t numCams;
         uint32_t numLights;

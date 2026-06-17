@@ -695,9 +695,19 @@ Manager::Impl * Manager::Impl::make(
     REQ_CUDA(cudaMemcpy(cam_zfar, gs_model.camZFar, sizeof(float) * gs_model.numCams, cudaMemcpyHostToDevice));
     REQ_CUDA(cudaMemcpy(cam_proj_type, gs_model.camProjType, sizeof(uint32_t) * gs_model.numCams, cudaMemcpyHostToDevice));
 
+    // Optional per-(world, geom) visibility mask for heterogeneous entities.
+    int32_t *geom_env_mask_gpu = nullptr;
+    if (gs_model.geomEnvMask != nullptr) {
+        size_t mask_count = (size_t)mgr_cfg.numWorlds * gs_model.numGeoms;
+        geom_env_mask_gpu = (int32_t *)cu::allocGPU(sizeof(int32_t) * mask_count);
+        REQ_CUDA(cudaMemcpy(geom_env_mask_gpu, gs_model.geomEnvMask,
+            sizeof(int32_t) * mask_count, cudaMemcpyHostToDevice));
+    }
+
     sim_cfg.geomTypes = geom_types_gpu;
     sim_cfg.geomDataIDs = geom_data_ids_gpu;
     sim_cfg.geomSizes = geom_sizes_gpu;
+    sim_cfg.geomEnvMask = geom_env_mask_gpu;
     sim_cfg.camFovy = cam_fovy;
     sim_cfg.camZNear = cam_znear;
     sim_cfg.camZFar = cam_zfar;
@@ -754,6 +764,9 @@ Manager::Impl * Manager::Impl::make(
     cu::deallocGPU(geom_types_gpu);
     cu::deallocGPU(geom_data_ids_gpu);
     cu::deallocGPU(geom_sizes_gpu);
+    if (geom_env_mask_gpu != nullptr) {
+        cu::deallocGPU(geom_env_mask_gpu);
+    }
     cu::deallocGPU(cam_fovy);
     cu::deallocGPU(cam_znear);
     cu::deallocGPU(cam_zfar);

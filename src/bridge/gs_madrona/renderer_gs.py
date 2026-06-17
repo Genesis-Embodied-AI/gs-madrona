@@ -15,6 +15,12 @@ os.environ['MADRONA_ROOT_CACHE_DIR'] = str(Path.home() / ".cache" / "madrona")
 
 class GeomRetriever:
     def retrieve_rigid_meshes_static(self) -> dict:
+        """Return the static geometry kwargs forwarded to MadronaBatchRenderer.
+
+        May include an optional ``geom_env_mask``: an int32 ``[num_worlds, num_geoms]``
+        array (1 = geom visible in that world, 0 = hidden) for heterogeneous entities.
+        Omitting it keeps every geom visible everywhere (legacy behavior).
+        """
         raise NotImplementedError()
     
     def retrieve_rigid_property_torch(self, num_worlds) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:

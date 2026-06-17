@@ -51,6 +51,7 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
             nb::ndarray<const float, nb::shape<-1>, nb::device::cpu> cam_zfar,
             nb::ndarray<const uint32_t, nb::shape<-1>, nb::device::cpu> cam_proj_type,
             nb::ndarray<const int32_t, nb::shape<-1>, nb::device::cpu> enabled_geom_groups,
+            nb::ndarray<const int32_t, nb::shape<-1, -1>, nb::device::cpu> geom_env_mask,
             bool add_cam_debug_geo,
             bool use_rt,
             VisualizerGPUHandles *viz_gpu_hdls)
@@ -81,6 +82,9 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                 .geomDataIDs = ptr_geom_data_ids,     // (int32_t *)geom_data_ids.data(),
                 .geomMatIDs = ptr_geom_mat_ids,       // (int32_t *)geom_mat_ids.data(),
                 .enabledGeomGroups = (int32_t *)enabled_geom_groups.data(),
+                // [num_worlds, num_geoms] visibility mask; None -> all visible.
+                .geomEnvMask = geom_env_mask.is_valid()
+                    ? (const int32_t *)geom_env_mask.data() : nullptr,
                 .geomSizes = (math::Vector3 *)geom_sizes.data(),
                 .matRGBA = (math::Vector4 *)mat_rgba.data(),
                 .matTexIDs = (int32_t *)mat_tex_ids.data(),
@@ -147,10 +151,11 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
            nb::arg("cam_zfar"),
            nb::arg("cam_proj_type"),
            nb::arg("enabled_geom_groups"),
+           nb::arg("geom_env_mask") = nb::none(),
            nb::arg("add_cam_debug_geo") = false,
            nb::arg("use_rt") = false,
            nb::arg("visualizer_gpu_handles") = nb::none(),
-           nb::keep_alive<1, 31>())
+           nb::keep_alive<1, 32>())
         .def("init", [](Manager &mgr,
             nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> geom_pos,
             nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 4>> geom_rot,
