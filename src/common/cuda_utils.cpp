@@ -22,7 +22,15 @@ void CudaDynamicLoader::ensureLoaded() {
         fprintf(stderr, "Failed to load Nvidia CUDA driver library: %s\n", dlerror());
         std::abort();
     }
-    for (const char* name : std::array{"libnvrtc.so.13", "libnvrtc.so.12", "libnvrtc.so"}) {
+    const char *nvrtc_names[] = {
+#if CUDART_VERSION >= 13000
+        "libnvrtc.so.13",
+#else
+        "libnvrtc.so.12",
+#endif
+        "libnvrtc.so",
+    };
+    for (const char* name : nvrtc_names) {
         nvrtc_handle_ = dlopen(name, RTLD_LAZY | RTLD_LOCAL);
         if (nvrtc_handle_) {
             break;
