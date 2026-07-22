@@ -8,6 +8,7 @@
 #include <cub/block/block_scan.cuh>
 #include <cub/block/block_load.cuh>
 #include <cub/block/block_store.cuh>
+#include <cuda/ptx>
 #include <madrona/mw_gpu/host_print.hpp>
 
 namespace madrona {
@@ -146,7 +147,7 @@ struct BlockRadixRankMatchEarlyCountsCustom
                     match_masks[bin] = 0;
                 }                    
             }
-            WARP_SYNC(WARP_MASK);
+            __syncwarp(WARP_MASK);
 
             // compute private per-part histograms
             int part = lane % NUM_PARTS;
@@ -160,7 +161,7 @@ struct BlockRadixRankMatchEarlyCountsCustom
             // no extra work is necessary if NUM_PARTS == 1
             if (NUM_PARTS > 1)
             {
-                WARP_SYNC(WARP_MASK);
+                __syncwarp(WARP_MASK);
                 // TODO: handle RADIX_DIGITS % WARP_THREADS != 0 if it becomes necessary
                 const int WARP_BINS_PER_THREAD = RADIX_DIGITS / WARP_THREADS;
                 int bins[WARP_BINS_PER_THREAD];
@@ -170,7 +171,7 @@ struct BlockRadixRankMatchEarlyCountsCustom
                     int bin = lane + u * WARP_THREADS;
                     bins[u] = ThreadReduce(warp_histograms[bin], ::cuda::std::plus<>{});
                 }
-                CTA_SYNC();
+                __syncthreads();
 
                 // store the resulting histogram in shared memory
                 int* warp_offsets = &s.warp_offsets[warp][0];
@@ -239,19 +240,19 @@ struct BlockRadixRankMatchEarlyCountsCustom
                 int bin = Digit(keys[u]);
                 int* p_match_mask = &match_masks[bin];
                 atomicOr(p_match_mask, lane_mask);
-                WARP_SYNC(WARP_MASK);
+                __syncwarp(WARP_MASK);
                 int bin_mask = *p_match_mask;
                 int leader = (WARP_THREADS - 1) - __clz(bin_mask);
                 int warp_offset = 0;
-                int popc = __popc(bin_mask & LaneMaskLe());
+                int popc = __popc(bin_mask & ::cuda::ptx::get_sreg_lanemask_le());
                 if (lane == leader)
                 {
                     // atomic is a bit faster
                     warp_offset = atomicAdd(&warp_offsets[bin], popc);
                 }
-                warp_offset = SHFL_IDX_SYNC(warp_offset, leader, WARP_MASK);
+                warp_offset = __shfl_sync(WARP_MASK, warp_offset, leader);
                 if (lane == leader) *p_match_mask = 0;
-                WARP_SYNC(WARP_MASK);
+                __syncwarp(WARP_MASK);
                 ranks[u] = warp_offset + popc - 1;
             }
         }
@@ -273,13 +274,13 @@ struct BlockRadixRankMatchEarlyCountsCustom
                                                                                            warp);
                 int leader = (WARP_THREADS - 1) - __clz(bin_mask);
                 int warp_offset = 0;
-                int popc = __popc(bin_mask & LaneMaskLe());
+                int popc = __popc(bin_mask & ::cuda::ptx::get_sreg_lanemask_le());
                 if (lane == leader)
                 {
                     // atomic is a bit faster
                     warp_offset = atomicAdd(&warp_offsets[bin], popc);
                 }
-                warp_offset = SHFL_IDX_SYNC(warp_offset, leader, WARP_MASK);
+                warp_offset = __shfl_sync(WARP_MASK, warp_offset, leader);
                 ranks[u] = warp_offset + popc - 1;
             }
         }
@@ -291,7 +292,7 @@ struct BlockRadixRankMatchEarlyCountsCustom
         {
             ComputeHistogramsWarp(keys);
             
-            CTA_SYNC();
+            __syncthreads();
             int bins[BINS_PER_THREAD];
             ComputeOffsetsWarpUpsweep(bins);
             bool early_out = callback(bins);
@@ -302,7 +303,7 @@ struct BlockRadixRankMatchEarlyCountsCustom
             BlockScan(s.prefix_tmp).ExclusiveSum(bins, exclusive_digit_prefix);
 
             ComputeOffsetsWarpDownsweep(exclusive_digit_prefix);
-            CTA_SYNC();
+            __syncthreads();
             ComputeRanksItem(keys, ranks, Int2Type<MATCH_ALGORITHM>());
 
             return false;
@@ -311,7 +312,7 @@ struct BlockRadixRankMatchEarlyCountsCustom
         __device__ __forceinline__ BlockRadixRankMatchInternal
         (TempStorage& temp_storage, DigitExtractorT digit_extractor, CountsCallback callback)
             : s(temp_storage), digit_extractor(digit_extractor),
-              callback(callback), warp(threadIdx.x / WARP_THREADS), lane(LaneId())
+              callback(callback), warp(threadIdx.x / WARP_THREADS), lane(::cuda::ptx::get_sreg_laneid())
             {}
     };
 
@@ -518,7 +519,7 @@ struct SortArchetypeNodeBase::RadixSortOnesweepCustom {
                     } while (value_j == 0);
 
                     inc_sum += value_j & LOOKBACK_VALUE_MASK;
-                    want_mask = WARP_BALLOT((value_j & LOOKBACK_GLOBAL_MASK) == 0, want_mask);
+                    want_mask = __ballot_sync(want_mask, (value_j & LOOKBACK_GLOBAL_MASK) == 0);
                     if (value_j & LOOKBACK_GLOBAL_MASK) break;
                 }
                 AtomicOffsetT& loc_i = d_lookback[block_idx * RADIX_DIGITS + bin];
@@ -588,7 +589,7 @@ struct SortArchetypeNodeBase::RadixSortOnesweepCustom {
                 short_circuit = short_circuit || bins[u] == TILE_ITEMS;
             }
         }
-        short_circuit = CTA_SYNC_OR(short_circuit);
+        short_circuit = __syncthreads_or(short_circuit);
         if (!short_circuit) return false;
 
         ShortCircuitCopy(keys, bins);
@@ -615,7 +616,7 @@ struct SortArchetypeNodeBase::RadixSortOnesweepCustom {
         LoadBinsToOffsetsGlobal(offsets);
         LookbackGlobal(bins);
         UpdateBinsGlobal(bins, offsets);
-        CTA_SYNC();
+        __syncthreads();
 
         // scatter the keys
         OffsetT global_offset = s.global_offsets[common_bin];
@@ -718,7 +719,7 @@ struct SortArchetypeNodeBase::RadixSortOnesweepCustom {
             {
                 d_keys_out[global_idx] = Twiddle::Out(key);
             }
-            WARP_SYNC(WARP_MASK);
+            __syncwarp(WARP_MASK);
         }
     }
 
@@ -733,7 +734,7 @@ struct SortArchetypeNodeBase::RadixSortOnesweepCustom {
             ValueT value = s.values_out[idx];
             OffsetT global_idx = idx + s.global_offsets[digits[u]];
             if (FULL_TILE || idx < tile_items) d_values_out[global_idx] = value;
-            WARP_SYNC(WARP_MASK);
+            __syncwarp(WARP_MASK);
         }
     }
 
@@ -759,7 +760,7 @@ struct SortArchetypeNodeBase::RadixSortOnesweepCustom {
             {
                 num_writes -= int(global_idx + 1) % ALIGN;
             }
-            num_writes = SHFL_IDX_SYNC(num_writes, last_lane, WARP_MASK);
+            num_writes = __shfl_sync(WARP_MASK, num_writes, last_lane);
             if (lane < num_writes)
             {
                 ThreadStore<CACHE_MODIFIER>(&d_keys_out[global_idx], key_out);
@@ -826,10 +827,10 @@ struct SortArchetypeNodeBase::RadixSortOnesweepCustom {
         LoadValues(block_idx * TILE_ITEMS, values);
         
         // scatter values
-        CTA_SYNC();
+        __syncthreads();
         ScatterValuesShared(values, ranks);
 
-        CTA_SYNC();
+        __syncthreads();
         ScatterValuesGlobal(digits);
     }
         
@@ -854,7 +855,7 @@ struct SortArchetypeNodeBase::RadixSortOnesweepCustom {
         }
         
         // scatter keys in shared memory
-        CTA_SYNC();
+        __syncthreads();
         ScatterKeysShared(keys, ranks);
 
         // compute global offsets
@@ -863,7 +864,7 @@ struct SortArchetypeNodeBase::RadixSortOnesweepCustom {
         UpdateBinsGlobal(bins, exclusive_digit_prefix);
 
         // scatter keys in global memory
-        CTA_SYNC();
+        __syncthreads();
         ScatterKeysGlobal();
 
         // scatter values if necessaryRadixSortOnesweepCustom
@@ -895,14 +896,14 @@ struct SortArchetypeNodeBase::RadixSortOnesweepCustom {
         , num_items(num_items)
         , digit_extractor(current_bit, num_bits)
         , warp(threadIdx.x / WARP_THREADS)
-        , lane(LaneId())
+        , lane(::cuda::ptx::get_sreg_laneid())
     {
         // initialization
         if (threadIdx.x == 0)
         {
             s.block_idx = atomicAdd(d_ctrs, 1);
         }
-        CTA_SYNC();
+        __syncthreads();
         block_idx = s.block_idx;
         full_block = (block_idx + 1) * TILE_ITEMS <= num_items;
     }
