@@ -63,7 +63,9 @@ float calculateLinearDepth(float depth_in, uint view_idx)
 
 uint32_t float3ToUint32(float3 v)
 {
-    return (uint32_t)(v.x * 255.0f) | ((uint32_t)(v.y * 255.0f) << 8) | ((uint32_t)(v.z * 255.0f) << 16) | (255 << 24);
+    // Deferred RGB is LDR; tone-map HDR lighting before packing it into bytes.
+    uint3 quant = (uint3)(255.0f * clamp(v, 0.0f, 1.0f));
+    return quant.r | (quant.g << 8) | (quant.b << 16) | ((uint32_t)255 << 24);
 }
 
 float linearToSRGB(float v)
