@@ -249,7 +249,8 @@ static HeapArray<LayeredTarget> makeLayeredTargets(uint32_t width,
 ////////////////////////////////////////////////////////////////////////////////
 // RENDER PIPELINE CREATION                                                   //
 ////////////////////////////////////////////////////////////////////////////////
-static vk::PipelineShaders makeDrawShaders(const vk::Device &dev, VkSampler repeat_sampler)
+static vk::PipelineShaders makeDrawShaders(
+    const vk::Device &dev, VkSampler repeat_sampler, uint32_t max_textures)
 {
     const char *py_root_env = getenv("MADRONA_ROOT_PATH");
     std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
@@ -267,11 +268,11 @@ static vk::PipelineShaders makeDrawShaders(const vk::Device &dev, VkSampler repe
         dev, tmp_alloc, shaders,
         Span<const vk::BindingOverride>({
             vk::BindingOverride {
-                3, 0, VK_NULL_HANDLE, InternalConfig::maxTextures,
+                3, 0, VK_NULL_HANDLE, max_textures,
                 VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
             },
             vk::BindingOverride {
-                4, 0, VK_NULL_HANDLE, InternalConfig::maxTextures,
+                4, 0, VK_NULL_HANDLE, max_textures,
                 VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
             },
             vk::BindingOverride {3, 1, repeat_sampler, 1, 0}
@@ -284,9 +285,10 @@ static PipelineMP<1> makeDrawPipeline(const vk::Device &dev,
                                     VkRenderPass render_pass,
                                     uint32_t num_frames,
                                     uint32_t num_pools,
-                                    VkSampler repeat_sampler)
+                                    VkSampler repeat_sampler,
+                                    uint32_t max_textures)
 {
-    auto shaders = makeDrawShaders(dev, repeat_sampler);
+    auto shaders = makeDrawShaders(dev, repeat_sampler, max_textures);
 
     VkPipelineVertexInputStateCreateInfo vert_info {};
     VkPipelineInputAssemblyStateCreateInfo input_assembly_info {};
@@ -1602,7 +1604,8 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
     batchDraw(
         makeDrawPipeline(
             dev, rctx.pipelineCache, VK_NULL_HANDLE, 
-            consts::numDrawCmdBuffers * cfg.numFrames, 5, rctx.repeatSampler)),
+            consts::numDrawCmdBuffers * cfg.numFrames, 5, rctx.repeatSampler,
+            cfg.maxTextures)),
     createVisualization(
         makeComputePipeline(
             dev, rctx.pipelineCache, 1, sizeof(uint32_t) * 2,

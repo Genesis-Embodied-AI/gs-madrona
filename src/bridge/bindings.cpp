@@ -51,7 +51,8 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
             nb::ndarray<const int32_t, nb::shape<-1>, nb::device::cpu> enabled_geom_groups,
             nb::ndarray<const int32_t, nb::shape<-1, -1>, nb::device::cpu> geom_env_mask,
             bool add_cam_debug_geo,
-            bool use_rt)
+            bool use_rt,
+            int64_t max_textures)
         {
             GSModelGeometry mesh_geo {
                 .vertices = (math::Vector3 *)mesh_vertices.data(),
@@ -112,6 +113,7 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                     .batchRenderViewHeight = (uint32_t)batch_render_view_height,
                     .addCamDebugGeometry = add_cam_debug_geo,
                     .useRT = use_rt,
+                    .maxTextures = (uint32_t)max_textures,
                 },
                 gs_model,
                 Optional<VisualizerGPUHandles>::none()
@@ -151,6 +153,7 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
            nb::arg("geom_env_mask") = nb::none(),
            nb::arg("add_cam_debug_geo") = false,
            nb::arg("use_rt") = false,
+           nb::arg("max_textures") = 0,
            nb::keep_alive<1, 32>())
         .def("init", [](Manager &mgr,
             nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> geom_pos,

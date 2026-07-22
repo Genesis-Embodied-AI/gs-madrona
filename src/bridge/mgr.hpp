@@ -78,6 +78,9 @@ public:
         uint32_t batchRenderViewHeight;
         bool addCamDebugGeometry = false;
         bool useRT = false;
+        // Texture descriptor capacity floor. 0 (the default) derives the
+        // capacity from the loaded scene; a larger value reserves headroom.
+        uint32_t maxTextures = 0;
     };
 
     MGR_EXPORT Manager(

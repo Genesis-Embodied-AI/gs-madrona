@@ -30,6 +30,7 @@ struct RenderContext {
 
     uint32_t br_width_;
     uint32_t br_height_;
+    uint32_t max_textures_;
 
     VkPipelineCache pipelineCache;
     VkSampler repeatSampler;

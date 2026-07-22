@@ -30,6 +30,8 @@ public:
         uint32_t agentViewWidth;
         uint32_t agentViewHeight;
 
+        uint32_t maxTextures;
+
         uint32_t numWorlds;
         uint32_t maxViewsPerWorld;
         uint32_t maxLightsPerWorld;

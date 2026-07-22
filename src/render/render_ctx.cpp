@@ -267,7 +267,8 @@ static VkRenderPass makeShadowRenderPass(const Device &dev,
 
 
 static PipelineShaders makeDrawShaders(
-    const Device &dev, VkSampler repeat_sampler, VkSampler clamp_sampler)
+    const Device &dev, VkSampler repeat_sampler, VkSampler clamp_sampler,
+    uint32_t max_textures)
 {
     (void)repeat_sampler;
     (void)clamp_sampler;
@@ -308,7 +309,7 @@ static PipelineShaders makeDrawShaders(
                 2,
                 0,
                 VK_NULL_HANDLE,
-                InternalConfig::maxTextures,
+                max_textures,
                 VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
             },
             BindingOverride {
@@ -342,9 +343,11 @@ static Pipeline<1> makeDrawPipeline(const Device &dev,
                                     VkRenderPass render_pass,
                                     VkSampler repeat_sampler,
                                     VkSampler clamp_sampler,
-                                    uint32_t num_frames)
+                                    uint32_t num_frames,
+                                    uint32_t max_textures)
 {
-    auto shaders = makeDrawShaders(dev, repeat_sampler, clamp_sampler);
+    auto shaders = makeDrawShaders(
+        dev, repeat_sampler, clamp_sampler, max_textures);
     VkPipelineVertexInputStateCreateInfo vert_info {};
     VkPipelineInputAssemblyStateCreateInfo input_assembly_info {};
     VkPipelineViewportStateCreateInfo viewport_info {};
@@ -1245,6 +1248,49 @@ static Sky loadSky(const vk::Device &dev, MemoryAllocator &alloc, VkQueue queue)
     };
 }
 
+static uint32_t validateTextureCapacity(
+    const Backend &backend, const Device &dev, uint32_t max_textures)
+{
+    if (max_textures == 0) {
+        FATAL("Texture descriptor capacity must be greater than zero");
+    }
+
+    VkPhysicalDeviceProperties properties;
+    backend.dt.getPhysicalDeviceProperties(dev.phy, &properties);
+    const VkPhysicalDeviceLimits &limits = properties.limits;
+
+    // The BatchRenderer draw pipeline binds the widest set of sampled-image
+    // arrays of any pipeline: two arrays of this capacity in the fragment
+    // stage (base-color and emissive). That path therefore dominates the
+    // limit check, so every array must fit within both the per-stage and the
+    // whole-set sampled-image budgets. This is a conservative bound: it treats
+    // the two texture arrays as the only sampled images in the stage, leaving
+    // the remaining headroom for the engine's few auxiliary bindings (shadow
+    // maps, sky).
+    constexpr uint32_t texture_arrays_per_stage = 2;
+    const uint32_t per_stage_cap =
+        limits.maxPerStageDescriptorSampledImages / texture_arrays_per_stage;
+    const uint32_t per_set_cap =
+        limits.maxDescriptorSetSampledImages / texture_arrays_per_stage;
+    const uint32_t capacity_cap =
+        per_stage_cap < per_set_cap ? per_stage_cap : per_set_cap;
+    if (max_textures > capacity_cap) {
+        FATAL(
+            "Requested texture descriptor capacity %u exceeds the supported "
+            "maximum of %u for this device: BatchRenderer binds %u sampled-image "
+            "arrays of this capacity, and the Vulkan limits are "
+            "maxPerStageDescriptorSampledImages=%u, "
+            "maxDescriptorSetSampledImages=%u",
+            max_textures,
+            capacity_cap,
+            texture_arrays_per_stage,
+            limits.maxPerStageDescriptorSampledImages,
+            limits.maxDescriptorSetSampledImages);
+    }
+
+    return max_textures;
+}
+
 RenderContext::RenderContext(
     APIBackend *render_backend,
     GPUDevice *render_dev,
@@ -1255,6 +1301,7 @@ RenderContext::RenderContext(
     renderQueue(makeGFXQueue(dev, 0)),
     br_width_(cfg.agentViewWidth),
     br_height_(cfg.agentViewHeight),
+    max_textures_(validateTextureCapacity(backend, dev, cfg.maxTextures)),
     pipelineCache(getPipelineCache(dev)),
     repeatSampler(makeImmutableSampler(dev, VK_SAMPLER_ADDRESS_MODE_REPEAT)),
     clampSampler(makeImmutableSampler(dev, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)),
@@ -1264,7 +1311,9 @@ RenderContext::RenderContext(
     shadowPass(makeShadowRenderPass(
         dev, InternalConfig::varianceFormat, InternalConfig::depthFormat)),
     instanceCull(makeCullPipeline(dev, pipelineCache, InternalConfig::numFrames)),
-    objectDraw(makeDrawPipeline(dev, pipelineCache, renderPass, repeatSampler, clampSampler, InternalConfig::numFrames)),
+    objectDraw(makeDrawPipeline(
+        dev, pipelineCache, renderPass, repeatSampler, clampSampler,
+        InternalConfig::numFrames, max_textures_)),
     asset_desc_pool_cull_(dev, instanceCull.shaders, 1, 1),
     asset_desc_pool_draw_(dev, objectDraw.shaders, 1, 1),
     asset_desc_pool_mat_tx_(dev, objectDraw.shaders, 2, 1),
@@ -1290,14 +1339,14 @@ RenderContext::RenderContext(
     {
         VkDescriptorPoolSize pool_sizes[] = {
             { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 25 },
-            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, InternalConfig::maxTextures * 2 },
+            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, max_textures_ * 2 },
             { VK_DESCRIPTOR_TYPE_SAMPLER, 1 }
         };
 
         VkDescriptorPoolCreateInfo pool_info = {};
         pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-        pool_info.maxSets = 10 + InternalConfig::maxTextures + 1;
+        pool_info.maxSets = 10 + max_textures_ + 1;
         pool_info.poolSizeCount = 3;
         pool_info.pPoolSizes = pool_sizes;
         REQ_VK(dev.dt.createDescriptorPool(dev.hdl, &pool_info, nullptr, &asset_pool_));
@@ -1433,7 +1482,7 @@ RenderContext::RenderContext(
             {
                 .binding = 0,
                 .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .descriptorCount = InternalConfig::maxTextures,
+                .descriptorCount = max_textures_,
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                 .pImmutableSamplers = nullptr,
             },
@@ -1489,6 +1538,7 @@ RenderContext::RenderContext(
         cfg.maxViewsPerWorld,
         cfg.maxInstancesPerWorld,
         cfg.maxLightsPerWorld,
+        max_textures_,
         1
     };
 
@@ -1879,6 +1929,15 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
     using namespace math;
 
     assert(loaded_assets_.size() == 0);
+
+    if (textures.size() > max_textures_) {
+        FATAL(
+            "Render asset has %u textures, exceeding the configured texture "
+            "descriptor capacity of %u. The capacity is fixed when the renderer "
+            "is created; reserve more by passing a larger 'max_textures' at "
+            "construction, or reduce the scene's texture count",
+            (uint32_t)textures.size(), max_textures_);
+    }
 
     int64_t num_total_vertices = 0;
     int64_t num_total_indices = 0;

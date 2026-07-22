@@ -82,11 +82,23 @@ static inline Optional<render::RenderManager> initRenderManager(
         max_instances_per_world += gs_model.numCams;
     }
 
+    // Texture descriptor capacity: enough for every texture in the scene, at
+    // least one (Vulkan forbids a zero-sized descriptor array), and raised to
+    // the requested floor when a larger override is supplied.
+    uint32_t max_textures = gs_model.numTextures;
+    if (mgr_cfg.maxTextures > max_textures) {
+        max_textures = mgr_cfg.maxTextures;
+    }
+    if (max_textures == 0) {
+        max_textures = 1;
+    }
+
     return render::RenderManager(render_api, render_dev, {
         .enableBatchRenderer = true,
         .renderMode = render::RenderManager::Config::RenderMode::RGBD,
         .agentViewWidth = mgr_cfg.batchRenderViewWidth,
         .agentViewHeight = mgr_cfg.batchRenderViewHeight,
+        .maxTextures = max_textures,
         .numWorlds = mgr_cfg.numWorlds,
         .maxViewsPerWorld = gs_model.numCams,
         .maxLightsPerWorld = gs_model.numLights,
