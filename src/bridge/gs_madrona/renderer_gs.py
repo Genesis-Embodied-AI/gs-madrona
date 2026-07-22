@@ -1,6 +1,4 @@
 import os
-import ctypes
-from importlib.metadata import distribution, PackageNotFoundError
 from pathlib import Path
 from typing import Tuple
 
@@ -66,16 +64,6 @@ class MadronaBatchRendererAdapter:
         cam_znear = cam_znears_tensor.cpu().numpy()
         cam_zfar = cam_zfars_tensor.cpu().numpy()
         cam_proj_type = cam_proj_types_tensor.int().cpu().numpy()
-
-        # Preload Nvidia compiler runtime if available (i.e. torch is not built from source)
-        try:
-            dist = distribution("nvidia_cuda_nvrtc_cu12")
-            for file in dist.files:
-                if file.name.startswith("libnvrtc.so.1"):
-                    ctypes.CDLL(dist.locate_file(file), ctypes.RTLD_LOCAL)
-                    break
-        except PackageNotFoundError:
-            pass
 
         self.madrona = MadronaBatchRenderer(
             gpu_id=gpu_id,

@@ -74,15 +74,11 @@ target_link_libraries(_gs_madrona_batch_renderer PRIVATE
 )
 
 if (SKBUILD)
-    if (CUDA_REQUIRED_ARG)
-        find_library(CUDA_NVJITLINK_LIBRARY nvJitLink
-            PATHS ${CUDAToolkit_LIBRARY_DIR}
-            REQUIRED)
-        get_filename_component(CUDA_NVJITLINK_LIBRARY_REALPATH "${CUDA_NVJITLINK_LIBRARY}" REALPATH)
-        get_filename_component(CUDA_NVJITLINK_NAME "${CUDA_NVJITLINK_LIBRARY}" NAME)
-        install(FILES ${CUDA_NVJITLINK_LIBRARY_REALPATH} DESTINATION gs_madrona
-            RENAME "${CUDA_NVJITLINK_NAME}.${CUDAToolkit_VERSION_MAJOR}")
-    endif()
+    # nvJitLink and nvrtc are intentionally NOT bundled here. They are declared
+    # as pip dependencies (nvidia-nvjitlink-cu12 / nvidia-cuda-nvrtc-cu12) and
+    # resolved at load time from the sibling nvidia/*/lib packages via RPATH,
+    # mirroring how torch ships its CUDA deps (see pyproject.toml). Bundling a
+    # copy in gs_madrona/ would shadow the pinned package via $ORIGIN.
 
     find_package(embree REQUIRED)
     get_target_property(madrona_embree_shlib embree IMPORTED_LOCATION_RELEASE)

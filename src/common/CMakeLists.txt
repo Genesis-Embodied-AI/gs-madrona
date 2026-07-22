@@ -178,6 +178,13 @@ if (CUDAToolkit_FOUND)
     target_link_libraries(madrona_cuda
         PUBLIC
             CUDA::cudart_static
+            # Link nvrtc dynamically (DT_NEEDED libnvrtc.so.12) and resolve it,
+            # like nvJitLink, from the pinned nvidia-cuda-nvrtc-cu12 package via
+            # RPATH ($ORIGIN/../nvidia/cuda_nvrtc/lib) rather than the host's
+            # CUDA. This mirrors how torch ships its CUDA dependencies: the wheel
+            # stays small (libs are declared, not bundled) and nvrtc always
+            # matches the cu12 nvJitLink it feeds, regardless of the host toolkit.
+            CUDA::nvrtc
         PRIVATE
             madrona_err
             madrona_noexceptrtti

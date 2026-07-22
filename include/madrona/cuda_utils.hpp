@@ -74,11 +74,10 @@ public:
     inline static nvrtcResult (*nvrtcGetLTOIR)(nvrtcProgram, char*) = nullptr;
     inline static nvrtcResult (*nvrtcGetCUBINSize)(nvrtcProgram, size_t*) = nullptr;
     inline static nvrtcResult (*nvrtcGetCUBIN)(nvrtcProgram, char*) = nullptr;
-    inline static nvrtcResult (*nvrtcGetErrorString)(nvrtcResult) = nullptr;
+    inline static const char* (*nvrtcGetErrorString)(nvrtcResult) = nullptr;
 
 private:
     static inline void* cuda_handle_;
-    static inline void* nvrtc_handle_;
 };
 
 namespace cu {

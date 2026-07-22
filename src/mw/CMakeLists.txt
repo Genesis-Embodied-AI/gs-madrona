@@ -29,7 +29,10 @@ target_link_libraries(madrona_mw_gpu
         madrona_hdrs madrona_cuda
     PRIVATE
         madrona_mw_core
-        CUDA::nvJitLink  # FIXME: CUDA::nvJitLink_static
+        # Dynamic nvJitLink (DT_NEEDED libnvJitLink.so.12), resolved from the
+        # pinned nvidia-nvjitlink-cu12 package via RPATH like torch does; see
+        # madrona_cuda for the rationale.
+        CUDA::nvJitLink
 )
 
 set(MADRONA_MW_GPU_COMPILE_FLAGS
