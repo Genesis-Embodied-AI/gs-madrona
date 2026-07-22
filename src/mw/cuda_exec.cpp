@@ -13,6 +13,8 @@
 #include <filesystem>
 #include <charconv>
 
+#include <unistd.h>
+
 #include <cuda/atomic>
 
 #include <madrona/mw_gpu.hpp>
@@ -1029,16 +1031,22 @@ static __attribute__((always_inline)) inline void dispatch(
     REQ_NVJITLINK(nvJitLinkGetLinkedCubin(linker, linked_cubin.data()));
 
     if (!cache_path.empty()) {
-        std::ofstream cache_file(cache_path.c_str(), std::ios::binary);
-        cache_file.write(init_ecs_name.data(), init_ecs_name.size() + 1);
-        cache_file.write(init_worlds_name.data(), init_worlds_name.size() + 1);
-        cache_file.write(init_tasks_name.data(), init_tasks_name.size() + 1);
-        while (size_t(cache_file.tellp()) % 4 != 0) {
-            cache_file.put(0);
+        // Write to a per-process temporary file and atomically rename it into place. A plain in-place write lets a
+        // concurrent process that finds the cache fresh load a half-written (corrupt) cubin and abort in
+        // cuModuleLoadData; an atomic rename guarantees readers only ever observe a complete file, and parallel
+        // compilers each write their own temp so the final rename wins with a valid result.
+        const std::string tmp_path = cache_path + ".tmp." + std::to_string(getpid());
+        {
+            std::ofstream cache_file(tmp_path.c_str(), std::ios::binary);
+            cache_file.write(init_ecs_name.data(), init_ecs_name.size() + 1);
+            cache_file.write(init_worlds_name.data(), init_worlds_name.size() + 1);
+            cache_file.write(init_tasks_name.data(), init_tasks_name.size() + 1);
+            while (size_t(cache_file.tellp()) % 4 != 0) {
+                cache_file.put(0);
+            }
+            cache_file.write(linked_cubin.data(), linked_cubin.size());
         }
-        cache_file.write(linked_cubin.data(), linked_cubin.size());
-
-        cache_file.close();
+        std::filesystem::rename(tmp_path, cache_path);
     }
 
     if (verbose_compile) {
@@ -1285,9 +1293,14 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
         REQ_NVJITLINK(nvJitLinkGetLinkedCubin(linker, linked_cubin.data()));
 
         if (!cache_path.empty()) {
-            std::ofstream cache_file(cache_path, std::ios::binary);
-            cache_file.write(linked_cubin.data(), linked_cubin.size());
-            cache_file.close();
+            // Atomic write (temp + rename); see the megakernel cache above for why in-place writes are unsafe under
+            // concurrent access.
+            const std::string tmp_path = cache_path + ".tmp." + std::to_string(getpid());
+            {
+                std::ofstream cache_file(tmp_path, std::ios::binary);
+                cache_file.write(linked_cubin.data(), linked_cubin.size());
+            }
+            std::filesystem::rename(tmp_path, cache_path);
         }
 
         REQ_CU(CudaDynamicLoader::cuModuleLoadData(&mod, linked_cubin.data()));
