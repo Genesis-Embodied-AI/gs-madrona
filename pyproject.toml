@@ -1,6 +1,8 @@
 [project]
 name = "gs-madrona"
-version = "0.0.8"
+# Version is derived from the git tag via setuptools_scm (see [tool.scikit-build]
+# below). Do not hardcode it here; a release is cut purely by tagging vX.Y.Z.
+dynamic = ["version"]
 description = "A fork from the official Madrona. The fork will be used for Genesis's own Madrona integration."
 readme = {file = "README.md", content-type = "text/markdown"}
 license = { text = "MIT" }
@@ -45,7 +47,7 @@ dependencies = [
 Repository = "https://github.com/Genesis-Embodied-AI/gs-madrona"
 
 [build-system]
-requires = ["scikit-build-core>=0.5.0", "nanobind>=1.3.2"]
+requires = ["scikit-build-core>=0.10", "nanobind>=1.3.2", "setuptools_scm>=8"]
 build-backend = "scikit_build_core.build"
 
 [tool.scikit-build]
@@ -59,6 +61,13 @@ editable.mode = "redirect"
 build.verbose = true
 install.strip = false
 search.site-packages = true
+# Single source of truth for the version: the git tag, via setuptools_scm.
+# `experimental` is required for an out-of-tree metadata provider; the built-in
+# scikit_build_core.metadata.setuptools_scm provider is incompatible with
+# setuptools_scm >=9, so we call setuptools_scm ourselves (see cmake/scm_version.py).
+experimental = true
+metadata.version.provider = "scm_version"
+metadata.version.provider-path = "cmake"
 
 [tool.scikit-build.cmake.define]
 CMAKE_INSTALL_RPATH_USE_LINK_PATH = true
