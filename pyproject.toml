@@ -70,9 +70,9 @@ repair-wheel-command = [
 before-all = [
   'dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/$(uname -m)/cuda-rhel8.repo',
   'dnf clean all',
-  'dnf install -y --setopt=install_weak_deps=False cuda-nvrtc-devel-12-4 cuda-cudart-devel-12-4 cuda-libraries-devel-12-4',
-  'dnf download cuda-nvcc-12-4',
-  'rpm -ivh --nodeps cuda-nvcc-12-4-*.rpm',
+  'dnf install -y --setopt=install_weak_deps=False cuda-nvrtc-devel-12-8 cuda-cudart-devel-12-8 cuda-libraries-devel-12-8',
+  'dnf download cuda-nvcc-12-8',
+  'rpm -ivh --nodeps cuda-nvcc-12-8-*.rpm',
 ]
 repair-wheel-command = [
   "auditwheel repair --zip-compression-level=9 -w {dest_dir} {wheel}",
