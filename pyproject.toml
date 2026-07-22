@@ -23,6 +23,24 @@ classifiers = [
 ]
 keywords = ["rendering", "graphics", "3d", "vulkan", "visualization", "raytracing"]
 
+# The runtime CUDA JIT compiler (nvrtc) and linker (nvJitLink) are not bundled
+# in the wheel; they are resolved at load time from these pip packages via
+# RPATH (see CMAKE_INSTALL_RPATH below), mirroring how torch ships its CUDA
+# deps. At first render nvrtc compiles our device code against the CCCL/CUB
+# headers bundled from the 12.8 build toolkit and must target Blackwell
+# (sm_120), so it has to be >= 12.8; we floor both packages there. This
+# intentionally conflicts with a torch installed from a pre-12.8 index (e.g.
+# .../whl/cu126, which pins these to 12.6.x): such a torch is genuinely
+# unsupported, and a clear pip resolution error is better than a cryptic nvrtc
+# failure at first render. The "-cu12" package names cap the major at 12
+# (matching our libnvrtc.so.12 / libnvJitLink.so.12 soname link), and pip keeps
+# both on a single minor so they stay mutually consistent. torch itself is not
+# declared, leaving users free to pick any cu12 (>= 12.8) variant.
+dependencies = [
+  "nvidia-cuda-nvrtc-cu12>=12.8",
+  "nvidia-nvjitlink-cu12>=12.8",
+]
+
 [project.urls]
 Repository = "https://github.com/Genesis-Embodied-AI/gs-madrona"
 
@@ -45,7 +63,12 @@ search.site-packages = true
 [tool.scikit-build.cmake.define]
 CMAKE_INSTALL_RPATH_USE_LINK_PATH = true
 CMAKE_BUILD_WITH_INSTALL_RPATH = true
-CMAKE_INSTALL_RPATH = '$ORIGIN'
+# Resolve the CUDA runtime-JIT libraries (libnvrtc.so.12, libnvJitLink.so.12)
+# from the user's pip-installed nvidia-*-cu12 packages (siblings of this one in
+# site-packages, e.g. brought in by torch), exactly like torch resolves its own
+# CUDA deps. This keeps them out of the wheel (size) while pinning them to the
+# cu12 series the extension was built against, independent of the host toolkit.
+CMAKE_INSTALL_RPATH = '$ORIGIN;$ORIGIN/../nvidia/cuda_nvrtc/lib;$ORIGIN/../nvidia/nvjitlink/lib'
 CMAKE_DISABLE_FIND_PACKAGE_X11 = true
 CMAKE_INTERPROCEDURAL_OPTIMIZATION = true
 CMAKE_CXX_FLAGS_RELEASE = "-O3 -DNDEBUG -ffunction-sections -fdata-sections"
@@ -63,7 +86,9 @@ config-settings = { "wheel.py-api" = "cp312" }
 select = "cp3{10,11}-*"
 config-settings = {}
 repair-wheel-command = [
-  "auditwheel repair --zip-compression-level=9 -w {dest_dir} {wheel}"
+  # Do not vendor the CUDA JIT libs; they are provided by the nvidia-*-cu12
+  # dependencies and resolved via RPATH (keeps the wheel under PyPI's limit).
+  "auditwheel repair --exclude libnvrtc.so.12 --exclude libnvJitLink.so.12 --zip-compression-level=9 -w {dest_dir} {wheel}"
 ]
 
 [tool.cibuildwheel.linux]
@@ -75,7 +100,9 @@ before-all = [
   'rpm -ivh --nodeps cuda-nvcc-12-8-*.rpm',
 ]
 repair-wheel-command = [
-  "auditwheel repair --zip-compression-level=9 -w {dest_dir} {wheel}",
+  # Do not vendor the CUDA JIT libs; they are provided by the nvidia-*-cu12
+  # dependencies and resolved via RPATH (keeps the wheel under PyPI's limit).
+  "auditwheel repair --exclude libnvrtc.so.12 --exclude libnvJitLink.so.12 --zip-compression-level=9 -w {dest_dir} {wheel}",
   "pipx run abi3audit --strict --report {wheel}",
 ]
 

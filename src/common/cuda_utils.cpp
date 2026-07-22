@@ -22,17 +22,6 @@ void CudaDynamicLoader::ensureLoaded() {
         fprintf(stderr, "Failed to load Nvidia CUDA driver library: %s\n", dlerror());
         std::abort();
     }
-    for (const char* name : std::array{"libnvrtc.so.13", "libnvrtc.so.12", "libnvrtc.so"}) {
-        nvrtc_handle_ = dlopen(name, RTLD_LAZY | RTLD_LOCAL);
-        if (nvrtc_handle_) {
-            break;
-        }
-    }
-    if (!nvrtc_handle_) {
-        fprintf(stderr, "Failed to load Nvidia  runtime compilation library: %s\n", dlerror());
-        std::abort();
-    }
-
 #define LOAD_SYM(handle, name)                                 \
     name = (decltype(name))dlsym(handle, #name);               \
     if (!name) {                                               \
@@ -79,30 +68,35 @@ void CudaDynamicLoader::ensureLoaded() {
     LOAD_CUDA_SYM(cuGetErrorString);
 #undef LOAD_CUDA_SYM
 
-#define LOAD_NVRTC_SYM(name) LOAD_SYM(nvrtc_handle_, name)
-    LOAD_NVRTC_SYM(nvrtcCreateProgram);
-    LOAD_NVRTC_SYM(nvrtcDestroyProgram);
-    LOAD_NVRTC_SYM(nvrtcCompileProgram);
-    LOAD_NVRTC_SYM(nvrtcGetPTX);
-    LOAD_NVRTC_SYM(nvrtcGetPTXSize);
-    LOAD_NVRTC_SYM(nvrtcGetProgramLog);
-    LOAD_NVRTC_SYM(nvrtcGetProgramLogSize);
-    LOAD_NVRTC_SYM(nvrtcAddNameExpression);
-    LOAD_NVRTC_SYM(nvrtcGetLoweredName);
-    LOAD_NVRTC_SYM(nvrtcGetLTOIRSize);
-    LOAD_NVRTC_SYM(nvrtcGetLTOIR);
-    LOAD_NVRTC_SYM(nvrtcGetCUBINSize);
-    LOAD_NVRTC_SYM(nvrtcGetCUBIN);
-    LOAD_NVRTC_SYM(nvrtcGetErrorString);
-#undef LOAD_NVRTC_SYM
+    // nvrtc is a normal (dynamic) link-time dependency of this library
+    // (DT_NEEDED libnvrtc.so.12, resolved via RPATH from the pinned cu12
+    // package). Bind the entry points directly to those linked symbols rather
+    // than dlopen'ing a host nvrtc: dlopen ignores DT_RUNPATH, so a plain
+    // dlopen("libnvrtc.so") could pick up a mismatched host nvrtc (e.g. .so.13)
+    // whose PTX output the cu12 nvJitLink cannot link. Binding to the linked
+    // symbols keeps nvrtc and nvJitLink on the same cu12 version.
+#define BIND_NVRTC_SYM(name) name = &(::name)
+    BIND_NVRTC_SYM(nvrtcCreateProgram);
+    BIND_NVRTC_SYM(nvrtcDestroyProgram);
+    BIND_NVRTC_SYM(nvrtcCompileProgram);
+    BIND_NVRTC_SYM(nvrtcGetPTX);
+    BIND_NVRTC_SYM(nvrtcGetPTXSize);
+    BIND_NVRTC_SYM(nvrtcGetProgramLog);
+    BIND_NVRTC_SYM(nvrtcGetProgramLogSize);
+    BIND_NVRTC_SYM(nvrtcAddNameExpression);
+    BIND_NVRTC_SYM(nvrtcGetLoweredName);
+    BIND_NVRTC_SYM(nvrtcGetLTOIRSize);
+    BIND_NVRTC_SYM(nvrtcGetLTOIR);
+    BIND_NVRTC_SYM(nvrtcGetCUBINSize);
+    BIND_NVRTC_SYM(nvrtcGetCUBIN);
+    BIND_NVRTC_SYM(nvrtcGetErrorString);
+#undef BIND_NVRTC_SYM
 
 #undef LOAD_SYM
 
     std::atexit([]() {
         dlclose(cuda_handle_);
         cuda_handle_ = nullptr;
-        dlclose(nvrtc_handle_);
-        nvrtc_handle_ = nullptr;
     });
   });
 }
