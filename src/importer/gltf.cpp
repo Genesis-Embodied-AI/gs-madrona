@@ -6,6 +6,7 @@
 #include <madrona/optional.hpp>
 
 #include <cstdarg>
+#include <cinttypes>
 #include <optional>
 #include <filesystem>
 #include <string_view>
