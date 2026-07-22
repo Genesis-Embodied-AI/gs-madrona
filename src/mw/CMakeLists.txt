@@ -7,7 +7,8 @@ target_link_libraries(madrona_mw_cpu
         madrona_mw_core
 )
 
-if (NOT CUDAToolkit_FOUND OR CUDAToolkit_VERSION_MAJOR LESS 12)
+if (NOT CUDAToolkit_FOUND OR CUDAToolkit_VERSION_MAJOR LESS 12 OR
+    (CUDAToolkit_VERSION_MAJOR EQUAL 12 AND CUDAToolkit_VERSION_MINOR LESS 8))
     return()
 endif()
 
@@ -107,36 +108,16 @@ set(BVH_INTERNAL_SRC_LIST "${BVH_INTERNAL_SRC_LIST}")
 
 get_target_property(MADRONA_HDRS_INCLUDES madrona_hdrs INTERFACE_INCLUDE_DIRECTORIES)
 
-set(CCCL_OVERRIDE_INCLUDE_DIRS "")
 if (SKBUILD)
-    if (CUDAToolkit_VERSION_MINOR LESS 5)
-        list(APPEND CCCL_OVERRIDE_INCLUDE_DIRS
-            "./cccl/libcudacxx/include/"
-            "./cccl/cub"
-            "./cccl/thrust"
-        )
-    endif()
-
     set(NVRTC_INCLUDE_DIRS
         ${DEVICE_SRC_DIR}/include
         "./include"
-        ${CCCL_OVERRIDE_INCLUDE_DIRS}
         "./cuda/include"
     )
 else()
-    if (CUDAToolkit_VERSION_MINOR LESS 5)
-        set(CCCL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../external/cccl")
-        list(APPEND CCCL_OVERRIDE_INCLUDE_DIRS
-            "${CCCL_DIR}/libcudacxx/include/"
-            "${CCCL_DIR}/cub"
-            "${CCCL_DIR}/thrust"
-        )
-    endif()
-
     set(NVRTC_INCLUDE_DIRS
         ${DEVICE_SRC_DIR}/include
         ${MADRONA_HDRS_INCLUDES}
-        ${CCCL_OVERRIDE_INCLUDE_DIRS}
         ${CUDAToolkit_INCLUDE_DIRS}
     )
 endif()

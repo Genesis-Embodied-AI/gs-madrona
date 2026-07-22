@@ -48,7 +48,7 @@ While gs-madrona currently depends on Genesis, we plan to decouple it in the nea
 - Output rendering results to video files
 
 ## Supported Platforms and Environments
-**gs-madrona** should be compatible with any Linux distribution and Python>=3.10. However, it has been tested only with Ubuntu 22.04 and Ubuntu 24.04 for Python 3.10 and 3.12. The rendering pipeline also depends on CUDA, so an NVIDIA graphics card with CUDA 12.4+ support is required for running it. There is no plan to support Windows OS and Mac OS at the moment.
+**gs-madrona** should be compatible with any Linux distribution and Python>=3.10. However, it has been tested only with Ubuntu 22.04 and Ubuntu 24.04 for Python 3.10 and 3.12. The rendering pipeline also depends on CUDA, so an NVIDIA graphics card with CUDA 12.8+ support is required for running it. There is no plan to support Windows OS and Mac OS at the moment.
 
 ## Performance
 FPS comparison of rendering [Franka](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/genesis/assets/xml/franka_emika_panda/panda.xml) with gs-madrona rasterizer and raytracer
@@ -75,7 +75,7 @@ pip install gs-madrona
 ```
 
 ### Build from source
-Please first install CUDA toolkit (>= 12.4) following the [official instructions](https://developer.nvidia.com/cuda-toolkit-archive).
+Please first install CUDA toolkit (>= 12.8) following the [official instructions](https://developer.nvidia.com/cuda-toolkit-archive).
 ```sh
 git clone --recurse-submodules https://github.com/Genesis-Embodied-AI/gs-madrona.git
 cd gs-madrona

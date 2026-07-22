@@ -100,14 +100,6 @@ if (SKBUILD)
             RENAME "${CUDA_NVJITLINK_NAME}.${CUDAToolkit_VERSION_MAJOR}")
     endif()
 
-    if (CUDAToolkit_VERSION_MINOR LESS 5)
-        set(CCCL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../external/cccl")
-        install(DIRECTORY "${CCCL_DIR}/cub" "${CCCL_DIR}/thrust"
-            DESTINATION gs_madrona/cccl)
-        install(DIRECTORY "${CCCL_DIR}/libcudacxx/include"
-            DESTINATION gs_madrona/cccl/libcudacxx)
-    endif()
-
     find_package(embree REQUIRED)
     get_target_property(madrona_embree_shlib embree IMPORTED_LOCATION_RELEASE)
     install(FILES ${madrona_embree_shlib} DESTINATION gs_madrona)
