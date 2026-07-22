@@ -12,6 +12,11 @@
 #include <string>
 #include <filesystem>
 #include <charconv>
+// The mwGPU namespace block below includes device headers that transitively
+// pull in <thread> (and thus <stop_token>); include it here at global scope
+// first so those standard headers compile against real std rather than the
+// mwGPU::std device shim.
+#include <thread>
 
 #include <unistd.h>
 
@@ -21,7 +26,6 @@
 #include <madrona/dyn_array.hpp>
 #include <madrona/cuda_utils.hpp>
 #include <madrona/tracing.hpp>
-#include <madrona/json.hpp>
 #include <madrona/render/asset_processor.hpp>
 
 #include "cpp_compile.hpp"
@@ -2160,71 +2164,6 @@ static int64_t findMatchingMegakernelConfig(
           desired_cfg.numSMs);
 };
 
-static DynArray<int32_t> processExecConfigFile(
-    const char *file_path,
-    int64_t default_megakernel_idx,
-    const MegakernelConfig *megakernel_cfgs,
-    int64_t num_configs)
-{
-    using namespace simdjson;
-
-    char *verbose_taskgraph_env = getenv("MADRONA_MWGPU_VERBOSE_TASKGRAPH");
-    bool verbose_taskgraph =
-        verbose_taskgraph_env && verbose_taskgraph_env[0] == '1';
-
-    padded_string json_data;
-    REQ_JSON(padded_string::load(file_path).get(json_data));
-
-    ondemand::parser parser;
-    ondemand::document config_json_doc;
-    REQ_JSON(parser.iterate(json_data).get(config_json_doc));
-
-    ondemand::object config_json_obj;
-    REQ_JSON(config_json_doc.get(config_json_obj));
-
-    DynArray<int32_t> node_megakernels(0);
-
-    for (auto kv : config_json_obj) {
-        std::string_view key;
-        REQ_JSON(kv.unescaped_key().get(key));
-        uint64_t num_blocks;
-        REQ_JSON(kv.value().get(num_blocks));
-
-        uint64_t node_idx;
-        auto res = std::from_chars(key.data(), key.data() + key.size(), node_idx);
-        
-        if (res.ec != std::errc {}) {
-            FATAL("MADRONA_MWGPU_EXEC_CONFIG_FILE points to invalid file");
-        }
-
-        // FIXME: json only has desired # blocks, somewhat ambiguous
-        MegakernelConfig node_cfg {
-            megakernel_cfgs[0].numThreads,
-            (uint32_t)num_blocks,
-            megakernel_cfgs[0].numSMs,
-        };
-
-        int64_t megakernel_idx = findMatchingMegakernelConfig(
-            megakernel_cfgs, num_configs, node_cfg);
-
-        if (verbose_taskgraph)
-        {
-            MADRONA_DEBUG_LOG("Taskgraph node %lu: using config %d %d %d\n", node_idx,
-                node_cfg.numThreads, node_cfg.numBlocksPerSM, node_cfg.numSMs);
-        }
-
-        if ((CountT)node_idx >= node_megakernels.size()) {
-            node_megakernels.resize(node_idx + 1, [&](int32_t *v) {
-                *v = default_megakernel_idx;
-            });
-        }
-
-        node_megakernels[node_idx] = megakernel_idx;
-    }
-
-    return node_megakernels;
-}
-
 static CUgraphExec makeTaskGraphRunGraph(
     Span<const uint32_t> taskgraph_ids,
     const MegakernelConfig *megakernel_cfgs,
@@ -2237,7 +2176,6 @@ static CUgraphExec makeTaskGraphRunGraph(
     REQ_CU(CudaDynamicLoader::cuGraphCreate(&run_graph, 0));
 
     char *config_override_env = getenv("MADRONA_MWGPU_EXEC_CONFIG_OVERRIDE");
-    char *config_file_env = getenv("MADRONA_MWGPU_EXEC_CONFIG_FILE");
 
     int64_t default_megakernel_idx = 0;
 
@@ -2249,12 +2187,7 @@ static CUgraphExec makeTaskGraphRunGraph(
             megakernel_cfgs, num_megakernels, override_cfg);
     }
 
-    DynArray<int32_t> node_megakernels = config_file_env != nullptr ?
-        processExecConfigFile(config_file_env,
-                              default_megakernel_idx,
-                              megakernel_cfgs,
-                              num_megakernels) :
-        DynArray<int32_t>({(int32_t)default_megakernel_idx});
+    DynArray<int32_t> node_megakernels({(int32_t)default_megakernel_idx});
 
     DynArray<CUgraphNode> megakernel_launches(0);
 

@@ -73,22 +73,6 @@ target_link_libraries(_gs_madrona_batch_renderer PRIVATE
     madgs_mgr
 )
 
-if (TARGET madrona_viz)
-    madrona_python_module(_gs_madrona_visualizer
-        viewer.cpp
-    )
-
-    target_link_libraries(_gs_madrona_visualizer PRIVATE
-        madrona_viz madgs_mgr
-    )
-
-    if (TARGET madrona_cuda)
-        target_link_libraries(_gs_madrona_visualizer PRIVATE
-            madrona_cuda
-        )
-    endif()
-endif()
-
 if (SKBUILD)
     if (CUDA_REQUIRED_ARG)
         find_library(CUDA_NVJITLINK_LIBRARY nvJitLink

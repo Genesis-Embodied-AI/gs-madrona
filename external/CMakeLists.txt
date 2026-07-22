@@ -1,6 +1,3 @@
-# Submoduled dependency options:
-# Disable USD support by default. Even tinyusdz is a BIG dependency
-set(MADRONA_USD_SUPPORT OFF CACHE BOOL "")
 
 include(madrona-deps/cmake/sys-detect.cmake)
 set(MADRONA_LINUX ${MADRONA_LINUX} PARENT_SCOPE)
@@ -61,36 +58,6 @@ endif()
 
 add_subdirectory(fast_float EXCLUDE_FROM_ALL)
 
-set(BUILD_SHARED_LIBS_ORIG ${BUILD_SHARED_LIBS})
-set(BUILD_SHARED_LIBS OFF)
-add_subdirectory(simdjson EXCLUDE_FROM_ALL)
-set_property(TARGET simdjson PROPERTY
-    POSITION_INDEPENDENT_CODE TRUE)
-
-if (NOT WIN32) #FIX
-    target_link_libraries(simdjson PRIVATE
-        madrona_libcxx madrona_noexceptrtti)
-endif()
-
-if (MADRONA_X64 AND NOT MADRONA_MACOS)
-    target_compile_options(simdjson PRIVATE -march=haswell)
-endif()
-
-set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_ORIG})
-
-if (MADRONA_ENABLE_TESTS)
-    #set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    add_subdirectory(googletest EXCLUDE_FROM_ALL)
-    target_link_libraries(gtest_main PUBLIC
-        madrona_noexceptrtti)
-    target_link_libraries(gtest PUBLIC
-        madrona_noexceptrtti)
-
-    if (NOT WIN32)
-        target_link_libraries(gtest_main PUBLIC madrona_libcxx)
-        target_link_libraries(gtest PUBLIC madrona_libcxx)
-    endif()
-endif ()
 
 if (Python_FOUND)
     add_subdirectory(nanobind EXCLUDE_FROM_ALL)
@@ -105,83 +72,8 @@ target_include_directories(spv_reflect PUBLIC
 set_target_properties(spv_reflect PROPERTIES CXX_VISIBILITY_PRESET hidden)
 set_target_properties(spv_reflect PROPERTIES VISIBILITY_INLINES_HIDDEN ON)
 
-add_library(imgui INTERFACE)
-target_include_directories(imgui SYSTEM INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/imgui
-)
-
 add_library(stb INTERFACE)
 target_include_directories(stb SYSTEM INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/stb
 )
 
-if (MADRONA_LINUX)
-    find_package(X11 QUIET)
-
-    set(INCLUDE_GLFW ${X11_FOUND})
-else ()
-    set(INCLUDE_GLFW ON)
-endif()
-
-#set(INCLUDE_GLFW OFF)
-
-if (INCLUDE_GLFW)
-    set(GLFW_LIBRARY_TYPE "SHARED")
-    add_subdirectory(glfw EXCLUDE_FROM_ALL)
-endif ()
-
-if (MADRONA_USD_SUPPORT)
-    set(TINYUSDZ_PRODUCTION_BUILD ON)
-    set(TINYUSDZ_CXX_MP_FLAG OFF CACHE BOOL "")
-    set(TINYUSDZ_WITH_AUDIO OFF CACHE BOOL "")
-    set(TINYUSDZ_WITH_TIFF OFF CACHE BOOL "")
-    set(TINYUSDZ_WITH_EXR OFF CACHE BOOL "")
-    set(TINYUSDZ_WITH_COLORIO OFF CACHE BOOL "")
-    set(TINYUSDZ_WITH_PXR_COMPAT_API OFF CACHE BOOL "")
-    add_subdirectory(tinyusdz EXCLUDE_FROM_ALL)
-    
-    add_library(madrona_tinyusdz INTERFACE)
-    
-    if (FRONTEND_MSVC) 
-        # FIXME: revisit this stuff next release of tinyusdz
-        # With MSFT STL, tinyusdz tries to use std::expected which is only
-        # supported in C++23
-        target_compile_definitions(tinyusdz_object PUBLIC
-            nsel_CONFIG_SELECT_EXPECTED=1
-            nsel_CONFIG_NO_EXCEPTIONS_SEH=0
-        )
-    
-        if (FRONTEND_CLANG_CL)
-            target_compile_options(tinyusdz_object PRIVATE
-                -w # tinyusdz adds -Werror on clang (independent of clang vs clang-cl)
-            )
-        else()
-            set_source_files_properties(tinyusdz/src/external/staticstruct.cc 
-                TARGET_DIRECTORY tinyusdz_object
-                PROPERTIES COMPILE_OPTIONS
-                    /FIstring
-            )
-        endif()
-    endif()
-    
-    if (NOT WIN32) #FIX
-        target_link_libraries(tinyusdz_object
-            madrona_libcxx madrona_noexceptrtti
-        )
-    endif()
-    
-    target_include_directories(madrona_tinyusdz INTERFACE SYSTEM
-        tinyusdz/src
-    )
-    target_link_libraries(madrona_tinyusdz INTERFACE
-        tinyusdz::tinyusdz_static
-    )
-    
-    if (WIN32)
-        # See above, issue persists in files including tinyusdz headers
-        target_compile_definitions(madrona_tinyusdz INTERFACE
-            nsel_CONFIG_SELECT_EXPECTED=1
-            nsel_CONFIG_NO_EXCEPTIONS_SEH=0
-        )
-    endif()
-endif()

@@ -17,8 +17,6 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
     // like madrona::py::Tensor
     madrona::py::setupMadronaSubmodule(m);
 
-    nb::class_<VisualizerGPUHandles>(m, "VisualizerGPUHandles");
-
     nb::class_<Manager>(m, "MadronaBatchRenderer")
         .def("__init__", [](
             Manager *self,
@@ -53,8 +51,7 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
             nb::ndarray<const int32_t, nb::shape<-1>, nb::device::cpu> enabled_geom_groups,
             nb::ndarray<const int32_t, nb::shape<-1, -1>, nb::device::cpu> geom_env_mask,
             bool add_cam_debug_geo,
-            bool use_rt,
-            VisualizerGPUHandles *viz_gpu_hdls)
+            bool use_rt)
         {
             GSModelGeometry mesh_geo {
                 .vertices = (math::Vector3 *)mesh_vertices.data(),
@@ -117,7 +114,7 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                     .useRT = use_rt,
                 },
                 gs_model,
-                viz_gpu_hdls != nullptr ? *viz_gpu_hdls : Optional<VisualizerGPUHandles>::none()
+                Optional<VisualizerGPUHandles>::none()
             );
 
             free(ptr_geom_mat_ids);
@@ -154,7 +151,6 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
            nb::arg("geom_env_mask") = nb::none(),
            nb::arg("add_cam_debug_geo") = false,
            nb::arg("use_rt") = false,
-           nb::arg("visualizer_gpu_handles") = nb::none(),
            nb::keep_alive<1, 32>())
         .def("init", [](Manager &mgr,
             nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> geom_pos,

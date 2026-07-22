@@ -1,9 +1,6 @@
 [submodule "external/madrona-deps"]
 	path = external/madrona-deps
 	url = https://github.com/shacklettbp/madrona-deps.git
-[submodule "external/googletest"]
-	path = external/googletest
-	url = https://github.com/google/googletest.git
 [submodule "external/nanobind"]
 	path = external/nanobind
 	url = https://github.com/wjakob/nanobind.git
@@ -16,21 +13,9 @@
 [submodule "external/madrona-toolchain"]
 	path = external/madrona-toolchain
 	url = https://github.com/shacklettbp/madrona-toolchain.git
-[submodule "external/simdjson"]
-	path = external/simdjson
-	url = https://github.com/simdjson/simdjson.git
 [submodule "external/SPIRV-Reflect"]
 	path = external/SPIRV-Reflect
 	url = https://github.com/KhronosGroup/SPIRV-Reflect.git
-[submodule "external/imgui"]
-	path = external/imgui
-	url = https://github.com/ocornut/imgui.git
-[submodule "external/glfw"]
-	path = external/glfw
-	url = https://github.com/glfw/glfw.git
-[submodule "external/tinyusdz"]
-	path = external/tinyusdz
-	url = https://github.com/syoyo/tinyusdz.git
 [submodule "external/stb"]
 	path = external/stb
 	url = https://github.com/nothings/stb.git
