@@ -29,7 +29,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 1
+          fetch-depth: 0  # setuptools_scm needs full tag history to derive the version
           show-progress: true
 
       - name: Build wheels
