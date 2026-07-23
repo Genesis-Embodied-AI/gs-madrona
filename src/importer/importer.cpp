@@ -12,14 +12,6 @@
 
 #include "obj.hpp"
 
-#ifdef MADRONA_GLTF_SUPPORT
-#include "gltf.hpp"
-#endif
-
-#ifdef MADRONA_USD_SUPPORT
-#include "usd.hpp"
-#endif
-
 #ifdef MADRONA_CUDA_SUPPORT
 #include <madrona/cuda_utils.hpp>
 #endif
@@ -33,14 +25,6 @@ struct AssetImporter::Impl {
 
     Optional<OBJLoader> objLoader;
 
-#ifdef MADRONA_GLTF_SUPPORT
-    Optional<GLTFLoader> gltfLoader;
-#endif
-
-#ifdef MADRONA_USD_SUPPORT
-    Optional<USDLoader> usdLoader;
-#endif
-
     static inline Impl * make(ImageImporter &&img_importer);
 
     inline Optional<ImportedAssets> importFromDisk(
@@ -53,12 +37,6 @@ AssetImporter::Impl * AssetImporter::Impl::make(ImageImporter &&img_importer)
     return new Impl {
         .imgImporter = std::move(img_importer),
         .objLoader = Optional<OBJLoader>::none(),
-#ifdef MADRONA_GLTF_SUPPORT
-        .gltfLoader = Optional<GLTFLoader>::none(),
-#endif
-#ifdef MADRONA_USD_SUPPORT
-        .usdLoader = Optional<USDLoader>::none(),
-#endif
     };
 }
 
@@ -103,33 +81,6 @@ Optional<ImportedAssets> AssetImporter::Impl::importFromDisk(
             }
 
             load_success = objLoader->load(path, imported);
-        } else if (extension == "gltf" || extension == "glb") {
-#ifdef MADRONA_GLTF_SUPPORT
-            if (!gltfLoader.has_value()) {
-                gltfLoader.emplace(imgImporter, err_buf);
-            }
-
-            load_success = gltfLoader->load(
-                path, imported, one_object_per_asset, imgImporter);
-#else
-            load_success = false;
-            snprintf(err_buf.data(), err_buf.size(), "Madrona not compiled with glTF support");
-#endif
-        } else if (extension == "usd" ||
-                   extension == "usda" ||
-                   extension == "usdc" ||
-                   extension == "usdz") {
-#ifdef MADRONA_USD_SUPPORT
-            if (!usdLoader.has_value()) {
-                usdLoader.emplace(imgImporter, err_buf);
-            }
-
-            load_success = usdLoader->load(
-                path, imported, one_object_per_asset, imgImporter);
-#else
-            load_success = false;
-            snprintf(err_buf.data(), err_buf.size(), "Madrona not compiled with USD support");
-#endif
         }
 
         if (!load_success) {

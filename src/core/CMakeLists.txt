@@ -11,20 +11,6 @@ set(MADRONA_CORE_SRCS
     #    platform_utils.cpp
 )
 
-add_library(madrona_core STATIC
-    ${MADRONA_CORE_SRCS}
-)
-
-target_link_libraries(madrona_core
-    PUBLIC 
-        madrona_common
-)
-
-target_compile_definitions(madrona_core
-    PUBLIC
-        -DMADRONA_USE_TASK_GRAPH=1
-)
-
 add_library(madrona_mw_core STATIC
     ${MADRONA_CORE_SRCS}
     ${MADRONA_INC_DIR}/taskgraph.hpp ${MADRONA_INC_DIR}/taskgraph.inl taskgraph.cpp
