@@ -35,6 +35,11 @@ set(MADRONA_MW_GPU_COMPILE_FLAGS
     -DTHRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_CPP
     -DCCCL_DISABLE_BF16_SUPPORT=1
     -DCUB_DISABLE_BF16_SUPPORT=1
+    # CUB 2.8.2 (CUDA 12.8) marks its own Traits<T>::CATEGORY deprecated yet still
+    # uses it internally in WarpScan/BlockScan; its self-suppression is a clang
+    # pragma that nvrtc/cicc ignores and cannot catch at our instantiation site.
+    # CCCL_IGNORE_DEPRECATED_API is CCCL's documented opt-out (drops the attribute).
+    -DCCCL_IGNORE_DEPRECATED_API=1
 )
 
 if (SKBUILD)
