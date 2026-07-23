@@ -149,12 +149,6 @@ target_link_libraries(madrona_bvh_builder
         madrona_embree
 )
 
-add_library(madrona_navmesh STATIC
-    ${MADRONA_INC_DIR}/navmesh.hpp ${MADRONA_INC_DIR}/navmesh.inl navmesh.cpp
-)
-
-target_link_libraries(madrona_navmesh PUBLIC madrona_common)
-
 if (CUDAToolkit_FOUND)
     add_library(madrona_cuda STATIC
         ${MADRONA_INC_DIR}/cuda_utils.hpp ${MADRONA_INC_DIR}/cuda_utils.inl

@@ -16,45 +16,6 @@
 
 namespace madrona::py {
 
-#ifdef MADRONA_CUDA_SUPPORT
-class CudaSync final {
-public:
-    CudaSync(cudaExternalSemaphore_t sema);
-    void wait(uint64_t strm);
-
-private:
-#ifdef MADRONA_LINUX
-    // These classes have to be virtual on linux so a unique typeinfo
-    // is emitted. Otherwise every user of this class gets a weak symbol
-    // reference and nanobind can't map the types correctly
-    virtual void key_();
-#endif
-
-    cudaExternalSemaphore_t sema_;
-};
-#endif
-
-// Need to wrap the actual enum class because macos
-// RTTI for enum classes isn't consistent across libraries
-class PyExecMode final {
-public:
-    inline PyExecMode(ExecMode v)
-        : v_(v)
-    {}
-
-    inline operator ExecMode() const
-    {
-        return v_;
-    }
-
-private:
-#ifdef MADRONA_LINUX
-    virtual void key_();
-#endif
-
-    ExecMode v_;
-};
-
 enum class TensorElementType {
     UInt8,
     Int8,
@@ -141,66 +102,5 @@ private:
     int64_t num_dimensions_;
     std::array<int64_t, maxDimensions> dimensions_;
 };
-
-struct NamedTensor {
-    const char *name;
-    Tensor tensor;
-};
-
-struct TrainStepInputInterface {
-    Span<const NamedTensor> actions;
-    Tensor resets;
-    Tensor simCtrl;
-    Span<const NamedTensor> pbt = {};
-};
-
-struct TrainStepOutputInterface {
-    Span<const NamedTensor> observations;
-    Tensor rewards;
-    Tensor dones;
-    Span<const NamedTensor> stats = {};
-    Span<const NamedTensor> pbt = {};
-};
-
-struct TrainCheckpointingInterface {
-    Tensor checkpointData;
-};
-
-class TrainInterface {
-public:
-    TrainInterface();
-    TrainInterface(TrainStepInputInterface step_inputs,
-                   TrainStepOutputInterface step_outputs,
-                   Optional<TrainCheckpointingInterface> checkpointing = 
-                       Optional<TrainCheckpointingInterface>::none());
-    TrainInterface(TrainInterface &&o);
-    ~TrainInterface();
-
-    TrainInterface & operator=(TrainInterface &&o);
-
-    TrainStepInputInterface stepInputs() const;
-    TrainStepOutputInterface stepOutputs() const;
-    Optional<TrainCheckpointingInterface> checkpointing() const;
-
-    void cpuCopyStepInputs(void **buffers);
-    void cpuCopyObservations(void **buffers);
-    void cpuCopyStepOutputs(void **buffers);
-
-#ifdef MADRONA_CUDA_SUPPORT
-    void ** cudaCopyStepInputs(cudaStream_t strm, void **buffers);
-    void cudaCopyObservations(cudaStream_t strm, void **buffers);
-    void cudaCopyStepOutputs(cudaStream_t strm, void **buffers);
-#endif
-
-private:
-    struct Impl;
-
-#ifdef MADRONA_LINUX
-    virtual void key_();
-#endif
-
-    std::unique_ptr<Impl> impl_;
-};
-
 
 }

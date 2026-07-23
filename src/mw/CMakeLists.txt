@@ -1,12 +1,3 @@
-add_library(madrona_mw_cpu STATIC
-    ${MADRONA_INC_DIR}/mw_cpu.hpp ${MADRONA_INC_DIR}/mw_cpu.inl cpu_exec.cpp
-)
-
-target_link_libraries(madrona_mw_cpu
-    PUBLIC
-        madrona_mw_core
-)
-
 if (NOT CUDAToolkit_FOUND OR CUDAToolkit_VERSION_MAJOR LESS 12 OR
     (CUDAToolkit_VERSION_MAJOR EQUAL 12 AND CUDAToolkit_VERSION_MINOR LESS 8))
     return()
@@ -44,6 +35,11 @@ set(MADRONA_MW_GPU_COMPILE_FLAGS
     -DTHRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_CPP
     -DCCCL_DISABLE_BF16_SUPPORT=1
     -DCUB_DISABLE_BF16_SUPPORT=1
+    # CUB 2.8.2 (CUDA 12.8) marks its own Traits<T>::CATEGORY deprecated yet still
+    # uses it internally in WarpScan/BlockScan; its self-suppression is a clang
+    # pragma that nvrtc/cicc ignores and cannot catch at our instantiation site.
+    # CCCL_IGNORE_DEPRECATED_API is CCCL's documented opt-out (drops the attribute).
+    -DCCCL_IGNORE_DEPRECATED_API=1
 )
 
 if (SKBUILD)
@@ -53,13 +49,6 @@ else()
 endif()
 
 set(DEVICE_SRC_DIR "${MADRONA_SRC_DIR}/mw/device")
-
-set(JOB_SYS_DEVICE_SOURCES
-    ${DEVICE_SRC_DIR}/job.cpp
-    ${DEVICE_SRC_DIR}/state.cpp
-    ${DEVICE_SRC_DIR}/crash.cpp
-    ${DEVICE_SRC_DIR}/const.cpp
-)
 
 set(BVH_DEVICE_SOURCES
     ${DEVICE_SRC_DIR}/bvh.cpp
@@ -80,22 +69,10 @@ set(TASK_GRAPH_DEVICE_SOURCES
     ${DEVICE_SRC_DIR}/ecs_render_bridge.cpp
     # FIXME
     ${MADRONA_SRC_DIR}/common/hashmap.cpp
-    ${MADRONA_SRC_DIR}/common/navmesh.cpp
     ${MADRONA_SRC_DIR}/core/base.cpp
-    ${MADRONA_SRC_DIR}/physics/physics.cpp
     ${MADRONA_SRC_DIR}/physics/geo.cpp
-    ${MADRONA_SRC_DIR}/physics/xpbd.cpp
-    ${MADRONA_SRC_DIR}/physics/tgs.cpp
-    ${MADRONA_SRC_DIR}/physics/narrowphase.cpp
-    ${MADRONA_SRC_DIR}/physics/broadphase.cpp
     ${MADRONA_SRC_DIR}/render/ecs_system.cpp
 )
-
-set(JOB_SYS_INTERNAL_SRC_LIST)
-foreach(f ${JOB_SYS_DEVICE_SOURCES})
-    set(JOB_SYS_INTERNAL_SRC_LIST "${JOB_SYS_INTERNAL_SRC_LIST}\"${f}\", ")
-endforeach()
-set(JOB_SYS_INTERNAL_SRC_LIST "${JOB_SYS_INTERNAL_SRC_LIST}")
 
 set(TASK_GRAPH_INTERNAL_SRC_LIST)
 foreach(f ${TASK_GRAPH_DEVICE_SOURCES})
@@ -142,7 +119,6 @@ target_compile_definitions(madrona_mw_gpu
     PRIVATE
         MADRONA_NVRTC_INCLUDE_DIRS=${NVRTC_INCLUDE_DIRS_LIST}
         MADRONA_NVRTC_OPTIONS=${NVRTC_OPTIONS}
-        MADRONA_MW_GPU_JOB_SYS_INTERNAL_CPP=${JOB_SYS_INTERNAL_SRC_LIST}
         MADRONA_MW_GPU_TASK_GRAPH_INTERNAL_CPP=${TASK_GRAPH_INTERNAL_SRC_LIST}
         MADRONA_MW_GPU_BVH_INTERNAL_CPP=${BVH_INTERNAL_SRC_LIST}
         MADRONA_MW_GPU_DEVICE_SRC_DIR=\"${DEVICE_SRC_DIR}\"

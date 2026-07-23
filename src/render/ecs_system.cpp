@@ -28,7 +28,6 @@ struct RenderingSystemState {
     uint32_t *totalNumViews;
     uint32_t *totalNumInstances;
     uint32_t *totalNumLights;
-    uint32_t *voxels;
     float aspectRatio;
 
     // This is used if on the CPU backend
@@ -655,7 +654,6 @@ void init(Context &ctx, const RenderECSBridge *bridge)
 #endif
 
         system_state.aspectRatio = (float)bridge->renderWidth / (float)bridge->renderHeight;
-        system_state.voxels = bridge->voxels;
     }
 
 #if 0

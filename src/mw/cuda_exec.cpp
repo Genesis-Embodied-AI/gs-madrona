@@ -323,11 +323,6 @@ static constexpr uint32_t numEntryQueueThreads = 512;
 
 using GPUImplConsts = mwGPU::madrona::mwGPU::GPUImplConsts;
 
-enum class ExecutorMode {
-    JobSystem,
-    TaskGraph,
-};
-
 struct GPUCompileResults {
     CUmodule mod;
     std::string initECSName;
@@ -405,8 +400,6 @@ struct GPUKernels {
     CUfunction initECS;
     CUfunction initWorlds;
     CUfunction initTasks;
-    CUfunction queueUserInit;
-    CUfunction queueUserRun;
     CUfunction initBVHParams;
     CUfunction destroyECS;
 };
@@ -479,94 +472,6 @@ struct MWCudaExecutor::Impl {
 
     std::vector<TimingGroup> timingGroups;
 };
-
-static void getUserEntries(const char *entry_class, CUmodule mod,
-                           const char **compile_flags,
-                           uint32_t num_compile_flags,
-                           CUfunction *init_out, CUfunction *run_out)
-{
-    static const char mangle_code_postfix[] = R"__(
-#include <cstdint>
-
-namespace madrona { namespace mwGPU {
-
-template <typename T> __global__ void submitInit(uint32_t, void *) {}
-template <typename T> __global__ void submitRun(uint32_t) {}
-
-} }
-)__";
-
-    static const char init_template[] =
-        "::madrona::mwGPU::submitInit<::";
-    static const char run_template[] =
-        "::madrona::mwGPU::submitRun<::";
-
-    std::string_view entry_view(entry_class);
-
-    // If user prefixed with ::, trim off as it will be added later
-    if (entry_view[0] == ':' && entry_view[1] == ':') {
-        entry_view = entry_view.substr(2);
-    }
-
-    std::string fwd_declare; 
-
-    // Find all namespace separators
-    int num_namespaces = 0;
-    size_t prev_off = 0, off = 0;
-    while ((off = entry_view.find("::", prev_off)) != std::string_view::npos) {
-        auto ns_view = entry_view.substr(prev_off, off - prev_off);
-
-        fwd_declare += "namespace ";
-        fwd_declare += ns_view;
-        fwd_declare += " { ";
-
-        prev_off = off + 2;
-        num_namespaces++;
-    }
-
-    auto class_view = entry_view.substr(prev_off);
-    if (class_view.size() == 0) {
-        FATAL("Invalid entry class name\n");
-    }
-
-    fwd_declare += "class ";
-    fwd_declare += class_view;
-    fwd_declare += "; ";
-
-    for (int i = 0; i < num_namespaces; i++) {
-        fwd_declare += "} ";
-    }
-
-    std::string mangle_code = std::move(fwd_declare);
-    mangle_code += mangle_code_postfix;
-
-    std::string init_name = init_template;
-    init_name += entry_view;
-    init_name += ">";
-
-    std::string run_name = run_template;
-    run_name += entry_view;
-    run_name += ">";
-
-    nvrtcProgram prog;
-    REQ_NVRTC(CudaDynamicLoader::nvrtcCreateProgram(&prog, mangle_code.c_str(), "mangle.cpp",
-                                 0, nullptr, nullptr));
-
-    REQ_NVRTC(CudaDynamicLoader::nvrtcAddNameExpression(prog, init_name.c_str()));
-    REQ_NVRTC(CudaDynamicLoader::nvrtcAddNameExpression(prog, run_name.c_str()));
-
-    REQ_NVRTC(CudaDynamicLoader::nvrtcCompileProgram(prog, num_compile_flags, compile_flags));
-
-    const char *init_lowered;
-    REQ_NVRTC(CudaDynamicLoader::nvrtcGetLoweredName(prog, init_name.c_str(), &init_lowered));
-    const char *run_lowered;
-    REQ_NVRTC(CudaDynamicLoader::nvrtcGetLoweredName(prog, run_name.c_str(), &run_lowered));
-
-    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(init_out, mod, init_lowered));
-    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(run_out, mod, run_lowered));
-
-    REQ_NVRTC(CudaDynamicLoader::nvrtcDestroyProgram(&prog));
-}
 
 static MegakernelCache loadMegakernelCache(const std::string &cache_path)
 {
@@ -676,7 +581,7 @@ static GPUCompileResults compileCode(
     const MegakernelConfig *megakernel_cfgs,
     int64_t num_megakernel_cfgs,
     CompileConfig::OptMode opt_mode,
-    ExecutorMode exec_mode, bool verbose_compile)
+    bool verbose_compile)
 {
     const std::string cache_path = getenv("MADRONA_MWGPU_KERNEL_CACHE");
 
@@ -761,30 +666,10 @@ static GPUCompileResults compileCode(
             (char *)cubin.data(), cubin.size(), name));
     };
 
-    std::string megakernel_job_prefix = R"__(#include "megakernel_job_impl.inl"
-
-extern "C" {
-
-)__";
-
     std::string megakernel_taskgraph_prefix = R"__(#include "megakernel_impl.inl"
 
 extern "C" {
 
-)__";
-
-    std::string megakernel_job_body = R"__(namespace madrona {
-namespace mwGPU {
-
-static __attribute__((always_inline)) inline void dispatch(
-        uint32_t func_id,
-        madrona::JobContainerBase *data,
-        uint32_t *data_indices,
-        uint32_t *invocation_offsets,
-        uint32_t num_launches,
-        uint32_t grid)
-{
-    switch (func_id) {
 )__";
 
     std::string megakernel_taskgraph_body = R"__(namespace madrona {
@@ -798,31 +683,14 @@ static __attribute__((always_inline)) inline void dispatch(
     switch (func_id) {
 )__";
 
-    std::string megakernel_prefix;
-    std::string megakernel_body;
+    std::string megakernel_prefix = megakernel_taskgraph_prefix;
+    std::string megakernel_body = megakernel_taskgraph_body;
     std::string megakernel_func_ids;
-    std::string_view entry_prefix;
-    std::string_view entry_postfix;
-    std::string_view entry_params;
-    std::string_view entry_args;
-    std::string_view id_prefix;
-    if (exec_mode == ExecutorMode::JobSystem) {
-        megakernel_prefix = megakernel_job_prefix;
-        megakernel_body = megakernel_job_body;
-        entry_prefix = ".weak .func _ZN7madrona5mwGPU8jobEntry";
-        entry_postfix = "EvPNS_16JobContainerBaseEPj";
-        entry_params = "(madrona::JobContainerBase *, uint32_t *, uint32_t *, uint32_t, uint32_t);\n";
-        entry_args = "(data, data_indices, invocation_offsets, num_launches, grid);\n";
-        id_prefix = "_ZN7madrona5mwGPU13JobFuncIDBase";
-    } else if (exec_mode == ExecutorMode::TaskGraph) {
-        megakernel_prefix = megakernel_taskgraph_prefix;
-        megakernel_body = megakernel_taskgraph_body;
-        entry_prefix = ".weak .func _ZN7madrona5mwGPU9userEntry";
-        entry_postfix = "EvPNS_8NodeBaseEi";
-        entry_params = "(madrona::NodeBase *, int32_t);\n";
-        entry_args = "(node_data, invocation_offset);\n";
-        id_prefix = "_ZN7madrona5mwGPU14UserFuncIDBase";
-    }
+    std::string_view entry_prefix = ".weak .func _ZN7madrona5mwGPU9userEntry";
+    std::string_view entry_postfix = "EvPNS_8NodeBaseEi";
+    std::string_view entry_params = "(madrona::NodeBase *, int32_t);\n";
+    std::string_view entry_args = "(node_data, invocation_offset);\n";
+    std::string_view id_prefix = "_ZN7madrona5mwGPU14UserFuncIDBase";
 
     std::string init_ecs_name;
     std::string init_worlds_name;
@@ -1382,7 +1250,6 @@ static BVHKernels buildBVHKernels(const CompileConfig &cfg,
 
 static GPUKernels buildKernels(const CompileConfig &cfg,
                                Span<const MegakernelConfig> megakernel_cfgs,
-                               ExecutorMode exec_mode,
                                int32_t num_sms,
                                std::pair<int, int> cuda_arch)
 {
@@ -1396,23 +1263,12 @@ static GPUKernels buildKernels(const CompileConfig &cfg,
 
     using namespace std;
 
-    array job_sys_cpp_files {
-        MADRONA_MW_GPU_JOB_SYS_INTERNAL_CPP
-    };
-
     array task_graph_cpp_files {
         MADRONA_MW_GPU_TASK_GRAPH_INTERNAL_CPP
     };
 
-    uint32_t num_exec_srcs = 0;
-    const char **exec_srcs = nullptr;
-    if (exec_mode == ExecutorMode::JobSystem) {
-        num_exec_srcs = job_sys_cpp_files.size();
-        exec_srcs = job_sys_cpp_files.data();
-    } else if (exec_mode == ExecutorMode::TaskGraph) {
-        num_exec_srcs = task_graph_cpp_files.size();
-        exec_srcs = task_graph_cpp_files.data();
-    }
+    uint32_t num_exec_srcs = task_graph_cpp_files.size();
+    const char **exec_srcs = task_graph_cpp_files.data();
     size_t num_srcs = num_exec_srcs + cfg.userSources.size();
 
     HeapArray<const char *> all_cpp_files(num_srcs);
@@ -1489,11 +1345,7 @@ static GPUKernels buildKernels(const CompileConfig &cfg,
         compile_flags.push_back("-DMADRONA_MWGPU_LTO_MODE=1");
     }
 
-    if (exec_mode == ExecutorMode::JobSystem) {
-        compile_flags.push_back("-DMARONA_MWGPU_JOB_SYSTEM=1");
-    } else if (exec_mode == ExecutorMode::TaskGraph) {
-        compile_flags.push_back("-DMADRONA_MWGPU_TASKGRAPH=1");
-    }
+    compile_flags.push_back("-DMADRONA_MWGPU_TASKGRAPH=1");
 
     DynArray<const char *> linker_flags {
         gpu_arch_flag.c_str(),
@@ -1538,7 +1390,7 @@ static GPUKernels buildKernels(const CompileConfig &cfg,
         fast_compile_flags.data(), fast_compile_flags.size(),
         linker_flags.data(), linker_flags.size(),
         megakernel_cfgs.data(), megakernel_cfgs.size(),
-        opt_mode, exec_mode, verbose_compile);
+        opt_mode, verbose_compile);
 
     HeapArray<CUfunction> megakernel_fns(megakernel_cfgs.size());
     for (int64_t i = 0; i < megakernel_cfgs.size(); i++) {
@@ -1557,8 +1409,6 @@ static GPUKernels buildKernels(const CompileConfig &cfg,
         .initECS = nullptr,
         .initWorlds = nullptr,
         .initTasks = nullptr,
-        .queueUserInit = nullptr,
-        .queueUserRun = nullptr,
         .initBVHParams = nullptr,
         .destroyECS = nullptr,
     };
@@ -1566,21 +1416,12 @@ static GPUKernels buildKernels(const CompileConfig &cfg,
     REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.computeGPUImplConsts,
         gpu_kernels.mod, "madronaMWGPUComputeConstants"));
 
-    if (exec_mode == ExecutorMode::JobSystem) {
-        REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.initECS, gpu_kernels.mod,
-                                   "madronaMWGPUInitialize"));
-        // FIXME: getUserEntries is broken
-        getUserEntries("", gpu_kernels.mod, compile_flags.data(),
-            compile_flags.size(), &gpu_kernels.queueUserInit,
-            &gpu_kernels.queueUserRun);
-    } else if (exec_mode == ExecutorMode::TaskGraph) {
-        REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.initECS, gpu_kernels.mod,
-                                   compile_results.initECSName.c_str()));
-        REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.initWorlds, gpu_kernels.mod,
-                                   compile_results.initWorldsName.c_str()));
-        REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.initTasks, gpu_kernels.mod,
-                                   compile_results.initTasksName.c_str()));
-    }
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.initECS, gpu_kernels.mod,
+                               compile_results.initECSName.c_str()));
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.initWorlds, gpu_kernels.mod,
+                               compile_results.initWorldsName.c_str()));
+    REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.initTasks, gpu_kernels.mod,
+                               compile_results.initTasksName.c_str()));
 
     REQ_CU(CudaDynamicLoader::cuModuleGetFunction(&gpu_kernels.initBVHParams, gpu_kernels.mod,
                                "initBVHParams"));
@@ -1796,7 +1637,6 @@ static GPUEngineState initEngineAndUserState(
     const GPUKernels &gpu_kernels,
     const BVHKernels &bvh_kernels,
     const Optional<CudaBatchRenderConfig> &render_cfg,
-    ExecutorMode exec_mode,
     CUdevice cu_gpu,
     CUcontext cu_ctx,
     cudaStream_t strm)
@@ -1975,23 +1815,12 @@ static GPUEngineState initEngineAndUserState(
     REQ_CU(CudaDynamicLoader::cuMemcpyHtoD(job_sys_consts_addr, gpu_consts_readback,
                         job_sys_consts_size));
 
-    if (exec_mode == ExecutorMode::JobSystem) {
-        launchKernel(gpu_kernels.initWorlds, 1, consts::numMegakernelThreads, no_args);
-        uint32_t num_queue_blocks = utils::divideRoundUp(num_worlds, consts::numEntryQueueThreads);
+    launchKernel(gpu_kernels.initECS, 1, 1, init_ecs_args);
+    uint32_t num_init_blocks = utils::divideRoundUp(num_worlds, consts::numMegakernelThreads);
 
-        launchKernel(gpu_kernels.queueUserInit, num_queue_blocks,
-                     consts::numEntryQueueThreads, init_worlds_args); 
-
-        launchKernel(gpu_kernels.megakernels[0], 1,
-                     consts::numMegakernelThreads, no_args);
-    } else if (exec_mode == ExecutorMode::TaskGraph) {
-        launchKernel(gpu_kernels.initECS, 1, 1, init_ecs_args);
-        uint32_t num_init_blocks = utils::divideRoundUp(num_worlds, consts::numMegakernelThreads);
-
-        launchKernel(gpu_kernels.initWorlds, num_init_blocks,
-                     consts::numMegakernelThreads, init_worlds_args);
-        launchKernel(gpu_kernels.initTasks, 1, 1, init_tasks_args);
-    }
+    launchKernel(gpu_kernels.initWorlds, num_init_blocks,
+                 consts::numMegakernelThreads, init_worlds_args);
+    launchKernel(gpu_kernels.initTasks, 1, 1, init_tasks_args);
 
     REQ_CUDA(cudaStreamSynchronize(strm));
 
@@ -2056,56 +1885,6 @@ static GPUEngineState initEngineAndUserState(
         std::move(exported_cols),
         fq
     };
-}
-
-[[maybe_unused]] static CUgraphExec makeJobSysRunGraph(
-    CUfunction queue_run_kernel,
-    CUfunction job_sys_kernel,
-    uint32_t num_worlds)
-{
-    auto queue_args = makeKernelArgBuffer(num_worlds);
-    auto no_args = makeKernelArgBuffer();
-
-    uint32_t num_queue_blocks = utils::divideRoundUp(num_worlds,
-        consts::numEntryQueueThreads);
-
-    CUgraph run_graph;
-    REQ_CU(CudaDynamicLoader::cuGraphCreate(&run_graph, 0));
-
-    CUDA_KERNEL_NODE_PARAMS kernel_node_params {
-        .func = queue_run_kernel,
-        .gridDimX = num_queue_blocks,
-        .gridDimY = 1,
-        .gridDimZ = 1,
-        .blockDimX = consts::numEntryQueueThreads,
-        .blockDimY = 1,
-        .blockDimZ = 1,
-        .sharedMemBytes = 0,
-        .kernelParams = nullptr,
-        .extra = queue_args.data(),
-        .kern = nullptr,
-        .ctx = nullptr,
-    };
-
-    CUgraphNode queue_node;
-    REQ_CU(CudaDynamicLoader::cuGraphAddKernelNode(&queue_node, run_graph,
-        nullptr, 0, &kernel_node_params));
-
-    kernel_node_params.func = job_sys_kernel;
-    kernel_node_params.gridDimX = 1;
-    kernel_node_params.blockDimX = consts::numMegakernelThreads;
-    kernel_node_params.extra = no_args.data();
-
-    CUgraphNode job_sys_node;
-    REQ_CU(CudaDynamicLoader::cuGraphAddKernelNode(&job_sys_node, run_graph,
-        &queue_node, 1, &kernel_node_params));
-
-    CUgraphExec run_graph_exec;
-    REQ_CU(CudaDynamicLoader::cuGraphInstantiate(&run_graph_exec, run_graph, 0));
-
-    REQ_CU(CudaDynamicLoader::cuGraphDestroy(run_graph));
-
-    return run_graph_exec;
 }
 
 static MegakernelConfig processExecConfigOverride(const char *override_str)
@@ -2337,8 +2116,6 @@ MWCudaExecutor::MWCudaExecutor(
     // MADRONA_DEBUG_LOG("Kernel cache directory set to: %s\n", kernel_cache_path.c_str());
     // MADRONA_DEBUG_LOG("BVH cache directory set to: %s\n", bvh_cache_path.c_str());
 
-    const ExecutorMode exec_mode = ExecutorMode::TaskGraph;
-
     auto strm = cu::makeStream();
 
     CUdevice cu_gpu;
@@ -2384,7 +2161,7 @@ MWCudaExecutor::MWCudaExecutor(
     } 
 
     GPUKernels gpu_kernels = buildKernels(compile_cfg, megakernel_cfgs,
-        exec_mode, num_sms, cu_capability);
+        num_sms, cu_capability);
 
     GPUEngineState eng_state = initEngineAndUserState(
         state_cfg.numWorlds, state_cfg.numWorldDataBytes,
@@ -2394,7 +2171,7 @@ MWCudaExecutor::MWCudaExecutor(
         state_cfg.numExportedBuffers,
         gpu_kernels,
         bvh_kernels, render_cfg,
-        exec_mode, cu_gpu, cu_ctx, strm);
+        cu_gpu, cu_ctx, strm);
 
     TaskGraphsState taskgraphs_state {
         .megakernels = std::move(gpu_kernels.megakernels),

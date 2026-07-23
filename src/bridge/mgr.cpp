@@ -4,9 +4,7 @@
 
 #include <madrona/utils.hpp>
 #include <madrona/importer.hpp>
-#include <madrona/physics_loader.hpp>
 #include <madrona/tracing.hpp>
-#include <madrona/mw_cpu.hpp>
 #include <madrona/render/api.hpp>
 
 #include <array>
@@ -23,7 +21,6 @@
 
 using namespace madrona;
 using namespace madrona::math;
-using namespace madrona::phys;
 using namespace madrona::py;
 using namespace madrona::imp;
 
@@ -104,7 +101,6 @@ static inline Optional<render::RenderManager> initRenderManager(
         .maxLightsPerWorld = gs_model.numLights,
         .maxInstancesPerWorld = max_instances_per_world,
         .execMode = ExecMode::CUDA,
-        .voxelCfg = {},
     });
 }
 
@@ -824,50 +820,6 @@ void Manager::render(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
                      const uint32_t *render_options)
 {
     impl_->render(geom_pos, geom_rot, cam_pos, cam_rot, render_options);
-}
-
-Tensor Manager::instancePositionsTensor() const
-{
-    return impl_->exportTensor(ExportID::InstancePositions,
-                               TensorElementType::Float32,
-                               {
-                                   impl_->cfg.numWorlds,
-                                   impl_->numGeoms,
-                                   sizeof(Vector3) / sizeof(float),
-                               });
-}
-
-Tensor Manager::instanceRotationsTensor() const
-{
-    return impl_->exportTensor(ExportID::InstanceRotations,
-                               TensorElementType::Float32,
-                               {
-                                   impl_->cfg.numWorlds,
-                                   impl_->numGeoms,
-                                   sizeof(Quat) / sizeof(float),
-                               });
-}
-
-Tensor Manager::cameraPositionsTensor() const
-{
-    return impl_->exportTensor(ExportID::CameraPositions,
-                               TensorElementType::Float32,
-                               {
-                                   impl_->cfg.numWorlds,
-                                   impl_->numCams,
-                                   sizeof(Vector3) / sizeof(float),
-                               });
-}
-
-Tensor Manager::cameraRotationsTensor() const
-{
-    return impl_->exportTensor(ExportID::CameraRotations,
-                               TensorElementType::Float32,
-                               {
-                                   impl_->cfg.numWorlds,
-                                   impl_->numCams,
-                                   sizeof(Quat) / sizeof(float),
-                               });
 }
 
 Tensor Manager::rgbTensor() const

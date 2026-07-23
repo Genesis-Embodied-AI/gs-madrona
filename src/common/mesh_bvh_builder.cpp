@@ -1,6 +1,5 @@
 #include <madrona/mesh_bvh_builder.hpp>
 
-#include <madrona/physics_assets.hpp>
 #include <madrona/macros.hpp>
 
 #include <vector>

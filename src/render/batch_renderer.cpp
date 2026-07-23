@@ -1557,17 +1557,14 @@ struct BatchRenderer::Impl {
     // Required whether we do batch rendering or not
     PipelineMP<1> prepareViews;
     PipelineMP<1> batchDraw;
-    PipelineMP<1> createVisualization;
     PipelineMP<1> lighting;
     PipelineMP<1> shadowGen;
     PipelineMP<1> shadowDraw;
-    Optional<PipelineMP<1>> postProcess; // Add post-processing pipeline
 
     //One frame is on simulation frame
     HeapArray<BatchFrame> batchFrames;
 
     VkDescriptorSet assetSetPrepare;
-    VkDescriptorSet assetSetDraw;
     VkDescriptorSet assetSetTextureMat;
     VkDescriptorSet assetSetLighting;
 
@@ -1606,11 +1603,6 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
             dev, rctx.pipelineCache, VK_NULL_HANDLE, 
             consts::numDrawCmdBuffers * cfg.numFrames, 5, rctx.repeatSampler,
             cfg.maxTextures)),
-    createVisualization(
-        makeComputePipeline(
-            dev, rctx.pipelineCache, 1, sizeof(uint32_t) * 2,
-            consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
-            "visualize_tris.hlsl", "visualize", makeShaders)),
     lighting(
         makeComputePipeline(
             dev, rctx.pipelineCache, 3, sizeof(shader::DeferredLightingPushConstBR),
@@ -1625,17 +1617,8 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
         makeShadowDrawPipeline(
             dev, rctx.pipelineCache, VK_NULL_HANDLE, 
             consts::numDrawCmdBuffers * cfg.numFrames, 3)),
-    postProcess(
-        cfg.enableBatchRenderer ?
-        makeComputePipeline(
-            dev, rctx.pipelineCache, 1, sizeof(uint32_t) * 4, // push constants for width, height, view count, etc.
-            consts::numDrawCmdBuffers * cfg.numFrames, rctx.repeatSampler,
-            "post_process.hlsl", "main", makeShaders) :
-        Optional<PipelineMP<1>>::none()
-    ),
     batchFrames(cfg.numFrames),
     assetSetPrepare(rctx.asset_set_cull_),
-    assetSetDraw(rctx.asset_set_draw_),
     assetSetTextureMat(rctx.asset_set_mat_tex_),
     assetSetLighting(rctx.asset_batch_lighting_set_),
     renderExtent { cfg.renderWidth, cfg.renderHeight },
@@ -1693,9 +1676,6 @@ BatchRenderer::~BatchRenderer()
     impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->batchDraw.hdls[0], nullptr);
     impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->batchDraw.layout, nullptr);
 
-    impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->createVisualization.hdls[0], nullptr);
-    impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->createVisualization.layout, nullptr);
-
     impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->lighting.hdls[0], nullptr);
     impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->lighting.layout, nullptr);
 
@@ -1704,11 +1684,6 @@ BatchRenderer::~BatchRenderer()
 
     impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->shadowDraw.hdls[0], nullptr);
     impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->shadowDraw.layout, nullptr);
-
-    if (impl->postProcess.has_value()) {
-        impl->dev.dt.destroyPipeline(impl->dev.hdl, impl->postProcess->hdls[0], nullptr);
-        impl->dev.dt.destroyPipelineLayout(impl->dev.hdl, impl->postProcess->layout, nullptr);
-    }
 
     for (CountT i = 0; i < impl->batchFrames.size(); i++) {
         impl->dev.dt.destroyCommandPool(impl->dev.hdl, impl->batchFrames[i].prepareCmdPool, nullptr);
@@ -1999,11 +1974,6 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
             interop->instancesCPU->flush(impl->dev);
             interop->instanceOffsetsCPU->flush(impl->dev);
             interop->aabbCPU->flush(impl->dev);
-        }
-
-        if (interop->voxelInputCPU.has_value()) {
-            // Need to flush engine input state before copy
-            interop->voxelInputCPU->flush(impl->dev);
         }
 
         if (interop->lightsCPU.has_value()) {

@@ -4,7 +4,6 @@
 
 using namespace madrona;
 using namespace madrona::math;
-using namespace madrona::phys;
 
 namespace RenderingSystem = madrona::render::RenderingSystem;
 

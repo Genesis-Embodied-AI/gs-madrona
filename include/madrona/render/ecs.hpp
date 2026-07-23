@@ -196,7 +196,6 @@ namespace RenderingSystem {
         bool update_visual_properties = false);
 
     void init(Context &ctx, const RenderECSBridge *bridge);
-    uint32_t * getVoxelPtr(Context &ctx);
     void makeEntityRenderable(Context &ctx, Entity e);
     void disableEntityRenderable(Context &ctx, Entity e);
     void attachEntityToView(Context &ctx,

@@ -37,8 +37,6 @@ public:
         uint32_t maxLightsPerWorld;
         uint32_t maxInstancesPerWorld;
         ExecMode execMode;
-
-        VoxelConfig voxelCfg;
     };
 
     RenderManager(APIBackend *render_backend,

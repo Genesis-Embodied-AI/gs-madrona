@@ -3,7 +3,6 @@
 #include <madrona/components.hpp>
 #include <madrona/math.hpp>
 #include <madrona/rand.hpp>
-#include <madrona/physics.hpp>
 #include <madrona/render/ecs.hpp>
 
 namespace madGS {
