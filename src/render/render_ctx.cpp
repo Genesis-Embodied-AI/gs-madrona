@@ -57,8 +57,6 @@ using PackedVertex = render::shader::PackedVertex;
 using MeshData = render::shader::MeshData;
 using MaterialDataShader = render::shader::MaterialData;
 using ObjectData = render::shader::ObjectData;
-using DrawPushConst = render::shader::DrawPushConst;
-using CullPushConst = render::shader::CullPushConst;
 using DeferredLightingPushConst = render::shader::DeferredLightingPushConst;
 using DrawCmd = render::shader::DrawCmd;
 using DrawData = render::shader::DrawData;
@@ -277,7 +275,9 @@ static PipelineShaders makeDrawShaders(
     std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
     std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
-    auto shader_path = (shader_dir / "viewer_draw.hlsl").string();
+    // Compiled only to reflect the material-texture descriptor-set layout
+    // (set 3) that the live batch-draw path binds; the pipeline is never built.
+    auto shader_path = (shader_dir / "batch_draw_rgb.hlsl").string();
 
     ShaderCompiler compiler;
     SPIRVShader vert_spirv = compiler.compileHLSLFileToSPV(
@@ -306,14 +306,21 @@ static PipelineShaders makeDrawShaders(
     return PipelineShaders(dev, tmp_alloc, shaders,
         Span<const BindingOverride>({
             BindingOverride {
-                2,
+                3,
                 0,
                 VK_NULL_HANDLE,
                 max_textures,
                 VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
             },
             BindingOverride {
-                2,
+                4,
+                0,
+                VK_NULL_HANDLE,
+                max_textures,
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+            },
+            BindingOverride {
+                3,
                 1,
                 repeat_sampler,
                 1,
@@ -328,232 +335,18 @@ static PipelineShaders makeCullShader(const Device &dev)
     std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
     std::filesystem::path shader_dir = std::filesystem::weakly_canonical(root_dir / "shaders");
 
+    // Compiled only to reflect the instance-cull descriptor-set layout (set 2)
+    // that the live prepare-views path binds; the pipeline is never built.
     ShaderCompiler compiler;
     SPIRVShader spirv = compiler.compileHLSLFileToSPV(
-        (shader_dir / "viewer_cull.hlsl").string().c_str(), {},
-        {}, { "instanceCull", ShaderStage::Compute });
+        (shader_dir / "prepare_views.hlsl").string().c_str(), {},
+        {}, { "main", ShaderStage::Compute });
 
     StackAlloc tmp_alloc;
     return PipelineShaders(dev, tmp_alloc,
                            Span<const SPIRVShader>(&spirv, 1), {});
 }
 
-static Pipeline<1> makeDrawPipeline(const Device &dev,
-                                    VkPipelineCache pipeline_cache,
-                                    VkRenderPass render_pass,
-                                    VkSampler repeat_sampler,
-                                    VkSampler clamp_sampler,
-                                    uint32_t num_frames,
-                                    uint32_t max_textures)
-{
-    auto shaders = makeDrawShaders(
-        dev, repeat_sampler, clamp_sampler, max_textures);
-    VkPipelineVertexInputStateCreateInfo vert_info {};
-    VkPipelineInputAssemblyStateCreateInfo input_assembly_info {};
-    VkPipelineViewportStateCreateInfo viewport_info {};
-    VkPipelineMultisampleStateCreateInfo multisample_info {};
-    VkPipelineRasterizationStateCreateInfo raster_info {};
-
-    initCommonDrawPipelineInfo(vert_info, input_assembly_info, 
-        viewport_info, multisample_info, raster_info);
-
-    // Depth/Stencil
-    VkPipelineDepthStencilStateCreateInfo depth_info {};
-    depth_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depth_info.depthTestEnable = VK_TRUE;
-    depth_info.depthWriteEnable = VK_TRUE;
-    depth_info.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
-    depth_info.depthBoundsTestEnable = VK_FALSE;
-    depth_info.stencilTestEnable = VK_FALSE;
-    depth_info.back.compareOp = VK_COMPARE_OP_ALWAYS;
-
-    // Blend
-    VkPipelineColorBlendAttachmentState blend_attach {};
-    blend_attach.blendEnable = VK_FALSE;
-    blend_attach.colorWriteMask =
-        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-
-    array<VkPipelineColorBlendAttachmentState, 3> blend_attachments {{
-        blend_attach,
-        blend_attach,
-        blend_attach
-    }};
-
-    VkPipelineColorBlendStateCreateInfo blend_info {};
-    blend_info.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    blend_info.logicOpEnable = VK_FALSE;
-    blend_info.attachmentCount =
-        static_cast<uint32_t>(blend_attachments.size());
-    blend_info.pAttachments = blend_attachments.data();
-
-    // Dynamic
-    array dyn_enable {
-        VK_DYNAMIC_STATE_VIEWPORT,
-        VK_DYNAMIC_STATE_SCISSOR,
-    };
-
-    VkPipelineDynamicStateCreateInfo dyn_info {};
-    dyn_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dyn_info.dynamicStateCount = dyn_enable.size();
-    dyn_info.pDynamicStates = dyn_enable.data();
-
-    // Push constant
-    VkPushConstantRange push_const {
-        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-        0,
-        sizeof(DrawPushConst),
-    };
-
-    // Layout configuration
-
-    array<VkDescriptorSetLayout, 3> draw_desc_layouts {{
-        shaders.getLayout(0),
-        shaders.getLayout(1),
-        shaders.getLayout(2),
-    }};
-
-    VkPipelineLayoutCreateInfo gfx_layout_info;
-    gfx_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    gfx_layout_info.pNext = nullptr;
-    gfx_layout_info.flags = 0;
-    gfx_layout_info.setLayoutCount = static_cast<uint32_t>(draw_desc_layouts.size());
-    gfx_layout_info.pSetLayouts = draw_desc_layouts.data();
-    gfx_layout_info.pushConstantRangeCount = 1;
-    gfx_layout_info.pPushConstantRanges = &push_const;
-
-    VkPipelineLayout draw_layout;
-    REQ_VK(dev.dt.createPipelineLayout(dev.hdl, &gfx_layout_info, nullptr, &draw_layout));
-    array<VkPipelineShaderStageCreateInfo, 2> gfx_stages {{
-        {
-            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            nullptr,
-            0,
-            VK_SHADER_STAGE_VERTEX_BIT,
-            shaders.getShader(0),
-            "vert",
-            nullptr,
-        },
-        {
-            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            nullptr,
-            0,
-            VK_SHADER_STAGE_FRAGMENT_BIT,
-            shaders.getShader(1),
-            "frag",
-            nullptr,
-        },
-    }};
-
-    VkGraphicsPipelineCreateInfo gfx_info;
-    gfx_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    gfx_info.pNext = nullptr;
-    gfx_info.flags = 0;
-    gfx_info.stageCount = gfx_stages.size();
-    gfx_info.pStages = gfx_stages.data();
-    gfx_info.pVertexInputState = &vert_info;
-    gfx_info.pInputAssemblyState = &input_assembly_info;
-    gfx_info.pTessellationState = nullptr;
-    gfx_info.pViewportState = &viewport_info;
-    gfx_info.pRasterizationState = &raster_info;
-    gfx_info.pMultisampleState = &multisample_info;
-    gfx_info.pDepthStencilState = &depth_info;
-    gfx_info.pColorBlendState = &blend_info;
-    gfx_info.pDynamicState = &dyn_info;
-    gfx_info.layout = draw_layout;
-    gfx_info.renderPass = render_pass;
-    gfx_info.subpass = 0;
-    gfx_info.basePipelineHandle = VK_NULL_HANDLE;
-    gfx_info.basePipelineIndex = -1;
-
-    VkPipeline draw_pipeline;
-    REQ_VK(dev.dt.createGraphicsPipelines(dev.hdl, pipeline_cache, 1,
-                                          &gfx_info, nullptr, &draw_pipeline));
-
-    FixedDescriptorPool desc_pool(dev, shaders, 0, num_frames);
-
-    return {
-        std::move(shaders),
-        draw_layout,
-        { draw_pipeline },
-        std::move(desc_pool),
-    };
-}
-
-static Pipeline<1> makeCullPipeline(const Device &dev,
-                                    VkPipelineCache pipeline_cache,
-                                    CountT num_frames)
-{
-    PipelineShaders shader = makeCullShader(dev);
-
-    // Push constant
-    VkPushConstantRange push_const {
-        VK_SHADER_STAGE_COMPUTE_BIT,
-        0,
-        sizeof(CullPushConst),
-    };
-
-    // Layout configuration
-    std::array desc_layouts {
-        shader.getLayout(0),
-        shader.getLayout(1),
-    };
-
-    VkPipelineLayoutCreateInfo cull_layout_info;
-    cull_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    cull_layout_info.pNext = nullptr;
-    cull_layout_info.flags = 0;
-    cull_layout_info.setLayoutCount =
-        static_cast<uint32_t>(desc_layouts.size());
-    cull_layout_info.pSetLayouts = desc_layouts.data();
-    cull_layout_info.pushConstantRangeCount = 1;
-    cull_layout_info.pPushConstantRanges = &push_const;
-
-    VkPipelineLayout cull_layout;
-    REQ_VK(dev.dt.createPipelineLayout(dev.hdl, &cull_layout_info, nullptr,
-                                       &cull_layout));
-
-    std::array<VkComputePipelineCreateInfo, 1> compute_infos;
-#if 0
-    VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT subgroup_size;
-    subgroup_size.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO_EXT;
-    subgroup_size.pNext = nullptr;
-    subgroup_size.requiredSubgroupSize = 32;
-#endif
-
-    compute_infos[0].sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-    compute_infos[0].pNext = nullptr;
-    compute_infos[0].flags = 0;
-    compute_infos[0].stage = {
-        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        nullptr, //&subgroup_size,
-        VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT_EXT,
-        VK_SHADER_STAGE_COMPUTE_BIT,
-        shader.getShader(0),
-        "instanceCull",
-        nullptr,
-    };
-    compute_infos[0].layout = cull_layout;
-    compute_infos[0].basePipelineHandle = VK_NULL_HANDLE;
-    compute_infos[0].basePipelineIndex = -1;
-
-    std::array<VkPipeline, compute_infos.size()> pipelines;
-    REQ_VK(dev.dt.createComputePipelines(dev.hdl, pipeline_cache,
-                                         compute_infos.size(),
-                                         compute_infos.data(), nullptr,
-                                         pipelines.data()));
-
-    FixedDescriptorPool desc_pool(dev, shader, 0, num_frames);
-
-    return Pipeline<1> {
-        std::move(shader),
-        cull_layout,
-        pipelines,
-        std::move(desc_pool),
-    };
-}
 
 
 
@@ -1277,15 +1070,11 @@ RenderContext::RenderContext(
         InternalConfig::gbufferFormat, InternalConfig::depthFormat)),
     shadowPass(makeShadowRenderPass(
         dev, InternalConfig::varianceFormat, InternalConfig::depthFormat)),
-    instanceCull(makeCullPipeline(dev, pipelineCache, InternalConfig::numFrames)),
-    objectDraw(makeDrawPipeline(
-        dev, pipelineCache, renderPass, repeatSampler, clampSampler,
-        InternalConfig::numFrames, max_textures_)),
-    asset_desc_pool_cull_(dev, instanceCull.shaders, 1, 1),
-    asset_desc_pool_draw_(dev, objectDraw.shaders, 1, 1),
-    asset_desc_pool_mat_tx_(dev, objectDraw.shaders, 2, 1),
+    instanceCull(makeCullShader(dev)),
+    objectDraw(makeDrawShaders(dev, repeatSampler, clampSampler, max_textures_)),
+    asset_desc_pool_cull_(dev, instanceCull, 2, 1),
+    asset_desc_pool_mat_tx_(dev, objectDraw, 3, 1),
     asset_set_cull_(asset_desc_pool_cull_.makeSet()),
-    asset_set_draw_(asset_desc_pool_draw_.makeSet()),
     asset_set_mat_tex_(asset_desc_pool_mat_tx_.makeSet()),
     load_cmd_pool_(makeCmdPool(dev, dev.gfxQF)),
     load_cmd_(makeCmdBuffer(dev, load_cmd_pool_)),
@@ -1549,11 +1338,6 @@ RenderContext::~RenderContext()
 
     dev.dt.destroyDescriptorPool(dev.hdl, asset_pool_, nullptr);
 
-    dev.dt.destroyPipeline(dev.hdl, objectDraw.hdls[0], nullptr);
-    dev.dt.destroyPipelineLayout(dev.hdl, objectDraw.layout, nullptr);
-
-    dev.dt.destroyPipeline(dev.hdl, instanceCull.hdls[0], nullptr);
-    dev.dt.destroyPipelineLayout(dev.hdl, instanceCull.layout, nullptr);
 
     dev.dt.destroyRenderPass(dev.hdl, renderPass, nullptr);
     dev.dt.destroyRenderPass(dev.hdl, shadowPass, nullptr);
@@ -2142,14 +1926,12 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
     vert_info.buffer = asset_buffer.buffer;
     vert_info.offset = buffer_offsets[1];
     vert_info.range = buffer_sizes[2];
-    DescHelper::storage(desc_updates.emplace_back(), asset_set_draw_, &vert_info, 0);
     DescHelper::storage(desc_updates.emplace_back(), asset_batch_lighting_set_, &vert_info, 0);
 
     VkDescriptorBufferInfo mat_info;
     mat_info.buffer = asset_buffer.buffer;
     mat_info.offset = buffer_offsets[3];
     mat_info.range = buffer_sizes[4];
-    DescHelper::storage(desc_updates.emplace_back(), asset_set_draw_, &mat_info, 1);
     DescHelper::storage(desc_updates.emplace_back(), asset_batch_lighting_set_, &mat_info, 2);
 
     VkDescriptorBufferInfo index_set_info;

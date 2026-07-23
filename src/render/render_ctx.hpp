@@ -39,15 +39,16 @@ struct RenderContext {
     VkRenderPass renderPass;
     VkRenderPass shadowPass;
 
-    Pipeline<1> instanceCull;
-    Pipeline<1> objectDraw;
+    // Compiled batch-path shaders kept only to source the descriptor-set
+    // layouts below (instanceCull <- prepare_views set 2, objectDraw <-
+    // batch_draw_rgb set 3); no pipelines are built from them.
+    render::vk::PipelineShaders instanceCull;
+    render::vk::PipelineShaders objectDraw;
 
     render::vk::FixedDescriptorPool asset_desc_pool_cull_;
-    render::vk::FixedDescriptorPool asset_desc_pool_draw_;
     render::vk::FixedDescriptorPool asset_desc_pool_mat_tx_;
 
     VkDescriptorSet asset_set_cull_;
-    VkDescriptorSet asset_set_draw_;
     VkDescriptorSet asset_set_mat_tex_;
 
     VkCommandPool load_cmd_pool_;

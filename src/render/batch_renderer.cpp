@@ -1565,7 +1565,6 @@ struct BatchRenderer::Impl {
     HeapArray<BatchFrame> batchFrames;
 
     VkDescriptorSet assetSetPrepare;
-    VkDescriptorSet assetSetDraw;
     VkDescriptorSet assetSetTextureMat;
     VkDescriptorSet assetSetLighting;
 
@@ -1620,7 +1619,6 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
             consts::numDrawCmdBuffers * cfg.numFrames, 3)),
     batchFrames(cfg.numFrames),
     assetSetPrepare(rctx.asset_set_cull_),
-    assetSetDraw(rctx.asset_set_draw_),
     assetSetTextureMat(rctx.asset_set_mat_tex_),
     assetSetLighting(rctx.asset_batch_lighting_set_),
     renderExtent { cfg.renderWidth, cfg.renderHeight },
