@@ -140,5 +140,17 @@ if (SKBUILD)
     endforeach()
     install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../data DESTINATION gs_madrona)
 
+    # Bundle the toolkit's CCCL/CUB/Thrust headers; nvrtc compiles the device
+    # code against these at first render. Report the CUB version so any skew
+    # from the device code's required API (see mw/device/sort_archetype.cpp) is
+    # visible in the build log.
+    foreach(_cuda_inc ${CUDAToolkit_INCLUDE_DIRS})
+        if (EXISTS "${_cuda_inc}/cub/version.cuh")
+            file(STRINGS "${_cuda_inc}/cub/version.cuh" _cub_version_line
+                REGEX "^#define CUB_VERSION ")
+            message(STATUS "Bundling CUDA ${CUDAToolkit_VERSION} headers (${_cub_version_line})")
+        endif()
+    endforeach()
+
     install(DIRECTORY ${CUDAToolkit_INCLUDE_DIRS} DESTINATION gs_madrona/cuda)
 endif()
