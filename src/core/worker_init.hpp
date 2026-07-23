@@ -14,12 +14,6 @@
 namespace madrona {
 
 struct WorkerInit {
-#ifdef MADRONA_USE_JOB_SYSTEM
-    JobManager *jobMgr;
-    StateManager *stateMgr;
-    StateCache *stateCache;
-    int workerIdx;
-#endif
 #ifdef MADRONA_USE_TASK_GRAPH
     StateManager *stateMgr;
     StateCache *stateCache;

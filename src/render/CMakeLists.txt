@@ -22,7 +22,6 @@ add_library(madrona_render_core STATIC
     render_ctx.hpp render_ctx.cpp
     batch_renderer.hpp batch_renderer.cpp
     render_common.hpp
-    image_util.cpp
 )
 
 target_compile_definitions(madrona_render_core PUBLIC

@@ -56,11 +56,11 @@ FPS comparison of rendering [Franka](https://github.com/Genesis-Embodied-AI/Gene
 Resolution: 128x128
 
 <p align="center">
-  <img src="./scripts/perf_benchmark/example_report/panda_madrona rasterizer_ madrona raytracer_128x128_comparison_table.png" width="600" alt="FPS of gs-madrona rasterizer vs raytracer" align="center"/>
+  <img src="./docs/perf_franka_128x128_table.png" width="600" alt="FPS of gs-madrona rasterizer vs raytracer" align="center"/>
 </p>
 
 <p align="center">
-  <img src="./scripts/perf_benchmark/example_report/panda_madrona rasterizer_ madrona raytracer_128x128_comparison_plot.png" width="600" alt="FPS of gs-madrona rasterizer vs raytracer" align="center"/>
+  <img src="./docs/perf_franka_128x128_plot.png" width="600" alt="FPS of gs-madrona rasterizer vs raytracer" align="center"/>
 </p>
 
 ## Install (Linux Only)
@@ -102,22 +102,6 @@ All the generated images will be stored in the current directory under `./image_
 renderer = gs.options.renderers.BatchRenderer(
     use_rasterizer=True,
 )
-```
-
-### Performance Benchmark
-For comprehensive performance benchmarking across multiple renderers (Madrona, Omniverse, PyRender, ManiSkill), please refer to the detailed documentation in `scripts/perf_benchmark/README.md`.
-
-The benchmark suite includes:
-- Multi-renderer performance testing
-- Batch size and resolution scaling tests
-- Rasterizer vs raytracer comparisons
-- Automated report generation
-- Asset preprocessing utilities
-
-Quick start:
-```bash
-cd scripts/perf_benchmark
-python batch_benchmark.py -f benchmark_config_smoke_test.yml
 ```
 
 ## Acknowledgments
