@@ -80,7 +80,12 @@ CudaImportedBuffer::~CudaImportedBuffer()
 
     cudaFree(dev_ptr_);
     cudaDestroyExternalMemory(ext_mem_);
-    close(ext_fd_);
+    // Do NOT close(ext_fd_): cudaImportExternalMemory() with an OpaqueFd handle
+    // transfers ownership of the fd to the CUDA driver (per the CUDA docs, any
+    // operation on it afterwards is undefined behavior). Closing it here is a
+    // double-close -- the driver closes the same fd during teardown, and once its
+    // number has been recycled by an unrelated open() this corrupts that file,
+    // surfacing as spurious "Bad file descriptor" errors elsewhere in the process.
 }
 
 }
