@@ -255,19 +255,5 @@ struct RenderOptions {
     uint32_t enableAntialiasing;
 };
 
-#if 0
-struct PackedDrawInstanceData {
-    float4 packed[5];
-};
-
-struct DrawInstanceData {
-    float3x3 toViewRot;
-    float3 toViewTranslation;
-    float3 objScale;
-    int32_t viewIdx;
-    float2 projScale;
-    float projZNear;
-};
-#endif
 
 #endif

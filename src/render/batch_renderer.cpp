@@ -2056,20 +2056,6 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
                              1, &offsets_data_copy);
     }
 
-#if 0
-    { // Import the aabbs for instances
-        VkDeviceSize num_aabbs_bytes = info.numInstances * sizeof(shader::AABB);
-        VkBufferCopy aabb_data_copy = {
-            .srcOffset = 0,
-            .dstOffset = 0,
-            .size = num_aabbs_bytes
-        };
-
-        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->aabbHdl,
-                             batch_buffers.aabbs.buffer,
-                             1, &aabb_data_copy);
-    }
-#endif
 
     { // Import the offsets for views
         VkDeviceSize num_offsets_bytes = info.numWorlds * sizeof(int32_t);
@@ -2490,27 +2476,6 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
 BatchImportedBuffers &BatchRenderer::getImportedBuffers(uint32_t frame_id) 
 {
     return impl->batchFrames[frame_id].buffers;
-}
-
-const vk::LocalBuffer &BatchRenderer::getComponentBuffer(uint32_t frame_id, uint32_t component) const
-{
-    return impl->batchFrames[frame_id].getComponentOutputBuffer(component);
-}
-
-// Get the semaphore that the viewer renderer has to wait on
-VkSemaphore BatchRenderer::getLatestWaitSemaphore()
-{
-    uint32_t last_frame = (impl->currentFrame + impl->batchFrames.size() - 1) % impl->batchFrames.size();
-    assert(impl->batchFrames[last_frame].latestOp != LatestOperation::None);
-    if (impl->batchFrames[last_frame].latestOp == LatestOperation::RenderPrepare) {
-        return impl->batchFrames[last_frame].prepareFinished;
-    } else if (impl->batchFrames[last_frame].latestOp == LatestOperation::RenderViews) {
-        return impl->batchFrames[last_frame].renderFinished;
-    } else if (impl->batchFrames[last_frame].latestOp == LatestOperation::Transition) {
-        return impl->batchFrames[last_frame].layoutTransitionFinished;
-    }
-
-    return VK_NULL_HANDLE;
 }
 
 const void *BatchRenderer::getComponentCUDAPtr(uint32_t frame_id, uint32_t component) const

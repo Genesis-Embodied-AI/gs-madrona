@@ -209,16 +209,6 @@ constexpr float bitsToFloat01(uint32_t rand_bits)
     // implementations that generate in the range (0, 1]
     return (rand_bits >> 8_u32) * 0x1p-24f;
 
-#if 0
-    constexpr uint32_t exponent = 0x3f800000;
-    uint32_t raw = (exponent | (rand_bits >> 9)) - 1;
-
-#ifdef MADRONA_GPU_MODE
-    return __uint_as_float(raw);
-#else
-    return std::bit_cast<float>(raw);
-#endif
-#endif
 }
 
 }

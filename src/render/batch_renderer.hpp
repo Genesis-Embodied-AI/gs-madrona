@@ -183,7 +183,6 @@ struct BatchRenderer {
 
     BatchRenderer(const Config& cfg, RenderContext &rctx);
     ~BatchRenderer();
-    void importCudaData(VkCommandBuffer);
 
     void setRenderOptions(const render::RenderOptions &render_options);
     void prepareForRendering(BatchRenderInfo info, EngineInterop *interop);
@@ -194,11 +193,6 @@ struct BatchRenderer {
 
     BatchImportedBuffers &getImportedBuffers(uint32_t frame_id);
 
-    const vk::LocalBuffer &getComponentBuffer(uint32_t frame_id, uint32_t component) const;
-    // Get the semaphore that the viewer renderer has to wait on.
-    // This is either going to be the semaphore from prepareForRendering,
-    // or it's the one from renderViews.
-    VkSemaphore getLatestWaitSemaphore();
     const void *getComponentCUDAPtr(uint32_t frame_id, uint32_t component) const;
 };
 

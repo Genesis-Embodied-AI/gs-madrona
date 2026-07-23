@@ -62,13 +62,6 @@ static constexpr VkImageUsageFlags depthAttachmentUsage =
     VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
     VK_IMAGE_USAGE_SAMPLED_BIT;
 
-#if 0
-static constexpr VkImageUsageFlags rtStorageUsage =
-    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-
-static constexpr VkFormatFeatureFlags rtStorageReqs =
-    VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
-#endif
 };
 
 template <bool host_mapped>

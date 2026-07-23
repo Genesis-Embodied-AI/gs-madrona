@@ -888,30 +888,6 @@ struct SortArchetypeNodeBase::RadixSortOnesweepCustom {
     }
 };
 
-#if 0 && __CUDA_ARCH__ < 800
-static uint32_t __reduce_add_sync(uint32_t mask, uint32_t val)
-{
-    uint32_t lane_id = threadIdx.x % 32;
-#pragma unroll
-    for (int i = 16; i > 0; i /= 2) {
-        uint32_t read_lane = lane_id ^ i;
-
-        bool other_active = mask & (1 << read_lane);
-
-        if (!other_active) {
-            read_lane = lane_id;
-        }
-
-        uint32_t other = __shfl_sync(mask, val, read_lane);
-
-        if (other_active) {
-            val += other;
-        }
-    }
-
-    return val;
-}
-#endif
 
 SortArchetypeNodeBase::OnesweepNode::OnesweepNode(uint32_t taskgraph_id,
                                                   ParentNodeT parent,

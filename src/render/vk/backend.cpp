@@ -842,26 +842,10 @@ Device * Backend::makeDevice(
     rq_features.pNext = &accel_features;
     rq_features.rayQuery = true;
 
-#if 0
-    VkPhysicalDeviceRobustness2FeaturesEXT robustness_features {};
-    robustness_features.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
-    robustness_features.pNext = &rq_features;
-    robustness_features.nullDescriptor = true;
-
-    VkPhysicalDeviceLineRasterizationFeaturesEXT line_features {};
-    line_features.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT;
-    line_features.pNext = &robustness_features;
-    line_features.smoothLines = true;
-#endif
 
     VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomic_float_features {};
     atomic_float_features.sType =
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
-#if 0
-    atomic_float_features.pNext = &line_features;
-#endif
     if (supports_rt) {
         atomic_float_features.pNext = &rq_features;
     } else {
@@ -883,15 +867,6 @@ Device * Backend::makeDevice(
     dyn_render_features.pNext = &subgroup_features;
     dyn_render_features.dynamicRendering = true;
 
-#if 0
-    VkPhysicalDeviceVulkan13Features vk13_features {};
-    vk13_features.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-    vk13_features.pNext = &atomic_float_features;
-    vk13_features.synchronization2 = true;
-    vk13_features.computeFullSubgroups = true;
-    vk13_features.subgroupSizeControl = true;
-#endif
 
     VkPhysicalDeviceVulkan12Features vk12_features {};
     vk12_features.sType =

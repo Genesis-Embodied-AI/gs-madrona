@@ -60,10 +60,6 @@ static bool loadCache(const char *location,
         DynArray<QBVHNode> nodes{num_nodes};
         fread(nodes.data(), sizeof(QBVHNode), num_nodes, ptr);
 
-#if 0
-        DynArray<MeshBVH::LeafGeometry> leaf_geos{num_leaves};
-        fread(leaf_geos.data(), sizeof(MeshBVH::LeafGeometry), num_leaves, ptr);
-#endif
 
         DynArray<MeshBVH::BVHVertex> vertices{num_verts};
         fread(vertices.data(), sizeof(MeshBVH::BVHVertex), num_verts, ptr);
