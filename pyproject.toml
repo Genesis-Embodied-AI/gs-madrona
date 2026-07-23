@@ -104,9 +104,14 @@ repair-wheel-command = [
 before-all = [
   'dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/$(uname -m)/cuda-rhel8.repo',
   'dnf clean all',
-  'dnf install -y --setopt=install_weak_deps=False cuda-nvrtc-devel-12-8 cuda-cudart-devel-12-8 cuda-libraries-devel-12-8',
+  'dnf install -y --setopt=install_weak_deps=False cuda-nvrtc-devel-12-8 cuda-cudart-devel-12-8 cuda-libraries-devel-12-8 cuda-cccl-12-8',
   'dnf download cuda-nvcc-12-8',
   'rpm -ivh --nodeps cuda-nvcc-12-8-*.rpm',
+  # Pin /usr/local/cuda to the 12.8 toolkit just installed so the build resolves
+  # a single, consistent CUDA version -- compile flags and the CCCL/CUB headers
+  # bundled into the wheel -- instead of whatever a pre-existing /usr/local/cuda
+  # symlink happens to point at.
+  'ln -sfn /usr/local/cuda-12.8 /usr/local/cuda',
 ]
 repair-wheel-command = [
   # Do not vendor the CUDA JIT libs; they are provided by the nvidia-*-cu12

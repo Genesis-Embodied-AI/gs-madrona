@@ -157,31 +157,10 @@ struct BlockRadixRankMatchEarlyCountsCustom
                 atomicAdd(&warp_histograms[Digit(keys[u])][part], 1);
             }
             
-            // sum different parts;
-            // no extra work is necessary if NUM_PARTS == 1
-            if (NUM_PARTS > 1)
-            {
-                __syncwarp(WARP_MASK);
-                // TODO: handle RADIX_DIGITS % WARP_THREADS != 0 if it becomes necessary
-                const int WARP_BINS_PER_THREAD = RADIX_DIGITS / WARP_THREADS;
-                int bins[WARP_BINS_PER_THREAD];
-                #pragma unroll
-                for (int u = 0; u < WARP_BINS_PER_THREAD; ++u)
-                {
-                    int bin = lane + u * WARP_THREADS;
-                    bins[u] = ThreadReduce(warp_histograms[bin], ::cuda::std::plus<>{});
-                }
-                __syncthreads();
-
-                // store the resulting histogram in shared memory
-                int* warp_offsets = &s.warp_offsets[warp][0];
-                #pragma unroll
-                for (int u = 0; u < WARP_BINS_PER_THREAD; ++u)
-                {
-                    int bin = lane + u * WARP_THREADS;
-                    warp_offsets[bin] = bins[u];
-                }
-            }
+            // Summing across parts would go here, but every instantiation uses
+            // NUM_PARTS == 1, so there is nothing to do. (This is also why the
+            // device sort needs no cub::ThreadReduce, whose namespace shifted
+            // across CUB versions.)
         }
 
         __device__ __forceinline__
