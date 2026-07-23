@@ -363,34 +363,6 @@ inline void exportCountsGPU(Context &ctx,
         bvh_internals->numViews = num_views;
     }
 
-#if 0
-    uint32_t *morton_codes = state_mgr->getArchetypeComponent<
-        RenderableArchetype, MortonCode>();
-    
-    WorldID *world_ids = state_mgr->getArchetypeComponent<
-        RenderableArchetype, WorldID>();
-
-    uint32_t current_world = 0;
-    uint32_t current_world_offset = 0;
-
-    for (int i = 0; 
-         i < state_mgr->getArchetypeNumRows<RenderableArchetype>();
-         ++i) {
-        if (world_ids[i].idx != current_world) {
-            current_world = world_ids[i].idx;
-            current_world_offset = i;
-        }
-
-        uint32_t code = morton_codes[i];
-        printf(USHORT_TO_BINARY_PATTERN " ", USHORT_TO_BINARY((code>>16)));
-        printf(USHORT_TO_BINARY_PATTERN " \t", USHORT_TO_BINARY((code)));
-
-        printf("(Leaf node %d)\t %d: (%d)\n", 
-                i - current_world_offset, 
-                world_ids[i].idx, 
-                morton_codes[i]);
-    }
-#endif
 }
 #endif
 
@@ -501,11 +473,6 @@ void registerTypes(ECSRegistry &registry,
         state_mgr->setArchetypeComponent<RenderableArchetype, TLBVHNode>(bridge->aabbs);
     }
 
-#if 0
-    auto *state_mgr = mwGPU::getStateManager();
-    auto instance_ptr = (void *)state_mgr->getArchetypeComponent<RenderableArchetype, InstanceData>();
-    printf("From rendering system init, instance_ptr=%p\n", instance_ptr);
-#endif
 #else
     (void)bridge;
 #endif
@@ -597,11 +564,6 @@ TaskGraphNodeID setupTasks(TaskGraphBuilder &builder,
         builder.addToGraph<CompactArchetypeNode<RenderableArchetype>>(
             {post_instance_sort_reset_tmp});
 
-#if 0
-    auto sort_views = 
-        builder.addToGraph<SortArchetypeNode<RenderCameraArchetype, WorldID>>(
-            {post_instance_sort_reset_tmp});
-#endif
 
     auto sort_views_world = builder.addToGraph<
         CompactArchetypeNode<RenderCameraArchetype>>(
@@ -656,12 +618,6 @@ void init(Context &ctx, const RenderECSBridge *bridge)
         system_state.aspectRatio = (float)bridge->renderWidth / (float)bridge->renderHeight;
     }
 
-#if 0
-    bool raycast_enabled = 
-        mwGPU::GPUImplConsts::get().raycastOutputResolution != 0;
-
-    system_state.enableRaycaster = raycast_enabled;
-#endif
 }
 
 void makeEntityRenderable(Context &ctx, Entity e)
@@ -763,20 +719,7 @@ void makeEntityLightCarrier(Context &ctx, Entity e)
     };
 }
 
-#if 0
-void configureLight(Context &ctx, Entity light, LightDesc desc)
-{
-    ctx.get<LightDesc>(light) = desc;
-}
-#endif
 
 // Add this later when we decide to make the renderer more flexible
-#if 0
-void setEntityOutputIndex(Context &ctx, Entity e, uint32_t index)
-{
-    auto cam_entity = ctx.get<RenderCamera>(e).cameraEntity;
-    ctx.get<RenderOutputIndex>(cam_entity).index = index;
-}
-#endif
 
 }

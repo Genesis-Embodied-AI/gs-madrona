@@ -79,10 +79,6 @@ static void setupRenderTasks(TaskGraphBuilder &builder,
                              Span<const TaskGraphNodeID> deps,
                              bool update_mats = false)
 {
-#if 0
-    builder.addToGraph<ParallelForNode<
-        Engine, printTransforms, Position, Rotation, Scale, ObjectID>>(deps);
-#endif
     RenderingSystem::setupTasks(builder, deps, update_mats);
 }
 

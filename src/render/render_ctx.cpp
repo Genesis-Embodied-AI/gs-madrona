@@ -288,14 +288,6 @@ static PipelineShaders makeDrawShaders(
         shader_path.c_str(), {}, {}, { "frag", ShaderStage::Fragment }
     );
 
-#if 0
-            {0, 2, repeat_sampler, 1, 0},
-            {0, 3, clamp_sampler, 1, 0},
-            {1, 1, VK_NULL_HANDLE,
-                VulkanConfig::max_materials *
-                    VulkanConfig::textures_per_material,
-             VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT},
-#endif
 
     std::array<SPIRVShader, 2> shaders {
         std::move(vert_spirv),

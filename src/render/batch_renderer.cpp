@@ -2056,20 +2056,6 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
                              1, &offsets_data_copy);
     }
 
-#if 0
-    { // Import the aabbs for instances
-        VkDeviceSize num_aabbs_bytes = info.numInstances * sizeof(shader::AABB);
-        VkBufferCopy aabb_data_copy = {
-            .srcOffset = 0,
-            .dstOffset = 0,
-            .size = num_aabbs_bytes
-        };
-
-        impl->dev.dt.cmdCopyBuffer(draw_cmd, interop->aabbHdl,
-                             batch_buffers.aabbs.buffer,
-                             1, &aabb_data_copy);
-    }
-#endif
 
     { // Import the offsets for views
         VkDeviceSize num_offsets_bytes = info.numWorlds * sizeof(int32_t);

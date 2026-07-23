@@ -646,13 +646,6 @@ static GPUCompileResults compileCode(
         }
     };
 
-#if 0
-    // Don't need the device runtime without dynamic parallelism
-
-    checkLinker(cuLinkAddFile(linker, CU_JIT_INPUT_LIBRARY,
-                              MADRONA_CUDADEVRT_PATH,
-                              0, nullptr, nullptr));
-#endif
 
     nvJitLinkInputType linker_input_type;
     if (opt_mode == CompileConfig::OptMode::LTO) {

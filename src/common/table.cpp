@@ -28,13 +28,6 @@ Table::Table(const TypeInfo *component_types, CountT num_components,
     for (int i = 0; i < (int)num_components; i++) {
         const TypeInfo &type = component_types[i];
 
-#if 0
-        // 3rd argument is offsetting the start from the page aligned boundary
-        // to avoid everything mapping to the same cache sets. Should revisit -
-        // maybe add a random offset for each Table as well?
-        columns_.emplace_back(type.numBytes, type.alignment,
-            MADRONA_CACHE_LINE * (i + 1), ICfg::maxRowsPerTable);
-#endif
 
         size_t column_bytes_per_row = (size_t)type.numBytes;
         columns_[i] = malloc(
