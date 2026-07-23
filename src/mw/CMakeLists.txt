@@ -1,12 +1,3 @@
-add_library(madrona_mw_cpu STATIC
-    ${MADRONA_INC_DIR}/mw_cpu.hpp ${MADRONA_INC_DIR}/mw_cpu.inl cpu_exec.cpp
-)
-
-target_link_libraries(madrona_mw_cpu
-    PUBLIC
-        madrona_mw_core
-)
-
 if (NOT CUDAToolkit_FOUND OR CUDAToolkit_VERSION_MAJOR LESS 12 OR
     (CUDAToolkit_VERSION_MAJOR EQUAL 12 AND CUDAToolkit_VERSION_MINOR LESS 8))
     return()

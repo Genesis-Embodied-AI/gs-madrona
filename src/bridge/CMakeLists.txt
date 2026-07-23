@@ -33,7 +33,6 @@ target_link_libraries(madgs_mgr
     PRIVATE
         madrona_python_utils
         madgs_cpu_impl
-        madrona_mw_cpu
         madrona_common
         madrona_importer
         madrona_render

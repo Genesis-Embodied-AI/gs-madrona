@@ -5,7 +5,6 @@
 #include <madrona/utils.hpp>
 #include <madrona/importer.hpp>
 #include <madrona/tracing.hpp>
-#include <madrona/mw_cpu.hpp>
 #include <madrona/render/api.hpp>
 
 #include <array>
