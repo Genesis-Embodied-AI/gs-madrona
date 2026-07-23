@@ -1088,8 +1088,7 @@ RenderContext::RenderContext(
     loaded_assets_(0),
     sky_(loadSky(dev, alloc, renderQueue)),
     material_textures_(0),
-    num_worlds_(cfg.numWorlds),
-    gpu_input_(cfg.execMode == ExecMode::CUDA)
+    num_worlds_(cfg.numWorlds)
 {
     {
         VkDescriptorPoolSize pool_sizes[] = {
