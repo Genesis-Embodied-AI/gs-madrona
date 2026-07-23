@@ -82,12 +82,10 @@ set(TASK_GRAPH_DEVICE_SOURCES
     ${MADRONA_SRC_DIR}/common/hashmap.cpp
     ${MADRONA_SRC_DIR}/common/navmesh.cpp
     ${MADRONA_SRC_DIR}/core/base.cpp
-    ${MADRONA_SRC_DIR}/physics/physics.cpp
+    # Genesis drives physics itself and feeds transforms to the renderer, so the
+    # madrona rigid-body simulation is not part of the render task graph. Only
+    # geo.cpp is kept (shared geometry helpers used by the mesh BVH).
     ${MADRONA_SRC_DIR}/physics/geo.cpp
-    ${MADRONA_SRC_DIR}/physics/xpbd.cpp
-    ${MADRONA_SRC_DIR}/physics/tgs.cpp
-    ${MADRONA_SRC_DIR}/physics/narrowphase.cpp
-    ${MADRONA_SRC_DIR}/physics/broadphase.cpp
     ${MADRONA_SRC_DIR}/render/ecs_system.cpp
 )
 
