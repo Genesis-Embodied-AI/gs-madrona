@@ -823,50 +823,6 @@ void Manager::render(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
     impl_->render(geom_pos, geom_rot, cam_pos, cam_rot, render_options);
 }
 
-Tensor Manager::instancePositionsTensor() const
-{
-    return impl_->exportTensor(ExportID::InstancePositions,
-                               TensorElementType::Float32,
-                               {
-                                   impl_->cfg.numWorlds,
-                                   impl_->numGeoms,
-                                   sizeof(Vector3) / sizeof(float),
-                               });
-}
-
-Tensor Manager::instanceRotationsTensor() const
-{
-    return impl_->exportTensor(ExportID::InstanceRotations,
-                               TensorElementType::Float32,
-                               {
-                                   impl_->cfg.numWorlds,
-                                   impl_->numGeoms,
-                                   sizeof(Quat) / sizeof(float),
-                               });
-}
-
-Tensor Manager::cameraPositionsTensor() const
-{
-    return impl_->exportTensor(ExportID::CameraPositions,
-                               TensorElementType::Float32,
-                               {
-                                   impl_->cfg.numWorlds,
-                                   impl_->numCams,
-                                   sizeof(Vector3) / sizeof(float),
-                               });
-}
-
-Tensor Manager::cameraRotationsTensor() const
-{
-    return impl_->exportTensor(ExportID::CameraRotations,
-                               TensorElementType::Float32,
-                               {
-                                   impl_->cfg.numWorlds,
-                                   impl_->numCams,
-                                   sizeof(Quat) / sizeof(float),
-                               });
-}
-
 Tensor Manager::rgbTensor() const
 {
     const uint8_t *rgb_ptr = impl_->getRGBOut();

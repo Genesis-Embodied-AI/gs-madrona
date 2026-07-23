@@ -205,10 +205,6 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                 reinterpret_cast<const uint32_t *>(render_options.data())
             );
         })
-        .def("instance_positions_tensor", &Manager::instancePositionsTensor)
-        .def("instance_rotations_tensor", &Manager::instanceRotationsTensor)
-        .def("camera_positions_tensor", &Manager::cameraPositionsTensor)
-        .def("camera_rotations_tensor", &Manager::cameraRotationsTensor)
         .def("rgb_tensor", &Manager::rgbTensor)
         .def("depth_tensor", &Manager::depthTensor)
         .def("normal_tensor", &Manager::normalTensor)

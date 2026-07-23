@@ -116,11 +116,6 @@ public:
     // These functions export Tensor objects that link the ECS
     // simulation state to the python bindings / PyTorch tensors (src/bindings.cpp)
     //
-    MGR_EXPORT madrona::py::Tensor instancePositionsTensor() const;
-    MGR_EXPORT madrona::py::Tensor instanceRotationsTensor() const;
-    MGR_EXPORT madrona::py::Tensor cameraPositionsTensor() const;
-    MGR_EXPORT madrona::py::Tensor cameraRotationsTensor() const;
-
     MGR_EXPORT madrona::py::Tensor rgbTensor() const;
     MGR_EXPORT madrona::py::Tensor depthTensor() const;
     MGR_EXPORT madrona::py::Tensor normalTensor() const;
