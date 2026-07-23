@@ -80,7 +80,6 @@ set(TASK_GRAPH_DEVICE_SOURCES
     ${DEVICE_SRC_DIR}/ecs_render_bridge.cpp
     # FIXME
     ${MADRONA_SRC_DIR}/common/hashmap.cpp
-    ${MADRONA_SRC_DIR}/common/navmesh.cpp
     ${MADRONA_SRC_DIR}/core/base.cpp
     # Genesis drives physics itself and feeds transforms to the renderer, so the
     # madrona rigid-body simulation is not part of the render task graph. Only
