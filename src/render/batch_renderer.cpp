@@ -1978,11 +1978,6 @@ void BatchRenderer::prepareForRendering(BatchRenderInfo info,
             interop->aabbCPU->flush(impl->dev);
         }
 
-        if (interop->voxelInputCPU.has_value()) {
-            // Need to flush engine input state before copy
-            interop->voxelInputCPU->flush(impl->dev);
-        }
-
         if (interop->lightsCPU.has_value()) {
             *interop->bridge.totalNumLights = interop->bridge.totalNumLightsCPUInc->load_acquire();
 

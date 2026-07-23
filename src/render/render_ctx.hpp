@@ -64,7 +64,6 @@ struct RenderContext {
     Sky sky_;
 
     DynArray<MaterialTexture> material_textures_;
-    VoxelConfig voxel_config_;
 
     uint32_t num_worlds_;
     std::unique_ptr<BatchRenderer> batchRenderer;

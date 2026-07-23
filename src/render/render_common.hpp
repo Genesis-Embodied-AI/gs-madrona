@@ -172,14 +172,6 @@ struct EngineInterop {
     uint32_t maxInstancesPerWorld;
     uint32_t maxLightsPerWorld;
 
-    Optional<render::vk::HostBuffer> voxelInputCPU;
-#ifdef MADRONA_VK_CUDA_SUPPORT
-    Optional<render::vk::DedicatedBuffer> voxelInputGPU;
-    Optional<render::vk::CudaImportedBuffer> voxelInputCUDA;
-#endif
-
-    VkBuffer voxelHdl;
-
     uint32_t *iotaArrayInstancesCPU;
     uint32_t *iotaArrayViewsCPU;
     uint32_t *iotaArrayLightOffsetsCPU;

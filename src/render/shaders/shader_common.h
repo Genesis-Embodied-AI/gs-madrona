@@ -131,14 +131,6 @@ struct ShadowGenPushConst {
     uint32_t worldIdx;
 };
 
-struct VoxelGenPushConst {
-    uint32_t worldX;
-    uint32_t worldY;
-    uint32_t worldZ;
-    float blockWidth;
-    uint32_t numBlocks;
-};
-
 struct Vertex {
     float3 position;
     float3 normal;

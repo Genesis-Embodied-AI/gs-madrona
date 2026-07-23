@@ -565,8 +565,7 @@ static EngineInterop setupEngineInterop(Device &dev,
                                         uint32_t max_instances_per_world,
                                         uint32_t max_lights_per_world,
                                         uint32_t render_width,
-                                        uint32_t render_height,
-                                        VoxelConfig voxel_config)
+                                        uint32_t render_height)
 {
     (void)dev;
 
@@ -753,31 +752,6 @@ static EngineInterop setupEngineInterop(Device &dev,
         }
     }
 
-    const uint32_t num_voxels = voxel_config.xLength * voxel_config.yLength * voxel_config.zLength;
-    const uint32_t staging_size = num_voxels > 0 ? num_voxels * sizeof(int32_t) : 4;
-
-    auto voxel_cpu = Optional<HostBuffer>::none();
-    VkBuffer voxel_buffer_hdl = VK_NULL_HANDLE;
-    uint32_t *voxel_buffer_ptr = nullptr;
-
-#ifdef MADRONA_VK_CUDA_SUPPORT
-    auto voxel_gpu = Optional<render::vk::DedicatedBuffer>::none();
-    auto voxel_cuda = Optional<render::vk::CudaImportedBuffer>::none();
-#endif
-
-    if (!gpu_input) {
-        voxel_cpu = alloc.makeStagingBuffer(staging_size);
-        voxel_buffer_ptr = num_voxels ? (uint32_t *)voxel_cpu->ptr : nullptr;
-        voxel_buffer_hdl = voxel_cpu->buffer;
-    } else {
-#ifdef MADRONA_VK_CUDA_SUPPORT
-        voxel_gpu = alloc.makeDedicatedBuffer(staging_size, false, true);
-        voxel_cuda.emplace(dev, voxel_gpu->mem, staging_size);
-        voxel_buffer_hdl = voxel_gpu->buf.buffer;
-        voxel_buffer_ptr = num_voxels ? (uint32_t *)voxel_cuda->getDevicePointer() : nullptr;
-#endif
-    }
-
     uint32_t *total_num_views_readback = nullptr;
     uint32_t *total_num_instances_readback = nullptr;
     uint32_t *total_num_lights_readback = nullptr;
@@ -825,7 +799,6 @@ static EngineInterop setupEngineInterop(Device &dev,
         .lightWorldIDs = (uint64_t *)world_ids_lights_base,
         .renderWidth = (int32_t)render_width,
         .renderHeight = (int32_t)render_height,
-        .voxels = voxel_buffer_ptr,
         .maxViewsPerworld = max_views_per_world,
         .maxInstancesPerWorld = max_instances_per_world,
         .maxLightsPerWorld = max_lights_per_world,
@@ -900,12 +873,6 @@ static EngineInterop setupEngineInterop(Device &dev,
         max_views_per_world,
         max_instances_per_world,
         max_lights_per_world,
-        std::move(voxel_cpu),
-#ifdef MADRONA_VK_CUDA_SUPPORT
-        std::move(voxel_gpu),
-        std::move(voxel_cuda),
-#endif
-        voxel_buffer_hdl,
         iota_array_instances,
         iota_array_views,
         iota_array_lights,
@@ -1327,12 +1294,11 @@ RenderContext::RenderContext(
         dev, alloc, cfg.execMode == ExecMode::CUDA, cfg.numWorlds,
         cfg.maxViewsPerWorld, cfg.maxInstancesPerWorld,
         cfg.maxLightsPerWorld,
-        br_width_, br_height_, cfg.voxelCfg)),
+        br_width_, br_height_)),
     lights_(InternalConfig::maxLights),
     loaded_assets_(0),
     sky_(loadSky(dev, alloc, renderQueue)),
     material_textures_(0),
-    voxel_config_(cfg.voxelCfg),
     num_worlds_(cfg.numWorlds),
     gpu_input_(cfg.execMode == ExecMode::CUDA)
 {

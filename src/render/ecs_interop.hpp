@@ -27,7 +27,6 @@ struct RenderECSBridge {
     uint64_t *lightWorldIDs;
     int32_t renderWidth;
     int32_t renderHeight;
-    uint32_t *voxels;
 
     uint32_t maxViewsPerworld;
     uint32_t maxInstancesPerWorld;

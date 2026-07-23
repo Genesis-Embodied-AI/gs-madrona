@@ -101,7 +101,6 @@ static inline Optional<render::RenderManager> initRenderManager(
         .maxLightsPerWorld = gs_model.numLights,
         .maxInstancesPerWorld = max_instances_per_world,
         .execMode = ExecMode::CUDA,
-        .voxelCfg = {},
     });
 }
 
