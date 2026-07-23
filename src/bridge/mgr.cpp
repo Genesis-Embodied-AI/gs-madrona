@@ -22,7 +22,6 @@
 
 using namespace madrona;
 using namespace madrona::math;
-using namespace madrona::phys;
 using namespace madrona::py;
 using namespace madrona::imp;
 
