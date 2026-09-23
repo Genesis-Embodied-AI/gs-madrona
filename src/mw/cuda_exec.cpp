@@ -1808,13 +1808,25 @@ static GPUEngineState initEngineAndUserState(
     REQ_CU(CudaDynamicLoader::cuMemcpyHtoD(job_sys_consts_addr, gpu_consts_readback,
                         job_sys_consts_size));
 
+    // Each init kernel allocates through the host allocator thread: the device
+    // spins on the channel until that thread has served the request with
+    // cuMemCreate / cuMemMap. A kernel launch issued while such a kernel is in
+    // flight can itself block in the driver until the device is idle (the
+    // driver has to grow the per-thread local memory when the new kernel needs
+    // more than the running one, or to finish loading the kernel), and it holds
+    // the context lock while it waits, which stalls the allocator thread's own
+    // driver calls: the device waits for the host, the host waits for the
+    // device. Draining the stream after every init launch keeps the launches
+    // out of that window.
     launchKernel(gpu_kernels.initECS, 1, 1, init_ecs_args);
-    uint32_t num_init_blocks = utils::divideRoundUp(num_worlds, consts::numMegakernelThreads);
+    REQ_CUDA(cudaStreamSynchronize(strm));
 
+    uint32_t num_init_blocks = utils::divideRoundUp(num_worlds, consts::numMegakernelThreads);
     launchKernel(gpu_kernels.initWorlds, num_init_blocks,
                  consts::numMegakernelThreads, init_worlds_args);
-    launchKernel(gpu_kernels.initTasks, 1, 1, init_tasks_args);
+    REQ_CUDA(cudaStreamSynchronize(strm));
 
+    launchKernel(gpu_kernels.initTasks, 1, 1, init_tasks_args);
     REQ_CUDA(cudaStreamSynchronize(strm));
 
     cu::deallocGPU(user_cfg_gpu_buffer);
