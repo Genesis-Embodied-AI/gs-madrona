@@ -65,7 +65,7 @@ target_link_libraries(madrona_err
     PUBLIC
         madrona_hdrs
     PRIVATE
-        madrona_noexceptrtti
+        madrona_nortti
 )
 
 if (MADRONA_WINDOWS)
@@ -79,7 +79,7 @@ add_library(madrona_std_mem ${MADRONA_STD_MEM_LIB_TYPE}
 )
 
 target_link_libraries(madrona_std_mem PRIVATE
-    madrona_hdrs madrona_noexceptrtti madrona_libcxx
+    madrona_hdrs madrona_nortti madrona_libcxx
 )
 
 add_library(madrona_mem STATIC
@@ -89,7 +89,7 @@ add_library(madrona_mem STATIC
 )
 
 target_link_libraries(madrona_mem PRIVATE
-  madrona_hdrs madrona_noexceptrtti)
+  madrona_hdrs madrona_nortti)
 
 if (NOT WIN32)
     target_link_libraries(madrona_mem PRIVATE
@@ -128,7 +128,7 @@ target_link_libraries(madrona_common
         madrona_hdrs
         madrona_libcxx
         madrona_err
-        madrona_noexceptrtti
+        madrona_nortti
         madrona_std_mem
         madrona_mem
 )
@@ -181,7 +181,7 @@ if (CUDAToolkit_FOUND)
             CUDA::nvrtc
         PRIVATE
             madrona_err
-            madrona_noexceptrtti
+            madrona_nortti
     )
 
     if (NOT WIN32) # FIXME

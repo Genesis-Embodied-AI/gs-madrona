@@ -7,8 +7,11 @@
  */
 #pragma once
 #include <cstddef>
+#include <cstdio>
 #include <dlfcn.h>
 #include <iostream>
+#include <stdexcept>
+#include <string>
 
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -82,21 +85,34 @@ private:
 
 namespace cu {
 
-inline void *allocGPU(size_t num_bytes);
+static inline void *allocGPU(size_t num_bytes);
 
-inline void deallocGPU(void *ptr);
+static inline void deallocGPU(void *ptr);
 
-inline void *allocStaging(size_t num_bytes);
+static inline void *allocStaging(size_t num_bytes);
 
-inline void *allocReadback(size_t num_bytes);
+static inline void *allocReadback(size_t num_bytes);
 
-inline void deallocCPU(void *ptr);
+static inline void deallocCPU(void *ptr);
 
-inline void cpyCPUToGPU(cudaStream_t strm, void *gpu, void *cpu, size_t num_bytes);
+static inline void cpyCPUToGPU(cudaStream_t strm, void *gpu, void *cpu, size_t num_bytes);
 
-inline void cpyGPUToCPU(cudaStream_t strm, void *cpu, void *gpu, size_t num_bytes);
+static inline void cpyGPUToCPU(cudaStream_t strm, void *cpu, void *gpu, size_t num_bytes);
 
-inline cudaStream_t makeStream();
+static inline cudaStream_t makeStream();
+
+// A failed CUDA call. Thrown by REQ_CUDA / REQ_CU from compilation units
+// built with exceptions, so the failure travels up to the API boundary
+// (Manager, hence the Python binding) instead of aborting the process.
+class CudaError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
+std::string cudaRuntimeErrorMessage(
+        cudaError_t err, const char *file, int line, const char *funcname);
+std::string cuDrvErrorMessage(
+        CUresult err, const char *file, int line, const char *funcname);
 
 [[noreturn]] void cudaRuntimeError(
         cudaError_t err, const char *file,
@@ -105,10 +121,23 @@ inline cudaStream_t makeStream();
         CUresult err, const char *file,
         int line, const char *funcname) noexcept;
 
-inline void checkCuda(cudaError_t res, const char *file,
-                      int line, const char *funcname) noexcept;
-inline void checkCuDrv(CUresult res, const char *file,
-                       int line, const char *funcname) noexcept;
+// Report a failed call: throw CudaError where the compilation unit has
+// exceptions, abort where it has none (madrona_cuda, madrona_err and
+// madrona_python_utils are built with -fno-exceptions). Internal linkage keeps
+// the two variants apart, for these and for every wrapper above calling them:
+// a shared inline definition would let the linker keep one body for every
+// unit.
+static inline void checkCuda(cudaError_t res, const char *file,
+                             int line, const char *funcname);
+static inline void checkCuDrv(CUresult res, const char *file,
+                              int line, const char *funcname);
+
+// Report a failed call on stderr and carry on, for the teardown paths
+// (destructors, thread exits) where a failure can neither throw nor abort.
+inline void checkCudaNoThrow(cudaError_t res, const char *file,
+                             int line, const char *funcname) noexcept;
+inline void checkCuDrvNoThrow(CUresult res, const char *file,
+                              int line, const char *funcname) noexcept;
 
 }
 }
@@ -122,5 +151,10 @@ inline void checkCuDrv(CUresult res, const char *file,
                                                 MADRONA_COMPILER_FUNCTION_NAME)
 #define REQ_CU(expr) ::madrona::cu::checkCuDrv((expr), __FILE__, __LINE__,\
                                                MADRONA_COMPILER_FUNCTION_NAME)
+
+#define REQ_CUDA_NOTHROW(expr) ::madrona::cu::checkCudaNoThrow((expr), __FILE__,\
+        __LINE__, MADRONA_COMPILER_FUNCTION_NAME)
+#define REQ_CU_NOTHROW(expr) ::madrona::cu::checkCuDrvNoThrow((expr), __FILE__,\
+        __LINE__, MADRONA_COMPILER_FUNCTION_NAME)
 
 #include "cuda_utils.inl"

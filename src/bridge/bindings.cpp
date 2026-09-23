@@ -1,5 +1,8 @@
 #include "mgr.hpp"
 
+#include <stdexcept>
+#include <string>
+
 #include <madrona/macros.hpp>
 #include <madrona/py/bindings.hpp>
 #include <nanobind/ndarray.h>
@@ -121,6 +124,14 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
 
             free(ptr_geom_mat_ids);
             free(ptr_geom_data_ids);
+
+            // A failed construction is raised here, so the process survives
+            // what used to abort it (an out of memory GPU)
+            if (const char *err = self->lastError()) {
+                std::string message = err;
+                self->~Manager();
+                throw std::runtime_error(message);
+            }
         }, nb::arg("gpu_id"),
            nb::arg("mesh_vertices"),
            nb::arg("mesh_faces"),
@@ -189,6 +200,9 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                 light_attenuation.shape(0) > 0 ? reinterpret_cast<const float *>(light_attenuation.data()) : nullptr,
                 light_intensity.shape(0) > 0 ? reinterpret_cast<const float *>(light_intensity.data()) : nullptr
             );
+            if (const char *err = mgr.lastError()) {
+                throw std::runtime_error(err);
+            }
         })
         .def("render", [](Manager &mgr,
             nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> geom_pos,
@@ -204,6 +218,9 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                 reinterpret_cast<const math::Quat *>(cam_rot.data()),
                 reinterpret_cast<const uint32_t *>(render_options.data())
             );
+            if (const char *err = mgr.lastError()) {
+                throw std::runtime_error(err);
+            }
         })
         .def("rgb_tensor", &Manager::rgbTensor)
         .def("depth_tensor", &Manager::depthTensor)
