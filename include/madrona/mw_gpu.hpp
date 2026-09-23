@@ -9,7 +9,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <string>
 
 #include <madrona/macros.hpp>
 #include <madrona/span.hpp>
@@ -155,12 +154,6 @@ public:
     // Get the base pointer of the component data exported with
     // ECSRegister::exportColumn. Note that this will be a GPU pointer.
     void * getExported(CountT slot) const;
-
-    // The failure the host allocator thread recorded while serving the
-    // device, empty when there is none. A device memory request the driver
-    // refuses stops the kernel, so the caller sees a CUDA error at its next
-    // synchronization: this is the reason to report along with it.
-    static std::string takeHostAllocatorFailure();
 
 private:
     struct Impl;

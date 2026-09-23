@@ -318,8 +318,35 @@ using HostAllocInit = mwGPU::madrona::mwGPU::HostAllocInit;
 // The last request the host allocator thread could not serve. The device
 // stops its kernel on it, and the API thread, which only sees the resulting
 // CUDA error at its next synchronization, reports this message with it.
-static std::mutex host_alloc_failure_mutex;
-static std::string host_alloc_failure;
+struct HostAllocatorStatus {
+    std::mutex mutex;
+    std::string failure;
+
+    std::string takeFailure()
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        std::string taken = std::move(failure);
+        failure.clear();
+        return taken;
+    }
+};
+
+// Wait for the stream, reporting a device kernel stopped on a refused memory
+// request by its cause rather than by the CUDA error it leaves behind.
+static void syncStream(cudaStream_t strm, HostAllocatorStatus *alloc_status)
+{
+    cudaError_t res = cudaStreamSynchronize(strm);
+    if (res == cudaSuccess) {
+        return;
+    }
+    std::string failure = alloc_status->takeFailure();
+    if (!failure.empty()) {
+        throw cu::CudaError("Device memory request refused by the driver: " + failure +
+            ". The kernel stopped on it and the CUDA context of this process is unusable from now on (" +
+            cu::cudaRuntimeErrorMessage(res, __FILE__, __LINE__, MADRONA_COMPILER_FUNCTION_NAME) + ")");
+    }
+    REQ_CUDA(res);
+}
 using HostPrint = mwGPU::madrona::mwGPU::HostPrint;
 using HostPrintCPU = mwGPU::madrona::mwGPU::HostPrintCPU;
 using DeviceTracingManager = mwGPU::madrona::mwGPU::DeviceTracingManager;
@@ -437,6 +464,7 @@ struct GPUEngineState {
 
     std::thread allocatorThread;
     HostChannel *hostAllocatorChannel;
+    std::unique_ptr<HostAllocatorStatus> hostAllocatorStatus;
     std::unique_ptr<HostPrintCPU> hostPrint;
 #ifdef MADRONA_TRACING
     std::unique_ptr<DeviceTracingManager> deviceTracing;
@@ -1529,7 +1557,8 @@ static void mapGPUMemory(CUdevice dev, CUdeviceptr base, uint64_t num_bytes)
 }
 
 static void gpuVMAllocatorThread(HostChannel *channel, CUcontext cu_ctx,
-                                 FreeQueue *free_queue)
+                                 FreeQueue *free_queue,
+                                 HostAllocatorStatus *alloc_status)
 {
     using namespace std::chrono_literals;
     using cuda::std::memory_order_acquire;
@@ -1624,8 +1653,8 @@ static void gpuVMAllocatorThread(HostChannel *channel, CUcontext cu_ctx,
             }
         } catch (const cu::CudaError &err) {
             channel->error.store(1, memory_order_release);
-            std::lock_guard<std::mutex> lock(host_alloc_failure_mutex);
-            host_alloc_failure = err.what();
+            std::lock_guard<std::mutex> lock(alloc_status->mutex);
+            alloc_status->failure = err.what();
         }
 
         channel->finished.store(1, memory_order_release);
@@ -1720,7 +1749,8 @@ static GPUEngineState initEngineAndUserState(
     allocator_channel->finished.store(0, cuda::std::memory_order_relaxed);
     allocator_channel->error.store(0, cuda::std::memory_order_release);
 
-    std::thread allocator_thread(gpuVMAllocatorThread, allocator_channel, cu_ctx, fq);
+    auto alloc_status = std::make_unique<HostAllocatorStatus>();
+    std::thread allocator_thread(gpuVMAllocatorThread, allocator_channel, cu_ctx, fq, alloc_status.get());
 
     // Init failing past this point unwinds through a joinable thread, which
     // would terminate the process: retire the thread on the way out instead.
@@ -1793,7 +1823,7 @@ static GPUEngineState initEngineAndUserState(
 
     launchKernel(gpu_kernels.computeGPUImplConsts, 1, 1, compute_consts_args);
 
-    REQ_CUDA(cudaStreamSynchronize(strm));
+    syncStream(strm, alloc_status.get());
 
     auto gpu_state_buffer = cu::allocGPU(*gpu_state_size_readback);
     cu::deallocCPU(gpu_state_size_readback);
@@ -1856,15 +1886,15 @@ static GPUEngineState initEngineAndUserState(
     // device. Draining the stream after every init launch keeps the launches
     // out of that window.
     launchKernel(gpu_kernels.initECS, 1, 1, init_ecs_args);
-    REQ_CUDA(cudaStreamSynchronize(strm));
+    syncStream(strm, alloc_status.get());
 
     uint32_t num_init_blocks = utils::divideRoundUp(num_worlds, consts::numMegakernelThreads);
     launchKernel(gpu_kernels.initWorlds, num_init_blocks,
                  consts::numMegakernelThreads, init_worlds_args);
-    REQ_CUDA(cudaStreamSynchronize(strm));
+    syncStream(strm, alloc_status.get());
 
     launchKernel(gpu_kernels.initTasks, 1, 1, init_tasks_args);
-    REQ_CUDA(cudaStreamSynchronize(strm));
+    syncStream(strm, alloc_status.get());
 
     cu::deallocGPU(user_cfg_gpu_buffer);
     cu::deallocGPU(init_tmp_buffer);
@@ -1902,13 +1932,13 @@ static GPUEngineState initEngineAndUserState(
         // params
         launchKernel(gpu_kernels.initBVHParams, 1, 1, init_bvh_args);
 
-        REQ_CUDA(cudaStreamSynchronize(strm));
+        syncStream(strm, alloc_status.get());
 
         // Call the bvh init function from bvh module
         auto bvh_init_internal_args = makeKernelArgBuffer(alloc_init);
         launchKernel(bvh_kernels.init, 1, 1, no_args);
 
-        REQ_CUDA(cudaStreamSynchronize(strm));
+        syncStream(strm, alloc_status.get());
 
         CudaDynamicLoader::cuMemcpy(bvh_consts_addr, (CUdeviceptr)params_tmp,
                  sizeof(mwGPU::madrona::BVHParams));
@@ -1922,6 +1952,7 @@ static GPUEngineState initEngineAndUserState(
         gpu_state_buffer,
         std::move(allocator_thread),
         allocator_channel,
+        std::move(alloc_status),
         std::move(host_print),
 #ifdef MADRONA_TRACING
         std::move(device_tracing),
@@ -2335,14 +2366,6 @@ MWCudaExecutor::~MWCudaExecutor()
     }
 }
 
-std::string MWCudaExecutor::takeHostAllocatorFailure()
-{
-    std::lock_guard<std::mutex> lock(host_alloc_failure_mutex);
-    std::string failure = std::move(host_alloc_failure);
-    host_alloc_failure.clear();
-    return failure;
-}
-
 MWCudaLaunchGraph MWCudaExecutor::buildRenderGraph()
 {
     if (!impl_->enableRaycasting) {
@@ -2575,7 +2598,7 @@ MWCudaLaunchGraph MWCudaExecutor::buildLaunchGraphAllTaskGraphs()
 void MWCudaExecutor::run(MWCudaLaunchGraph &launch_graph)
 {
     REQ_CU(CudaDynamicLoader::cuGraphLaunch(launch_graph.impl_->runGraph, impl_->cuStream));
-    REQ_CUDA(cudaStreamSynchronize(impl_->cuStream));
+    syncStream(impl_->cuStream, impl_->engineState.hostAllocatorStatus.get());
 #ifdef MADRONA_TRACING
     impl_->engineState.deviceTracing->transferLogToCPU();
 #endif

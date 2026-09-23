@@ -85,21 +85,21 @@ private:
 
 namespace cu {
 
-inline void *allocGPU(size_t num_bytes);
+static inline void *allocGPU(size_t num_bytes);
 
-inline void deallocGPU(void *ptr);
+static inline void deallocGPU(void *ptr);
 
-inline void *allocStaging(size_t num_bytes);
+static inline void *allocStaging(size_t num_bytes);
 
-inline void *allocReadback(size_t num_bytes);
+static inline void *allocReadback(size_t num_bytes);
 
-inline void deallocCPU(void *ptr);
+static inline void deallocCPU(void *ptr);
 
-inline void cpyCPUToGPU(cudaStream_t strm, void *gpu, void *cpu, size_t num_bytes);
+static inline void cpyCPUToGPU(cudaStream_t strm, void *gpu, void *cpu, size_t num_bytes);
 
-inline void cpyGPUToCPU(cudaStream_t strm, void *cpu, void *gpu, size_t num_bytes);
+static inline void cpyGPUToCPU(cudaStream_t strm, void *cpu, void *gpu, size_t num_bytes);
 
-inline cudaStream_t makeStream();
+static inline cudaStream_t makeStream();
 
 // A failed CUDA call. Thrown by REQ_CUDA / REQ_CU from compilation units
 // built with exceptions, so the failure travels up to the API boundary
@@ -122,10 +122,11 @@ std::string cuDrvErrorMessage(
         int line, const char *funcname) noexcept;
 
 // Report a failed call: throw CudaError where the compilation unit has
-// exceptions, abort where it has none (madrona_common, madrona_cuda and
-// madrona_err are built with -fno-exceptions). Internal linkage keeps the two
-// variants apart, as a shared inline definition would let the linker keep
-// one of them for every unit.
+// exceptions, abort where it has none (madrona_cuda, madrona_err and
+// madrona_python_utils are built with -fno-exceptions). Internal linkage keeps
+// the two variants apart, for these and for every wrapper above calling them:
+// a shared inline definition would let the linker keep one body for every
+// unit.
 static inline void checkCuda(cudaError_t res, const char *file,
                              int line, const char *funcname);
 static inline void checkCuDrv(CUresult res, const char *file,

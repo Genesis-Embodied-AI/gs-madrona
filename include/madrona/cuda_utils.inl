@@ -8,7 +8,7 @@
 
 namespace madrona::cu {
 
-void *allocGPU(size_t num_bytes)
+static inline void *allocGPU(size_t num_bytes)
 {
     void *ptr;
     REQ_CUDA(cudaMalloc(&ptr, num_bytes));
@@ -16,12 +16,12 @@ void *allocGPU(size_t num_bytes)
     return ptr;
 }
 
-void deallocGPU(void *ptr)
+static inline void deallocGPU(void *ptr)
 {
     REQ_CUDA_NOTHROW(cudaFree(ptr));
 }
 
-void *allocStaging(size_t num_bytes)
+static inline void *allocStaging(size_t num_bytes)
 {
     void *ptr;
     REQ_CUDA(cudaHostAlloc(&ptr, num_bytes,
@@ -30,7 +30,7 @@ void *allocStaging(size_t num_bytes)
     return ptr;
 }
 
-void *allocReadback(size_t num_bytes)
+static inline void *allocReadback(size_t num_bytes)
 {
     void *ptr;
     REQ_CUDA(cudaHostAlloc(&ptr, num_bytes,
@@ -39,24 +39,24 @@ void *allocReadback(size_t num_bytes)
     return ptr;
 }
 
-void deallocCPU(void *ptr)
+static inline void deallocCPU(void *ptr)
 {
     REQ_CUDA_NOTHROW(cudaFreeHost(ptr));
 }
 
-void cpyCPUToGPU(cudaStream_t strm, void *gpu, void *cpu, size_t num_bytes)
+static inline void cpyCPUToGPU(cudaStream_t strm, void *gpu, void *cpu, size_t num_bytes)
 {
     REQ_CUDA(cudaMemcpyAsync(gpu, cpu, num_bytes, cudaMemcpyHostToDevice,
                              strm));
 }
 
-void cpyGPUToCPU(cudaStream_t strm, void *cpu, void *gpu, size_t num_bytes)
+static inline void cpyGPUToCPU(cudaStream_t strm, void *cpu, void *gpu, size_t num_bytes)
 {
     REQ_CUDA(cudaMemcpyAsync(cpu, gpu, num_bytes, cudaMemcpyDeviceToHost,
                              strm));
 }
 
-cudaStream_t makeStream()
+static inline cudaStream_t makeStream()
 {
     cudaStream_t strm;
     REQ_CUDA(cudaStreamCreate(&strm));

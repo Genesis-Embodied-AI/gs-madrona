@@ -810,12 +810,6 @@ Manager::~Manager() {}
 void Manager::recordFailure(const std::exception &err)
 {
     lastError_ = err.what();
-    std::string alloc_failure = MWCudaExecutor::takeHostAllocatorFailure();
-    if (!alloc_failure.empty()) {
-        lastError_ = "Device memory request refused by the driver: " +
-            alloc_failure + ". The kernel stopped on it and the CUDA context "
-            "of this process is unusable from now on (" + lastError_ + ")";
-    }
 }
 
 const char * Manager::lastError() const
