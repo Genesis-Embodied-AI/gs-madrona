@@ -795,10 +795,33 @@ Manager::Impl * Manager::Impl::make(
 Manager::Manager(const Config &cfg,
                  const GSModel &gs_model,
                  Optional<VisualizerGPUHandles> viz_gpu_hdls)
-    : impl_(Impl::make(cfg, gs_model, viz_gpu_hdls))
-{}
+    : impl_(nullptr),
+      lastError_()
+{
+    try {
+        impl_.reset(Impl::make(cfg, gs_model, viz_gpu_hdls));
+    } catch (const std::exception &err) {
+        recordFailure(err);
+    }
+}
 
 Manager::~Manager() {}
+
+void Manager::recordFailure(const std::exception &err)
+{
+    lastError_ = err.what();
+    std::string alloc_failure = MWCudaExecutor::takeHostAllocatorFailure();
+    if (!alloc_failure.empty()) {
+        lastError_ = "Device memory request refused by the driver: " +
+            alloc_failure + ". The kernel stopped on it and the CUDA context "
+            "of this process is unusable from now on (" + lastError_ + ")";
+    }
+}
+
+const char * Manager::lastError() const
+{
+    return lastError_.empty() ? nullptr : lastError_.c_str();
+}
 
 void Manager::init(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
                    const math::Vector3 *cam_pos, const math::Quat *cam_rot,
@@ -809,17 +832,31 @@ void Manager::init(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
                    const float *light_cutoff, const float *light_attenuation,
                    const float *light_intensity)
 {
-    impl_->init(
-        geom_pos, geom_rot, cam_pos, cam_rot, mat_ids, geom_rgb, geom_sizes,
-        light_pos, light_dir, light_rgb, light_isdir, light_castshadow, 
-        light_cutoff, light_attenuation, light_intensity);
+    if (!lastError_.empty()) {
+        return;
+    }
+    try {
+        impl_->init(
+            geom_pos, geom_rot, cam_pos, cam_rot, mat_ids, geom_rgb, geom_sizes,
+            light_pos, light_dir, light_rgb, light_isdir, light_castshadow,
+            light_cutoff, light_attenuation, light_intensity);
+    } catch (const std::exception &err) {
+        recordFailure(err);
+    }
 }
 
 void Manager::render(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
                      const math::Vector3 *cam_pos, const math::Quat *cam_rot,
                      const uint32_t *render_options)
 {
-    impl_->render(geom_pos, geom_rot, cam_pos, cam_rot, render_options);
+    if (!lastError_.empty()) {
+        return;
+    }
+    try {
+        impl_->render(geom_pos, geom_rot, cam_pos, cam_rot, render_options);
+    } catch (const std::exception &err) {
+        recordFailure(err);
+    }
 }
 
 Tensor Manager::rgbTensor() const

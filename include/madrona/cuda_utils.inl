@@ -18,7 +18,7 @@ void *allocGPU(size_t num_bytes)
 
 void deallocGPU(void *ptr)
 {
-    REQ_CUDA(cudaFree(ptr));
+    REQ_CUDA_NOTHROW(cudaFree(ptr));
 }
 
 void *allocStaging(size_t num_bytes)
@@ -41,7 +41,7 @@ void *allocReadback(size_t num_bytes)
 
 void deallocCPU(void *ptr)
 {
-    REQ_CUDA(cudaFreeHost(ptr));
+    REQ_CUDA_NOTHROW(cudaFreeHost(ptr));
 }
 
 void cpyCPUToGPU(cudaStream_t strm, void *gpu, void *cpu, size_t num_bytes)
@@ -64,19 +64,45 @@ cudaStream_t makeStream()
     return strm;
 }
 
-void checkCuda(cudaError_t res, const char *file,
-               int line, const char *funcname) noexcept
+static inline void checkCuda(cudaError_t res, const char *file,
+                             int line, const char *funcname)
 {
     if (res != cudaSuccess) {
+#if defined(__cpp_exceptions)
+        throw CudaError(cudaRuntimeErrorMessage(res, file, line, funcname));
+#else
         cudaRuntimeError(res, file, line, funcname);
+#endif
     }
 }
 
-void checkCuDrv(CUresult res, const char *file,
-                int line, const char *funcname) noexcept
+static inline void checkCuDrv(CUresult res, const char *file,
+                              int line, const char *funcname)
 {
     if (res != CUDA_SUCCESS) {
+#if defined(__cpp_exceptions)
+        throw CudaError(cuDrvErrorMessage(res, file, line, funcname));
+#else
         cuDrvError(res, file, line, funcname);
+#endif
+    }
+}
+
+void checkCudaNoThrow(cudaError_t res, const char *file,
+                      int line, const char *funcname) noexcept
+{
+    if (res != cudaSuccess) {
+        fprintf(stderr, "%s\n",
+                cudaRuntimeErrorMessage(res, file, line, funcname).c_str());
+    }
+}
+
+void checkCuDrvNoThrow(CUresult res, const char *file,
+                       int line, const char *funcname) noexcept
+{
+    if (res != CUDA_SUCCESS) {
+        fprintf(stderr, "%s\n",
+                cuDrvErrorMessage(res, file, line, funcname).c_str());
     }
 }
 

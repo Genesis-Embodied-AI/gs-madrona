@@ -90,6 +90,10 @@ struct HostChannel {
 
     cuda::atomic<uint32_t, cuda::thread_scope_system> ready;
     cuda::atomic<uint32_t, cuda::thread_scope_system> finished;
+    // Set by the host thread when the driver refused a request (out of
+    // memory). The device cannot recover from that: it stops the kernel, and
+    // the host reports the recorded failure at its next synchronization.
+    cuda::atomic<uint32_t, cuda::thread_scope_system> error;
 };
 
 struct HostAllocInit {

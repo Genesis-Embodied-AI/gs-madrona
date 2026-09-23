@@ -16,6 +16,7 @@
 // pull in <thread> (and thus <stop_token>); include it here at global scope
 // first so those standard headers compile against real std rather than the
 // mwGPU::std device shim.
+#include <mutex>
 #include <thread>
 
 #include <unistd.h>
@@ -94,7 +95,7 @@ public:
     {
         channel_->signal.store(-1, cuda::std::memory_order_release);
         thread_.join();
-        REQ_CU(CudaDynamicLoader::cuMemFree((CUdeviceptr)channel_));
+        REQ_CU_NOTHROW(CudaDynamicLoader::cuMemFree((CUdeviceptr)channel_));
     }
 
     inline void * getChannelPtr()
@@ -313,6 +314,12 @@ struct FreeQueue {
 
 using HostChannel = mwGPU::madrona::mwGPU::HostChannel;
 using HostAllocInit = mwGPU::madrona::mwGPU::HostAllocInit;
+
+// The last request the host allocator thread could not serve. The device
+// stops its kernel on it, and the API thread, which only sees the resulting
+// CUDA error at its next synchronization, reports this message with it.
+static std::mutex host_alloc_failure_mutex;
+static std::string host_alloc_failure;
 using HostPrint = mwGPU::madrona::mwGPU::HostPrint;
 using HostPrintCPU = mwGPU::madrona::mwGPU::HostPrintCPU;
 using DeviceTracingManager = mwGPU::madrona::mwGPU::DeviceTracingManager;
@@ -1544,73 +1551,81 @@ static void gpuVMAllocatorThread(HostChannel *channel, CUcontext cu_ctx,
         }
         channel->ready.store(0, memory_order_relaxed);
 
-        if (channel->op == HostChannel::Op::Reserve) {
-            uint64_t num_reserve_bytes = channel->reserve.maxBytes;
-            uint64_t num_alloc_bytes = channel->reserve.initNumBytes;
+        // A request the driver refuses (out of memory) is handed back to the
+        // device through the channel instead of aborting the process
+        try {
+            if (channel->op == HostChannel::Op::Reserve) {
+                uint64_t num_reserve_bytes = channel->reserve.maxBytes;
+                uint64_t num_alloc_bytes = channel->reserve.initNumBytes;
 
-            CUdeviceptr dev_ptr;
-            REQ_CU(CudaDynamicLoader::cuMemAddressReserve(&dev_ptr, num_reserve_bytes,
-                                       0, 0, 0));
+                CUdeviceptr dev_ptr;
+                REQ_CU(CudaDynamicLoader::cuMemAddressReserve(&dev_ptr, num_reserve_bytes,
+                                           0, 0, 0));
 
-            if (verbose_host_alloc) {
-                MADRONA_DEBUG_LOG("Reserve request received %lu %lu, got %p\n",
-                       num_reserve_bytes, num_alloc_bytes, (void *)dev_ptr);
+                if (verbose_host_alloc) {
+                    MADRONA_DEBUG_LOG("Reserve request received %lu %lu, got %p\n",
+                           num_reserve_bytes, num_alloc_bytes, (void *)dev_ptr);
+                }
+
+                if (num_alloc_bytes > 0) {
+                    mapGPUMemory(dev, dev_ptr, num_alloc_bytes);
+                }
+
+                channel->reserve.result = (void *)dev_ptr;
+            } else if (channel->op == HostChannel::Op::Map) {
+                void *ptr = channel->map.addr;
+                uint64_t num_bytes = channel->map.numBytes;
+
+                if (verbose_host_alloc) {
+                    MADRONA_DEBUG_LOG("Grow request received %p %lu\n",
+                           ptr, num_bytes);
+                }
+
+                mapGPUMemory(dev, (CUdeviceptr)ptr, num_bytes);
+
+                if (verbose_host_alloc) {
+                    MADRONA_DEBUG_LOG("Grew %p\n", ptr);
+                }
+            } else if (channel->op == HostChannel::Op::Alloc) {
+                CUdeviceptr dev_ptr;
+                REQ_CU(CudaDynamicLoader::cuMemAlloc(&dev_ptr, channel->alloc.numBytes));
+                channel->alloc.result = (void *)dev_ptr;
+
+                if (verbose_host_alloc) {
+                    MADRONA_DEBUG_LOG("Alloc request received %lu, got %p\n",
+                        (uint64_t)channel->alloc.numBytes, (void *)dev_ptr);
+                }
+            } else if (channel->op == HostChannel::Op::ReserveFree) {
+                void *ptr = channel->reserveFree.addr;
+                uint64_t num_bytes = channel->reserveFree.numBytes;
+                uint64_t num_reserve_bytes = channel->reserveFree.numReserveBytes;
+
+                if (verbose_host_alloc) {
+                    MADRONA_DEBUG_LOG("Unmapped %lu bytes from %p, and freed %lu reservation\n",
+                        num_bytes, ptr, num_reserve_bytes);
+                }
+
+                free_queue->reserveToFree.push_back(FreeQueue::Reserve {
+                    .addr = channel->reserveFree.addr,
+                    .numBytes = channel->reserveFree.numBytes,
+                    .numReserveBytes = channel->reserveFree.numReserveBytes,
+                });
+            } else if (channel->op == HostChannel::Op::AllocFree) {
+                void *ptr = channel->allocFree.addr;
+
+                if (verbose_host_alloc) {
+                    MADRONA_DEBUG_LOG("Allocation free request received for %p\n",
+                        ptr);
+                }
+
+                free_queue->toFree.push_back(ptr);
+            } else if (channel->op == HostChannel::Op::Terminate) {
+                break;
             }
-
-            if (num_alloc_bytes > 0) {
-                mapGPUMemory(dev, dev_ptr, num_alloc_bytes);
-            }
-
-            channel->reserve.result = (void *)dev_ptr;
-        } else if (channel->op == HostChannel::Op::Map) {
-            void *ptr = channel->map.addr;
-            uint64_t num_bytes = channel->map.numBytes;
-
-            if (verbose_host_alloc) {
-                MADRONA_DEBUG_LOG("Grow request received %p %lu\n",
-                       ptr, num_bytes);
-            }
-
-            mapGPUMemory(dev, (CUdeviceptr)ptr, num_bytes);
-
-            if (verbose_host_alloc) {
-                MADRONA_DEBUG_LOG("Grew %p\n", ptr);
-            }
-        } else if (channel->op == HostChannel::Op::Alloc) {
-            CUdeviceptr dev_ptr;
-            REQ_CU(CudaDynamicLoader::cuMemAlloc(&dev_ptr, channel->alloc.numBytes));
-            channel->alloc.result = (void *)dev_ptr;
-
-            if (verbose_host_alloc) {
-                MADRONA_DEBUG_LOG("Alloc request received %lu, got %p\n",
-                    (uint64_t)channel->alloc.numBytes, (void *)dev_ptr);
-            }
-        } else if (channel->op == HostChannel::Op::ReserveFree) {
-            void *ptr = channel->reserveFree.addr;
-            uint64_t num_bytes = channel->reserveFree.numBytes;
-            uint64_t num_reserve_bytes = channel->reserveFree.numReserveBytes;
-
-            if (verbose_host_alloc) {
-                MADRONA_DEBUG_LOG("Unmapped %lu bytes from %p, and freed %lu reservation\n",
-                    num_bytes, ptr, num_reserve_bytes);
-            }
-
-            free_queue->reserveToFree.push_back(FreeQueue::Reserve {
-                .addr = channel->reserveFree.addr,
-                .numBytes = channel->reserveFree.numBytes,
-                .numReserveBytes = channel->reserveFree.numReserveBytes,
-            });
-        } else if (channel->op == HostChannel::Op::AllocFree) {
-            void *ptr = channel->allocFree.addr;
-
-            if (verbose_host_alloc) {
-                MADRONA_DEBUG_LOG("Allocation free request received for %p\n",
-                    ptr);
-            }
-
-            free_queue->toFree.push_back(ptr);
-        } else if (channel->op == HostChannel::Op::Terminate) {
-            break;
+        } catch (const cu::CudaError &err) {
+            channel->error.store(1, memory_order_release);
+            std::lock_guard<std::mutex> lock(host_alloc_failure_mutex);
+            host_alloc_failure = err.what();
         }
 
         channel->finished.store(1, memory_order_release);
@@ -1701,7 +1716,29 @@ static GPUEngineState initEngineAndUserState(
 
     FreeQueue *fq = new FreeQueue {};
 
+    allocator_channel->ready.store(0, cuda::std::memory_order_relaxed);
+    allocator_channel->finished.store(0, cuda::std::memory_order_relaxed);
+    allocator_channel->error.store(0, cuda::std::memory_order_release);
+
     std::thread allocator_thread(gpuVMAllocatorThread, allocator_channel, cu_ctx, fq);
+
+    // Init failing past this point unwinds through a joinable thread, which
+    // would terminate the process: retire the thread on the way out instead.
+    struct AllocatorThreadGuard {
+        HostChannel *channel;
+        std::thread *thread;
+        bool armed = true;
+
+        ~AllocatorThreadGuard()
+        {
+            if (!armed) {
+                return;
+            }
+            channel->op = HostChannel::Op::Terminate;
+            channel->ready.store(1, cuda::std::memory_order_release);
+            thread->join();
+        }
+    } allocator_thread_guard { allocator_channel, &allocator_thread };
 
     auto host_print = std::make_unique<HostPrintCPU>(cu_gpu);
 
@@ -1878,6 +1915,8 @@ static GPUEngineState initEngineAndUserState(
 
         cu::deallocGPU(params_tmp);
     }
+
+    allocator_thread_guard.armed = false;
 
     return GPUEngineState {
         gpu_state_buffer,
@@ -2080,7 +2119,7 @@ MWCudaLaunchGraph::~MWCudaLaunchGraph()
         return;
     }
 
-    REQ_CU(CudaDynamicLoader::cuGraphExecDestroy(impl_->runGraph));
+    REQ_CU_NOTHROW(CudaDynamicLoader::cuGraphExecDestroy(impl_->runGraph));
 }
 
 CUcontext MWCudaExecutor::initCUDA(int gpu_id)
@@ -2209,47 +2248,47 @@ MWCudaExecutor::~MWCudaExecutor()
 {
     if (!impl_) return;
 
-    REQ_CU(CudaDynamicLoader::cuLaunchKernel(impl_->destroyKernel, 1, 1, 1, 1, 1, 1,
+    REQ_CU_NOTHROW(CudaDynamicLoader::cuLaunchKernel(impl_->destroyKernel, 1, 1, 1, 1, 1, 1,
             0, impl_->cuStream, nullptr, nullptr));
-    REQ_CUDA(cudaStreamSynchronize(impl_->cuStream));
+    REQ_CUDA_NOTHROW(cudaStreamSynchronize(impl_->cuStream));
 
     // Ok now, we go through the free queue
     auto *fq = impl_->engineState.freeQueue;
     for (int i = 0; i < (int)fq->toFree.size(); ++i) {
-        REQ_CU(CudaDynamicLoader::cuMemFree((CUdeviceptr)fq->toFree[i]));
+        REQ_CU_NOTHROW(CudaDynamicLoader::cuMemFree((CUdeviceptr)fq->toFree[i]));
     }
 
     for (int i = 0; i < (int)fq->reserveToFree.size(); ++i) {
         void *ptr = fq->reserveToFree[i].addr;
         uint64_t num_reserve_bytes = fq->reserveToFree[i].numReserveBytes;
 
-        REQ_CU(CudaDynamicLoader::cuMemUnmap((CUdeviceptr)ptr, num_reserve_bytes));
-        REQ_CU(CudaDynamicLoader::cuMemAddressFree((CUdeviceptr)ptr, num_reserve_bytes));
+        REQ_CU_NOTHROW(CudaDynamicLoader::cuMemUnmap((CUdeviceptr)ptr, num_reserve_bytes));
+        REQ_CU_NOTHROW(CudaDynamicLoader::cuMemAddressFree((CUdeviceptr)ptr, num_reserve_bytes));
     }
 
     // Free mesh bvh data
     if (impl_->bvhKernels.meshBVHData.numNodes) {
-        REQ_CUDA(cudaFree(impl_->bvhKernels.meshBVHData.nodes));
+        REQ_CUDA_NOTHROW(cudaFree(impl_->bvhKernels.meshBVHData.nodes));
     }
 
     if (impl_->bvhKernels.meshBVHData.numLeaves) {
-        REQ_CUDA(cudaFree(impl_->bvhKernels.meshBVHData.leafMaterial));
+        REQ_CUDA_NOTHROW(cudaFree(impl_->bvhKernels.meshBVHData.leafMaterial));
     }
 
     if (impl_->bvhKernels.meshBVHData.numVerts) {
-        REQ_CUDA(cudaFree(impl_->bvhKernels.meshBVHData.vertices));
+        REQ_CUDA_NOTHROW(cudaFree(impl_->bvhKernels.meshBVHData.vertices));
     }
 
     if (impl_->bvhKernels.meshBVHData.numBVHs) {
-        REQ_CUDA(cudaFree(impl_->bvhKernels.meshBVHData.meshBVHs));
+        REQ_CUDA_NOTHROW(cudaFree(impl_->bvhKernels.meshBVHData.meshBVHs));
     }
 
     if (impl_->bvhKernels.materialData.textures) {
-        REQ_CUDA(cudaFree(impl_->bvhKernels.materialData.textures));
+        REQ_CUDA_NOTHROW(cudaFree(impl_->bvhKernels.materialData.textures));
     }
 
     if (impl_->bvhKernels.materialData.materials) {
-        REQ_CUDA(cudaFree(impl_->bvhKernels.materialData.materials));
+        REQ_CUDA_NOTHROW(cudaFree(impl_->bvhKernels.materialData.materials));
     }
 
 #ifdef MADRONA_TRACING
@@ -2263,8 +2302,8 @@ MWCudaExecutor::~MWCudaExecutor()
         1, cuda::std::memory_order_release);
     impl_->engineState.allocatorThread.join();
 
-    REQ_CU(CudaDynamicLoader::cuModuleUnload(impl_->cuModule));
-    REQ_CUDA(cudaStreamDestroy(impl_->cuStream));
+    REQ_CU_NOTHROW(CudaDynamicLoader::cuModuleUnload(impl_->cuModule));
+    REQ_CUDA_NOTHROW(cudaStreamDestroy(impl_->cuStream));
 
     char *verbose_stats_env = getenv("MADRONA_MWGPU_VERBOSE_STAT");
     bool verbose_stats = verbose_stats_env && verbose_stats_env[0] == '1';
@@ -2294,6 +2333,14 @@ MWCudaExecutor::~MWCudaExecutor()
             MADRONA_DEBUG_LOG("%s avg total time = %f ms\n", times.statName, avg_total_time);
         }
     }
+}
+
+std::string MWCudaExecutor::takeHostAllocatorFailure()
+{
+    std::lock_guard<std::mutex> lock(host_alloc_failure_mutex);
+    std::string failure = std::move(host_alloc_failure);
+    host_alloc_failure.clear();
+    return failure;
 }
 
 MWCudaLaunchGraph MWCudaExecutor::buildRenderGraph()

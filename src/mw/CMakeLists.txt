@@ -53,6 +53,7 @@ set(DEVICE_SRC_DIR "${MADRONA_SRC_DIR}/mw/device")
 set(BVH_DEVICE_SOURCES
     ${DEVICE_SRC_DIR}/bvh.cpp
     ${DEVICE_SRC_DIR}/memory.cpp
+    ${DEVICE_SRC_DIR}/crash.cpp
     ${DEVICE_SRC_DIR}/host_print.cpp
     ${DEVICE_SRC_DIR}/bvh_raycast.cpp
 )

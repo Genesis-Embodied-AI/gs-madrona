@@ -5,7 +5,9 @@
 #define MGR_EXPORT MADRONA_IMPORT
 #endif
 
+#include <exception>
 #include <memory>
+#include <string>
 
 #include <madrona/py/utils.hpp>
 #include <madrona/exec_mode.hpp>
@@ -129,12 +131,21 @@ public:
 
     MGR_EXPORT madrona::render::RenderManager & getRenderManager();
 
+    // The failure of the last operation, construction included, nullptr when
+    // it succeeded. A failed CUDA call (typically out of memory) is recorded
+    // here for the caller to raise instead of aborting the process, and a
+    // manager carrying a failure ignores every further operation.
+    MGR_EXPORT const char * lastError() const;
+
 private:
     struct Impl;
     struct CPUImpl;
     struct CUDAImpl;
 
+    void recordFailure(const std::exception &err);
+
     std::unique_ptr<Impl> impl_;
+    std::string lastError_;
 };
 
 }

@@ -1,3 +1,4 @@
+#include <madrona/crash.hpp>
 #include <madrona/memory.hpp>
 #include <madrona/table.hpp>
 #include <madrona/utils.hpp>
@@ -33,6 +34,10 @@ static void submitRequest(HostChannel *channel)
     while (channel->finished.load(memory_order_acquire) != 1) {}
 
     channel->finished.store(0, memory_order_relaxed);
+
+    if (channel->error.load(memory_order_acquire) != 0) {
+        FATAL("The host could not serve a device memory request");
+    }
 }
 
 void * HostAllocator::reserveMemory(uint64_t max_bytes,

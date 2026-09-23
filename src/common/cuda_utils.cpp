@@ -103,6 +103,25 @@ void CudaDynamicLoader::ensureLoaded() {
 
 namespace cu {
 
+std::string cudaRuntimeErrorMessage(
+        cudaError_t err, const char *file, int line, const char *funcname)
+{
+    return std::string("CUDA error at ") + file + ":" + std::to_string(line) +
+        " in " + funcname + ": " + cudaGetErrorName(err) + ": " +
+        cudaGetErrorString(err);
+}
+
+std::string cuDrvErrorMessage(
+        CUresult err, const char *file, int line, const char *funcname)
+{
+    const char *name = "unknown";
+    const char *desc = "unknown";
+    CudaDynamicLoader::cuGetErrorName(err, &name);
+    CudaDynamicLoader::cuGetErrorString(err, &desc);
+    return std::string("CUDA driver error at ") + file + ":" +
+        std::to_string(line) + " in " + funcname + ": " + name + ": " + desc;
+}
+
 [[noreturn]] void cudaRuntimeError(
         cudaError_t err, const char *file,
         int line, const char *funcname) noexcept
@@ -114,7 +133,8 @@ namespace cu {
         CUresult err, const char *file,
         int line, const char *funcname) noexcept
 {
-    const char *name, *desc;
+    const char *name = "unknown";
+    const char *desc = "unknown";
     CudaDynamicLoader::cuGetErrorName(err, &name);
     CudaDynamicLoader::cuGetErrorString(err, &desc);
     fatal(file, line, funcname, "%s: %s", name, desc);
