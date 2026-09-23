@@ -16,19 +16,19 @@ else()
     add_library(madrona_libcxx INTERFACE)
 endif()
 
-add_library(madrona_noexceptrtti INTERFACE)
+add_library(madrona_nortti INTERFACE)
 if (FRONTEND_GCC OR FRONTEND_CLANG)
-    target_compile_options(madrona_noexceptrtti INTERFACE
-        -fno-exceptions -fno-rtti)
+    target_compile_options(madrona_nortti INTERFACE
+        -fno-rtti)
 elseif (FRONTEND_MSVC)
-    target_compile_options(madrona_noexceptrtti INTERFACE
+    target_compile_options(madrona_nortti INTERFACE
         /GR-
     )
 else ()
     message(FATAL_ERROR "Unsupported compiler frontend")
 endif ()
 
-install(TARGETS madrona_noexceptrtti EXPORT madronaExternal)
+install(TARGETS madrona_nortti EXPORT madronaExternal)
 install(EXPORT madronaExternal DESTINATION ${CMAKE_INSTALL_PREFIX})
 
 set(MADRONA_TOOLCHAIN_ROOT_OVERRIDE "${CMAKE_CURRENT_BINARY_DIR}/madrona-toolchain")
@@ -53,7 +53,7 @@ set_property(TARGET meshoptimizer PROPERTY
 
 if (NOT WIN32) #FIX
     target_link_libraries(meshoptimizer PRIVATE
-        madrona_libcxx madrona_noexceptrtti)
+        madrona_libcxx madrona_nortti)
 endif()
 
 add_subdirectory(fast_float EXCLUDE_FROM_ALL)
