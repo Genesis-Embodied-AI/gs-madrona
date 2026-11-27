@@ -308,6 +308,35 @@ void generateMipmaps(const void* src_data, uint32_t width, uint32_t height,
     }
 }
 
+// Whether some texel of an RGBA8 image has an alpha below one
+static uint8_t rgbaHasAlpha(const uint8_t *rgba, uint32_t width, uint32_t height)
+{
+    size_t num_texels = (size_t)width * height;
+    for (size_t i = 0; i < num_texels; ++i) {
+        if (rgba[4 * i + 3] != 255) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Whether the color or a texture of a material holds an alpha below one
+static uint32_t materialMayBeTranslucent(const Material &mat,
+                                         const int32_t *material_textures,
+                                         const uint8_t *texture_has_alpha)
+{
+    if (mat.color.w < 1.f) {
+        return 1;
+    }
+    for (uint32_t j = 0; j < mat.numTextures; ++j) {
+        int32_t texture_idx = material_textures[mat.textureOffset + j];
+        if (texture_idx >= 0 && texture_has_alpha[texture_idx]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 MaterialData initMaterialData(
     const imp::SourceMaterial *materials,
     uint32_t num_materials,
@@ -340,8 +369,23 @@ MaterialData initMaterialData(
         .mipmapTextureBuffers = (cudaMipmappedArray_t *) malloc(sizeof(cudaMipmappedArray_t) * num_mipmap_textures),
         .numMipmapTextureBuffers = num_mipmap_textures,
         .materialTextures = (int32_t *) malloc(sizeof(int32_t) * num_material_textures),
-        .materials = (Material *) malloc(sizeof(Material) * num_materials)
+        .materials = (Material *) malloc(sizeof(Material) * num_materials),
+        .textureMipmapBufferIndices = (int32_t *) malloc(sizeof(int32_t) * num_textures),
+        .numTextures = num_textures,
+        .hostMaterials = nullptr,
+        .hostMaterialTextures = nullptr,
+        .textureHasAlpha = (uint8_t *) malloc(num_textures > 0 ? num_textures : 1),
+        .numMaterials = num_materials,
+        .anyTranslucent = nullptr,
     };
+
+    // A compressed texture counts as holding alpha, its blocks unread
+    for (uint32_t i = 0; i < num_textures; ++i) {
+        const auto &tex = textures[i];
+        cpu_mat_data.textureHasAlpha[i] =
+            tex.format == imp::SourceTextureFormat::BC7 ? 1 :
+            rgbaHasAlpha((const uint8_t *)tex.data, tex.width, tex.height);
+    }
 
     // Separate indices for texture buffer arrays (they have different sizes)
     uint32_t non_mipmap_idx = 0;
@@ -390,6 +434,7 @@ MaterialData initMaterialData(
 
             cpu_mat_data.textures[i] = tex_obj;
             cpu_mat_data.textureBuffers[non_mipmap_idx++] = cuda_array;
+            cpu_mat_data.textureMipmapBufferIndices[i] = -1;
         } else {
             // TODO: Only generate mipmaps for RGBA textures
             // RGBA uncompressed textures: generate mipmaps
@@ -434,6 +479,7 @@ MaterialData initMaterialData(
             cudaTextureObject_t tex_obj = 0;
             REQ_CUDA(cudaCreateTextureObject(&tex_obj, &res_desc, &tex_desc, nullptr));
             cpu_mat_data.textures[i] = tex_obj;
+            cpu_mat_data.textureMipmapBufferIndices[i] = (int32_t)mipmap_idx;
             cpu_mat_data.mipmapTextureBuffers[mipmap_idx++] = mipArray;
         }
     }
@@ -448,6 +494,7 @@ MaterialData initMaterialData(
             .numTextures = src_mat.numTextures,
             .roughness = src_mat.roughness,
             .metalness = src_mat.metalness,
+            .mayBeTranslucent = 0,
         };
         
         if (src_mat.textureIdx != nullptr && src_mat.numTextures > 0) {
@@ -456,6 +503,9 @@ MaterialData initMaterialData(
                    sizeof(int32_t) * src_mat.numTextures);
         }
         material_texture_offset += src_mat.numTextures;
+        cpu_mat_data.materials[i].mayBeTranslucent = materialMayBeTranslucent(
+            cpu_mat_data.materials[i], cpu_mat_data.materialTextures,
+            cpu_mat_data.textureHasAlpha);
     }
 
     // Copy texture objects and materials to GPU
@@ -471,16 +521,25 @@ MaterialData initMaterialData(
                 sizeof(Material) * num_materials,
                 cudaMemcpyHostToDevice));
 
+    uint32_t any_translucent = 0;
+    for (uint32_t i = 0; i < num_materials; ++i) {
+        any_translucent |= cpu_mat_data.materials[i].mayBeTranslucent;
+    }
+    REQ_CUDA(cudaMalloc(&cpu_mat_data.anyTranslucent, sizeof(uint32_t)));
+    REQ_CUDA(cudaMemcpy(cpu_mat_data.anyTranslucent, &any_translucent,
+                        sizeof(uint32_t), cudaMemcpyHostToDevice));
+
     int32_t *gpu_mat_texs;
     REQ_CUDA(cudaMalloc(&gpu_mat_texs, sizeof(int32_t) * num_material_textures));
     REQ_CUDA(cudaMemcpy(gpu_mat_texs, cpu_mat_data.materialTextures, 
                 sizeof(int32_t) * num_material_textures,
                 cudaMemcpyHostToDevice));
 
-    // Free CPU-side temporary buffers
+    // Free CPU-side temporary buffers, keeping the materials for the texture
+    // writes
     free(cpu_mat_data.textures);
-    free(cpu_mat_data.materials);
-    free(cpu_mat_data.materialTextures);
+    cpu_mat_data.hostMaterials = cpu_mat_data.materials;
+    cpu_mat_data.hostMaterialTextures = cpu_mat_data.materialTextures;
     
     // Note: textureBuffers and mipmapTextureBuffers are CUDA arrays that remain on GPU
     // They are not freed here as they're part of the returned MaterialData
@@ -491,6 +550,85 @@ MaterialData initMaterialData(
     gpu_mat_data.materialTextures = gpu_mat_texs;
 
     return gpu_mat_data;
+}
+
+void updateMaterialTexture(
+    MaterialData &mat_data,
+    uint32_t texture_idx,
+    const uint8_t *rgba,
+    uint32_t width,
+    uint32_t height)
+{
+    if (texture_idx >= mat_data.numTextures) {
+        FATAL("Texture %u is out of range, the scene holds %u textures",
+              texture_idx, mat_data.numTextures);
+    }
+    int32_t buffer_idx = mat_data.textureMipmapBufferIndices[texture_idx];
+    if (buffer_idx < 0) {
+        FATAL("Texture %u is compressed, whose pixels cannot be written",
+              texture_idx);
+    }
+    cudaMipmappedArray_t mip_array = mat_data.mipmapTextureBuffers[buffer_idx];
+
+    cudaArray_t level0;
+    REQ_CUDA(cudaGetMipmappedArrayLevel(&level0, mip_array, 0));
+    cudaChannelFormatDesc channel_desc;
+    cudaExtent extent;
+    unsigned int flags;
+    REQ_CUDA(cudaArrayGetInfo(&channel_desc, &extent, &flags, level0));
+    if (extent.width != width || extent.height != height) {
+        FATAL("Texture %u is %zux%zu, written with %ux%u pixels",
+              texture_idx, extent.width, extent.height, width, height);
+    }
+
+    // The levels past the first are allocated by 'generateMipmaps', and freed
+    // however the copies end
+    struct MipLevels {
+        void* data[16] = {};
+        uint32_t widths[16];
+        uint32_t heights[16];
+        uint32_t num = 0;
+        ~MipLevels()
+        {
+            for (uint32_t mip = 1; mip < num; mip++) {
+                free(data[mip]);
+            }
+        }
+    } mips;
+    generateMipmaps(rgba, width, height,
+                    mips.data, mips.widths, mips.heights, mips.num);
+
+    for (uint32_t mip = 0; mip < mips.num; mip++) {
+        cudaArray_t cuda_array;
+        REQ_CUDA(cudaGetMipmappedArrayLevel(&cuda_array, mip_array, mip));
+        REQ_CUDA(cudaMemcpy2DToArray(cuda_array, 0, 0, mips.data[mip],
+                                     mips.widths[mip] * 4,
+                                     mips.widths[mip] * 4,
+                                     mips.heights[mip],
+                                     cudaMemcpyHostToDevice));
+    }
+
+    // The materials holding the texture read its alpha when it may now hold
+    // some, and skip it when it holds none
+    uint8_t has_alpha = rgbaHasAlpha(rgba, width, height);
+    if (has_alpha == mat_data.textureHasAlpha[texture_idx]) {
+        return;
+    }
+    mat_data.textureHasAlpha[texture_idx] = has_alpha;
+    uint32_t any_translucent = 0;
+    for (uint32_t i = 0; i < mat_data.numMaterials; ++i) {
+        Material &mat = mat_data.hostMaterials[i];
+        uint32_t flag = materialMayBeTranslucent(
+            mat, mat_data.hostMaterialTextures, mat_data.textureHasAlpha);
+        if (flag != mat.mayBeTranslucent) {
+            mat.mayBeTranslucent = flag;
+            REQ_CUDA(cudaMemcpy(mat_data.materials + i, &mat, sizeof(Material),
+                                cudaMemcpyHostToDevice));
+        }
+        any_translucent |= flag;
+    }
+    REQ_CUDA(cudaMemcpy(mat_data.anyTranslucent, &any_translucent,
+                        sizeof(uint32_t), cudaMemcpyHostToDevice));
 }
 #endif
 

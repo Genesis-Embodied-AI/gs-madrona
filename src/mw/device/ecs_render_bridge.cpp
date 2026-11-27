@@ -11,6 +11,7 @@ extern "C" __global__ void initBVHParams(madrona::BVHParams *params,
                                          void *materials,
                                          void *textures,
                                          void *material_textures,
+                                         void *any_translucent,
                                          uint32_t num_sms,
                                          uint32_t sm_shared_memory)
 {
@@ -63,6 +64,7 @@ extern "C" __global__ void initBVHParams(madrona::BVHParams *params,
     params->materials = (Material *)materials;
     params->textures = (cudaTextureObject_t *)textures;
     params->materialTextures = (int32_t *)material_textures;
+    params->anyTranslucent = (uint32_t *)any_translucent;
 
     params->raycastRGBD = raycast_rgbd;
 

@@ -114,6 +114,23 @@ public:
                            const madrona::math::Vector3 *cam_pos,
                            const madrona::math::Quat *cam_rot,
                            const uint32_t *render_options);
+
+    // Set the material each world draws each geom with, from a device array
+    // [numWorlds, numGeoms] of material indices, -1 drawing the geom with the
+    // material of its mesh and, for the ray tracer, -2 with its color. The
+    // next render draws them, after checking them on the host once it has
+    // synchronized: an id it cannot draw is reported by 'argumentError', and
+    // the last valid ids are restored before anything draws them.
+    MGR_EXPORT void setGeomMatIDs(const int32_t *mat_ids);
+
+    // Overwrite the RGBA8 pixels of some textures, each of the size it was
+    // loaded with, from a host array [numTextures, height, width, 4], and
+    // regenerate their mipmaps.
+    MGR_EXPORT void updateTextures(uint32_t num_textures,
+                                   const int32_t *texture_ids,
+                                   const uint8_t *pixels,
+                                   uint32_t width,
+                                   uint32_t height);
      
     // These functions export Tensor objects that link the ECS
     // simulation state to the python bindings / PyTorch tensors (src/bindings.cpp)
@@ -125,6 +142,9 @@ public:
 
     MGR_EXPORT uint32_t numWorlds() const;
     MGR_EXPORT uint32_t numCams() const;
+    MGR_EXPORT uint32_t numGeoms() const;
+    MGR_EXPORT uint32_t numMaterials() const;
+    MGR_EXPORT uint32_t numTextures() const;
 
     MGR_EXPORT uint32_t batchViewWidth() const;
     MGR_EXPORT uint32_t batchViewHeight() const;
@@ -137,6 +157,13 @@ public:
     // manager carrying a failure ignores every further operation.
     MGR_EXPORT const char * lastError() const;
 
+    // The invalid argument the last operation refused, nullptr when none. It
+    // leaves the manager usable, unlike 'lastError', and stays until
+    // 'clearArgumentError'. Errors cross the library boundary as strings,
+    // since its exceptions cannot be caught outside it.
+    MGR_EXPORT const char * argumentError() const;
+    MGR_EXPORT void clearArgumentError();
+
 private:
     struct Impl;
     struct CPUImpl;
@@ -146,6 +173,7 @@ private:
 
     std::unique_ptr<Impl> impl_;
     std::string lastError_;
+    std::string argumentError_;
 };
 
 }

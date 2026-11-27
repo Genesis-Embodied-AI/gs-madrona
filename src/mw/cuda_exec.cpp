@@ -1925,6 +1925,7 @@ static GPUEngineState initEngineAndUserState(
             render_cfg->materialData.materials,
             render_cfg->materialData.textures,
             render_cfg->materialData.materialTextures,
+            render_cfg->materialData.anyTranslucent,
             (uint32_t)num_sms,
             (uint32_t)shared_mem_per_sm);
 
@@ -2318,6 +2319,9 @@ MWCudaExecutor::~MWCudaExecutor()
         REQ_CUDA_NOTHROW(cudaFree(impl_->bvhKernels.materialData.textures));
     }
 
+    if (impl_->bvhKernels.materialData.anyTranslucent) {
+        REQ_CUDA_NOTHROW(cudaFree(impl_->bvhKernels.materialData.anyTranslucent));
+    }
     if (impl_->bvhKernels.materialData.materials) {
         REQ_CUDA_NOTHROW(cudaFree(impl_->bvhKernels.materialData.materials));
     }

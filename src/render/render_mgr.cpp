@@ -23,6 +23,14 @@ void RenderManager::configureLighting(Span<const LightDesc> lights)
     rctx_->configureLighting(lights);
 }
 
+void RenderManager::updateTexture(uint32_t texture_idx,
+                                  const uint8_t *rgba,
+                                  uint32_t width,
+                                  uint32_t height)
+{
+    rctx_->updateTexture(texture_idx, rgba, width, height);
+}
+
 RenderManager::RenderManager(
     APIBackend *render_backend,
     GPUDevice *render_dev,

@@ -28,6 +28,20 @@ struct MaterialData {
     uint32_t numMipmapTextureBuffers;
     int32_t *materialTextures;
     Material *materials;
+    // Host array: for each texture, the index of its array among
+    // mipmapTextureBuffers, -1 for a compressed texture held without mipmaps
+    int32_t *textureMipmapBufferIndices;
+    uint32_t numTextures;
+    // Host copies of the materials and of their texture indices, and whether
+    // each texture holds an alpha below one, which a texture write updates
+    // along with the flag of the materials holding it
+    Material *hostMaterials;
+    int32_t *hostMaterialTextures;
+    uint8_t *textureHasAlpha;
+    uint32_t numMaterials;
+    // Device flag: whether some material may be translucent, which a ray
+    // reads to skip the opacity of the surfaces it hits in an opaque scene
+    uint32_t *anyTranslucent;
 };
 
 

@@ -267,23 +267,31 @@ PixelOutput frag(in V2F v2f, in uint prim_id : SV_PrimitiveID)
     RenderOptions renderOptions = renderOptionsBuffer[0];
     float3 normal = normalize(v2f.worldNormal);
 
+    // The color of the surface, its material color times its texture, the
+    // texture of the world for a material holding one per world
+    MaterialData mat_data = materialBuffer[v2f.materialIdx];
+    float4 color = mat_data.color;
+    uint texture_count = mat_data.numTextures;
+    if (texture_count > 0) {
+        uint texture_start = mat_data.textureOffset;
+        int texture_idx = materialTexturesIndices[texture_start + v2f.worldIdx % texture_count];
+        if (texture_idx != -1) {
+            color *= materialTexturesArray[texture_idx].Sample(linearSampler, v2f.uv);
+        }
+    }
+
+    // A pixel the surface leaves uncovered shows what lies behind it, in
+    // every output
+    uint2 view_pixel = uint2(v2f.position.xy) -
+        uint2(pushConst.viewOffsetX, pushConst.viewOffsetY);
+    if (color.a < ditheredAlphaThreshold(view_pixel)) {
+        discard;
+    }
+
     if (!renderOptions.outputs[0]) {
         output.rgbOut = float4(0.0, 0.0, 0.0, 1.0);
     }
     else {
-        MaterialData mat_data = materialBuffer[v2f.materialIdx];
-        float4 color = mat_data.color;
-
-        int texture_idx = -1;
-        uint texture_count = mat_data.numTextures;
-        if (texture_count > 0) {
-            uint texture_start = mat_data.textureOffset;
-            texture_idx = materialTexturesIndices[texture_start + v2f.worldIdx % texture_count];
-        }
-        if (texture_idx != -1) {
-            color *= materialTexturesArray[texture_idx].Sample(linearSampler, v2f.uv);
-        }
-
         float3 totalLighting = float3(0.f, 0.f, 0.f);
         uint numLights = pushConst.numLights;
         float shadowFactor = shadowFactorVSM(v2f.worldPos, v2f.viewIdx);

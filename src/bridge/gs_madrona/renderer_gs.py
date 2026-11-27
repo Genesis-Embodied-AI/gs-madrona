@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from typing import Tuple
 
+import numpy as np
 import torch
 
 from gs_madrona._gs_madrona_batch_renderer import MadronaBatchRenderer
@@ -158,6 +159,45 @@ class MadronaBatchRendererAdapter:
         segmentation_torch = self.madrona.segmentation_tensor().to_torch()
         normal_torch = self.madrona.normal_tensor().to_torch()
         return rgb_torch, depth_torch, segmentation_torch, normal_torch 
+
+    def set_geom_mat_ids(self, geom_mat_ids: torch.Tensor):
+        """Set the material each world draws each geom with, from the next render on.
+
+        Parameters
+        ----------
+        geom_mat_ids : torch.Tensor
+            The int32 material indices of shape (num_worlds, num_geoms) on the GPU, -1 drawing a geom with the material
+            of its mesh, and -2 with its color for the ray tracer. Switching between the materials of a geom, such as
+            one per image of a texture, uploads nothing. The next render checks them once it reads them back, and raises
+            a ValueError for an index it cannot draw, the geoms keeping the materials they had.
+        """
+        self.madrona.set_geom_mat_ids(geom_mat_ids.to(dtype=torch.int32).contiguous())
+
+    def update_textures(self, texture_ids, pixels):
+        """Overwrite the pixels of some textures of the scene, and regenerate their mipmaps.
+
+        Parameters
+        ----------
+        texture_ids : array_like | torch.Tensor
+            The indices of the textures to write, among those passed at construction.
+        pixels : np.ndarray | torch.Tensor
+            The 8-bit sRGB RGBA pixels of shape (len(texture_ids), height, width, 4) and of type uint8, each texture
+            keeping the size it was created with.
+        """
+        if isinstance(texture_ids, torch.Tensor):
+            texture_ids = texture_ids.detach().cpu().numpy()
+        if len(texture_ids) == 0:
+            return
+        if isinstance(pixels, torch.Tensor):
+            if pixels.dtype != torch.uint8:
+                raise TypeError(f"Pixels are uint8, got {pixels.dtype}.")
+            pixels = pixels.detach().cpu().numpy()
+        elif np.asarray(pixels).dtype != np.uint8:
+            raise TypeError(f"Pixels are uint8, got {np.asarray(pixels).dtype}.")
+        self.madrona.update_textures(
+            np.ascontiguousarray(texture_ids, dtype=np.int32),
+            np.ascontiguousarray(pixels),
+        )
 
     ########################## Utils ##########################
     def get_camera_pos_rot_torch(self, cam_pos_tensor, cam_rot_tensor):

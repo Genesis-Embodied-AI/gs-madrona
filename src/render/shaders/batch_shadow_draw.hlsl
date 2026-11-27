@@ -29,9 +29,22 @@ StructuredBuffer<MeshData> meshDataBuffer;
 [[vk::binding(2, 2)]]
 StructuredBuffer<MaterialData> materialBuffer;
 
+// The textures of the materials, the set the RGB pass binds
+[[vk::binding(0, 3)]]
+Texture2D<float4> materialTexturesArray[];
+
+[[vk::binding(1, 3)]]
+SamplerState linearSampler;
+
+[[vk::binding(2, 3)]]
+StructuredBuffer<int> materialTexturesIndices;
+
 
 struct V2F {
     [[vk::location(0)]] float4 position : SV_Position;
+    [[vk::location(1)]] float2 uv : TEXCOORD0;
+    [[vk::location(2)]] int materialIdx : TEXCOORD1;
+    [[vk::location(3)]] uint worldIdx : TEXCOORD2;
 };
 
 float getSomethingVS()
@@ -46,13 +59,22 @@ float getSomethingVS()
     return float(min(0, something)) * 0.000000001;
 }
 
-float getSomethingPS()
+// The opacity of the surface at a point, its material alpha times the alpha
+// of its texture, the texture of the world for a material holding one per
+// world (as the RGB pass reads it)
+float surfaceAlpha(V2F v2f)
 {
-    // This is a hack to reference unused bound resources to avoid errors.
-    // TODO: Remove this once we have a proper way to handle this.
-    uint something = min(0, int(ceil(materialBuffer[0].color.w)));
-
-    return float(min(0, something)) * 0.000000001;
+    MaterialData mat_data = materialBuffer[v2f.materialIdx];
+    float alpha = mat_data.color.a;
+    uint texture_count = mat_data.numTextures;
+    if (texture_count > 0) {
+        uint texture_start = mat_data.textureOffset;
+        int texture_idx = materialTexturesIndices[texture_start + v2f.worldIdx % texture_count];
+        if (texture_idx != -1) {
+            alpha *= materialTexturesArray[texture_idx].Sample(linearSampler, v2f.uv).a;
+        }
+    }
+    return alpha;
 }
 
 [shader("vertex")]
@@ -78,6 +100,13 @@ void vert(in uint vid : SV_VertexID,
 #endif
 
     v2f.position = clip_pos;
+    v2f.uv = vert.uv;
+    v2f.worldIdx = instance_data.worldID;
+    if (instance_data.matID == -1) {
+        v2f.materialIdx = meshDataBuffer[draw_data.meshID].materialIndex;
+    } else {
+        v2f.materialIdx = instance_data.matID;
+    }
 }
 
 struct PixelOutput {
@@ -87,10 +116,13 @@ struct PixelOutput {
 [shader("pixel")]
 PixelOutput frag(in V2F v2f)
 {
+    // A surface casts the shadow of the pixels of the shadow map it covers,
+    // so that a cutout casts its pattern
+    if (surfaceAlpha(v2f) < ditheredAlphaThreshold(uint2(v2f.position.xy))) {
+        discard;
+    }
+
     float depth = v2f.position.z;
-#if 1
-    depth += getSomethingPS();
-#endif
 
     // VSM
     float dx = ddx(depth);

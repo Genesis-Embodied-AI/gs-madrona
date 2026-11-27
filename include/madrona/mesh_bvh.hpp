@@ -154,6 +154,10 @@ struct Material {
 
     float roughness;
     float metalness;
+
+    // Whether the color or a texture of the material holds an alpha below one,
+    // which a ray reads at each hit, an opaque material being skipped
+    uint32_t mayBeTranslucent;
 };
 
 struct TriangleIndices {
