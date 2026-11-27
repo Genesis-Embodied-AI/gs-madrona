@@ -9,6 +9,8 @@
 
 #include <array>
 #include <charconv>
+#include <stdexcept>
+#include <vector>
 #include <iostream>
 #include <filesystem>
 #include <fstream>
@@ -118,6 +120,20 @@ struct Manager::Impl {
 
     Optional<MWCudaLaunchGraph> raytraceGraph;
 
+    // The render graph also writing the materials and lights of the instances,
+    // run at init and by the first render after a change of the materials
+    Optional<MWCudaLaunchGraph> renderInitGraph =
+        Optional<MWCudaLaunchGraph>::none();
+    bool matsDirty = false;
+
+    // The textures of the scene, which 'updateTextures' writes into those of
+    // the pipeline drawing them
+    uint32_t numMats = 0;
+    std::vector<uint32_t> texWidths;
+    std::vector<uint32_t> texHeights;
+    Optional<render::MaterialData> rtMatData =
+        Optional<render::MaterialData>::none();
+
     static inline Impl * make(
         const Config &cfg,
         const GSModel &gs_model,
@@ -143,7 +159,12 @@ struct Manager::Impl {
           raytraceGraph(std::move(raytrace_graph))
     {}
 
-    inline ~Impl() {}
+    inline ~Impl()
+    {
+        if (rtMatData.has_value()) {
+            free(rtMatData->textureMipmapBufferIndices);
+        }
+    }
 
     inline void renderImpl(const render::RenderOptions &render_options)
     {
@@ -295,7 +316,7 @@ struct Manager::Impl {
                      const float *light_intensity)
     {
         MWCudaLaunchGraph init_graph = gpuExec.buildLaunchGraph(TaskGraphID::Init);
-        MWCudaLaunchGraph render_init_graph = gpuExec.buildLaunchGraph(TaskGraphID::RenderInit);
+        renderInitGraph = gpuExec.buildLaunchGraph(TaskGraphID::RenderInit);
 
         gpuExec.run(init_graph);
 
@@ -317,7 +338,39 @@ struct Manager::Impl {
             const_cast<float *>(light_attenuation),
             const_cast<float *>(light_intensity), 0);
 
-        gpuExec.run(render_init_graph);
+        gpuExec.run(*renderInitGraph);
+        matsDirty = false;
+    }
+
+    inline void setGeomMatIDs(const int32_t *mat_ids)
+    {
+        if (!renderInitGraph.has_value()) {
+            throw std::logic_error(
+                "The materials of the geoms are set after init");
+        }
+        copyInProperties(nullptr, const_cast<int32_t *>(mat_ids), nullptr,
+                         nullptr, nullptr, nullptr, nullptr, nullptr,
+                         nullptr, nullptr, nullptr, 0);
+        matsDirty = true;
+    }
+
+    inline void updateTextures(uint32_t num_textures,
+                               const int32_t *texture_ids,
+                               const uint8_t *pixels,
+                               uint32_t width,
+                               uint32_t height)
+    {
+        size_t num_bytes = (size_t)width * height * 4;
+        for (uint32_t i = 0; i < num_textures; i++) {
+            uint32_t texture_idx = (uint32_t)texture_ids[i];
+            const uint8_t *rgba = pixels + i * num_bytes;
+            if (cfg.useRT) {
+                render::AssetProcessor::updateMaterialTexture(
+                    *rtMatData, texture_idx, rgba, width, height);
+            } else if (renderMgr.has_value()) {
+                renderMgr->updateTexture(texture_idx, rgba, width, height);
+            }
+        }
     }
 
     inline render::RenderOptions makeRenderOptions(const uint32_t *render_options)
@@ -345,7 +398,14 @@ struct Manager::Impl {
             (Vector3 *)cam_pos,
             (Quat *)cam_rot, 0);
 
-        gpuExec.runAsync(renderGraph, 0);
+        // The first render after a change of the materials writes them into
+        // the instances along with their transforms
+        if (matsDirty) {
+            gpuExec.runAsync(*renderInitGraph, 0);
+            matsDirty = false;
+        } else {
+            gpuExec.runAsync(renderGraph, 0);
+        }
         // Currently a CPU sync is needed to read back the total number of
         // instances for Vulkan
         // TODO: Can we remove this? where is the total number read after this?
@@ -780,7 +840,7 @@ Manager::Impl * Manager::Impl::make(
     cu::deallocGPU(cam_zfar);
     cu::deallocGPU(cam_proj_type);
 
-    return new Impl {
+    Impl *impl = new Impl {
         mgr_cfg,
         gs_model.numGeoms,
         gs_model.numCams,
@@ -790,6 +850,15 @@ Manager::Impl * Manager::Impl::make(
         std::move(gpu_exec),
         std::move(raytrace_graph)
     };
+    impl->numMats = gs_model.numMats;
+    impl->texWidths.assign(gs_model.texWidths,
+                           gs_model.texWidths + gs_model.numTextures);
+    impl->texHeights.assign(gs_model.texHeights,
+                            gs_model.texHeights + gs_model.numTextures);
+    if (use_rt) {
+        impl->rtMatData = rt_assets.matData;
+    }
+    return impl;
 }
 
 Manager::Manager(const Config &cfg,
@@ -848,6 +917,56 @@ void Manager::render(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
     }
     try {
         impl_->render(geom_pos, geom_rot, cam_pos, cam_rot, render_options);
+    } catch (const std::exception &err) {
+        recordFailure(err);
+    }
+}
+
+void Manager::setGeomMatIDs(const int32_t *mat_ids)
+{
+    if (!lastError_.empty()) {
+        return;
+    }
+    try {
+        impl_->setGeomMatIDs(mat_ids);
+    } catch (const std::logic_error &) {
+        throw;
+    } catch (const std::exception &err) {
+        recordFailure(err);
+    }
+}
+
+void Manager::updateTextures(uint32_t num_textures,
+                             const int32_t *texture_ids,
+                             const uint8_t *pixels,
+                             uint32_t width,
+                             uint32_t height)
+{
+    if (!lastError_.empty()) {
+        return;
+    }
+    // A texture out of range or of another size is refused before any write
+    for (uint32_t i = 0; i < num_textures; i++) {
+        int32_t texture_idx = texture_ids[i];
+        if (texture_idx < 0 ||
+                (size_t)texture_idx >= impl_->texWidths.size()) {
+            throw std::out_of_range(
+                "Texture " + std::to_string(texture_idx) +
+                " is out of range, the scene holds " +
+                std::to_string(impl_->texWidths.size()) + " textures");
+        }
+        if (impl_->texWidths[texture_idx] != width ||
+                impl_->texHeights[texture_idx] != height) {
+            throw std::invalid_argument(
+                "Texture " + std::to_string(texture_idx) + " is " +
+                std::to_string(impl_->texWidths[texture_idx]) + "x" +
+                std::to_string(impl_->texHeights[texture_idx]) +
+                ", written with " + std::to_string(width) + "x" +
+                std::to_string(height) + " pixels");
+        }
+    }
+    try {
+        impl_->updateTextures(num_textures, texture_ids, pixels, width, height);
     } catch (const std::exception &err) {
         recordFailure(err);
     }
@@ -925,6 +1044,21 @@ uint32_t Manager::numWorlds() const
 uint32_t Manager::numCams() const
 {
     return impl_->numCams;
+}
+
+uint32_t Manager::numGeoms() const
+{
+    return impl_->numGeoms;
+}
+
+uint32_t Manager::numMaterials() const
+{
+    return impl_->numMats;
+}
+
+uint32_t Manager::numTextures() const
+{
+    return (uint32_t)impl_->texWidths.size();
 }
 
 uint32_t Manager::batchViewWidth() const

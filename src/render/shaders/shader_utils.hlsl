@@ -1,6 +1,22 @@
 #include "shader_common.h"
 #include "../../render/vk/shaders/utils.hlsl"
 
+// The alpha below which a surface leaves a pixel uncovered: the texels of zero
+// alpha of a cutout leave every pixel, and a surface of alpha a covers a
+// fraction a of the pixels of each 4x4 block (ordered dither), showing what
+// lies behind through the others.
+float ditheredAlphaThreshold(float2 pixel)
+{
+    static const float bayer[16] = {
+        0.0, 8.0, 2.0, 10.0,
+        12.0, 4.0, 14.0, 6.0,
+        3.0, 11.0, 1.0, 9.0,
+        15.0, 7.0, 13.0, 5.0,
+    };
+    uint2 cell = uint2(pixel) & 3u;
+    return (bayer[cell.y * 4u + cell.x] + 0.5) / 16.0;
+}
+
 float4 composeQuats(float4 a, float4 b)
 {
     return float4(

@@ -20,6 +20,13 @@ struct RenderContext {
 
     void configureLighting(Span<const LightDesc> lights);
 
+    // Overwrite the RGBA8 pixels of a loaded texture and regenerate its
+    // mipmaps. The image keeps the size it was loaded with.
+    void updateTexture(uint32_t texture_idx,
+                       const uint8_t *rgba,
+                       uint32_t width,
+                       uint32_t height);
+
     void waitForIdle();
 
     vk::Backend &backend;

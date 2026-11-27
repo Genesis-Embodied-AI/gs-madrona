@@ -1697,8 +1697,13 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
 
             num_total_vertices += mesh.numVertices;
             num_total_indices += mesh.numFaces * 3;
-            num_total_textures += src_mats[mesh.materialIDX].numTextures;
         }
+    }
+
+    // The texture indices of every material, those no mesh draws by default
+    // included, which an instance draws when its material is overridden
+    for (const SourceMaterial &mat : src_mats) {
+        num_total_textures += mat.numTextures;
     }
 
 
@@ -1973,6 +1978,49 @@ CountT RenderContext::loadObjects(Span<const imp::SourceObject> src_objs,
     });
 
     return 0;
+}
+
+void RenderContext::updateTexture(uint32_t texture_idx,
+                                  const uint8_t *rgba,
+                                  uint32_t width,
+                                  uint32_t height)
+{
+    if (texture_idx >= (uint32_t)material_textures_.size()) {
+        FATAL("Texture %u is out of range, the scene holds %u textures",
+              texture_idx, (uint32_t)material_textures_.size());
+    }
+    MaterialTexture &texture = material_textures_[texture_idx];
+    if (texture.image.width != width || texture.image.height != height) {
+        FATAL("Texture %u is %ux%u, written with %ux%u pixels", texture_idx,
+              texture.image.width, texture.image.height, width, height);
+    }
+
+    VkDeviceSize num_bytes = (VkDeviceSize)width * height * 4;
+    HostBuffer staging = alloc.makeStagingBuffer(num_bytes);
+    memcpy(staging.ptr, rgba, num_bytes);
+    staging.flush(dev);
+
+    GPURunUtil gpu_run {
+        load_cmd_pool_,
+        load_cmd_,
+        renderQueue,
+        load_fence_
+    };
+    gpu_run.begin(dev);
+
+    // The frames submitted before finish sampling the image before the copy
+    // replaces it
+    dev.dt.cmdPipelineBarrier(load_cmd_,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 0, nullptr, 0, nullptr);
+
+    copyBufferToImage(dev, load_cmd_, staging, texture.image.image,
+                      width, height, texture.image.mipLevels);
+    generateMipmaps(dev, load_cmd_, texture.image.image,
+                    (int32_t)width, (int32_t)height, texture.image.mipLevels);
+
+    gpu_run.submit(dev);
 }
 
 void RenderContext::configureLighting(Span<const LightDesc> lights)

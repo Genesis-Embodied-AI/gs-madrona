@@ -222,6 +222,49 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                 throw std::runtime_error(err);
             }
         })
+        .def("set_geom_mat_ids", [](Manager &mgr,
+            nb::ndarray<nb::pytorch, const int32_t, nb::shape<-1, -1>,
+                        nb::c_contig, nb::device::cuda> mat_ids)
+        {
+            if (mat_ids.shape(0) != mgr.numWorlds() ||
+                    mat_ids.shape(1) != mgr.numGeoms()) {
+                throw std::invalid_argument(
+                    "The material ids are of shape (num_worlds, num_geoms) = (" +
+                    std::to_string(mgr.numWorlds()) + ", " +
+                    std::to_string(mgr.numGeoms()) + ")");
+            }
+            mgr.setGeomMatIDs(reinterpret_cast<const int32_t *>(mat_ids.data()));
+            if (const char *err = mgr.lastError()) {
+                throw std::runtime_error(err);
+            }
+        }, nb::arg("mat_ids"),
+        "Set the material each world draws each geom with, -1 for the "
+        "material of its mesh, from the next render on.")
+        .def("update_textures", [](Manager &mgr,
+            nb::ndarray<const int32_t, nb::shape<-1>, nb::c_contig,
+                        nb::device::cpu> texture_ids,
+            nb::ndarray<const uint8_t, nb::shape<-1, -1, -1, 4>, nb::c_contig,
+                        nb::device::cpu> pixels)
+        {
+            if (texture_ids.shape(0) != pixels.shape(0)) {
+                throw std::invalid_argument(
+                    "One image of pixels is written per texture");
+            }
+            mgr.updateTextures(
+                (uint32_t)texture_ids.shape(0),
+                reinterpret_cast<const int32_t *>(texture_ids.data()),
+                reinterpret_cast<const uint8_t *>(pixels.data()),
+                (uint32_t)pixels.shape(2),
+                (uint32_t)pixels.shape(1));
+            if (const char *err = mgr.lastError()) {
+                throw std::runtime_error(err);
+            }
+        }, nb::arg("texture_ids"), nb::arg("pixels"),
+        "Overwrite the RGBA8 pixels (num_textures, height, width, 4) of some "
+        "textures, each of the size it was loaded with.")
+        .def_prop_ro("num_geoms", &Manager::numGeoms)
+        .def_prop_ro("num_materials", &Manager::numMaterials)
+        .def_prop_ro("num_textures", &Manager::numTextures)
         .def("rgb_tensor", &Manager::rgbTensor)
         .def("depth_tensor", &Manager::depthTensor)
         .def("normal_tensor", &Manager::normalTensor)

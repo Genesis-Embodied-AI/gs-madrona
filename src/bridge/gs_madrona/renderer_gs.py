@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from typing import Tuple
 
+import numpy as np
 import torch
 
 from gs_madrona._gs_madrona_batch_renderer import MadronaBatchRenderer
@@ -158,6 +159,41 @@ class MadronaBatchRendererAdapter:
         segmentation_torch = self.madrona.segmentation_tensor().to_torch()
         normal_torch = self.madrona.normal_tensor().to_torch()
         return rgb_torch, depth_torch, segmentation_torch, normal_torch 
+
+    def set_geom_mat_ids(self, geom_mat_ids: torch.Tensor):
+        """Set the material each world draws each geom with, from the next render on.
+
+        Parameters
+        ----------
+        geom_mat_ids : torch.Tensor
+            The int32 material indices of shape (num_worlds, num_geoms) on the GPU, -1 drawing a geom with the material
+            of its mesh. Switching between the materials of a geom, such as one per image of a texture, uploads nothing.
+        """
+        geom_mat_ids = geom_mat_ids.to(dtype=torch.int32).contiguous()
+        num_materials = self.madrona.num_materials
+        if geom_mat_ids.numel() > 0 and not bool(
+            ((geom_mat_ids >= -1) & (geom_mat_ids < num_materials)).all()
+        ):
+            raise ValueError(f"Material indices are -1 or among the {num_materials} materials of the scene.")
+        self.madrona.set_geom_mat_ids(geom_mat_ids)
+
+    def update_textures(self, texture_ids, pixels):
+        """Overwrite the pixels of some textures of the scene, and regenerate their mipmaps.
+
+        Parameters
+        ----------
+        texture_ids : array_like
+            The indices of the textures to write, among those passed at construction.
+        pixels : array_like
+            The 8-bit sRGB RGBA pixels of shape (len(texture_ids), height, width, 4), each texture keeping the size it
+            was created with.
+        """
+        if isinstance(pixels, torch.Tensor):
+            pixels = pixels.detach().to(device="cpu", dtype=torch.uint8).numpy()
+        self.madrona.update_textures(
+            np.ascontiguousarray(texture_ids, dtype=np.int32),
+            np.ascontiguousarray(pixels, dtype=np.uint8),
+        )
 
     ########################## Utils ##########################
     def get_camera_pos_rot_torch(self, cam_pos_tensor, cam_rot_tensor):

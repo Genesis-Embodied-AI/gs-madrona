@@ -28,6 +28,10 @@ struct MaterialData {
     uint32_t numMipmapTextureBuffers;
     int32_t *materialTextures;
     Material *materials;
+    // Host array: for each texture, the index of its array among
+    // mipmapTextureBuffers, -1 for a compressed texture held without mipmaps
+    int32_t *textureMipmapBufferIndices;
+    uint32_t numTextures;
 };
 
 

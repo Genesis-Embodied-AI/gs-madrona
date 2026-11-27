@@ -340,7 +340,9 @@ MaterialData initMaterialData(
         .mipmapTextureBuffers = (cudaMipmappedArray_t *) malloc(sizeof(cudaMipmappedArray_t) * num_mipmap_textures),
         .numMipmapTextureBuffers = num_mipmap_textures,
         .materialTextures = (int32_t *) malloc(sizeof(int32_t) * num_material_textures),
-        .materials = (Material *) malloc(sizeof(Material) * num_materials)
+        .materials = (Material *) malloc(sizeof(Material) * num_materials),
+        .textureMipmapBufferIndices = (int32_t *) malloc(sizeof(int32_t) * num_textures),
+        .numTextures = num_textures,
     };
 
     // Separate indices for texture buffer arrays (they have different sizes)
@@ -390,6 +392,7 @@ MaterialData initMaterialData(
 
             cpu_mat_data.textures[i] = tex_obj;
             cpu_mat_data.textureBuffers[non_mipmap_idx++] = cuda_array;
+            cpu_mat_data.textureMipmapBufferIndices[i] = -1;
         } else {
             // TODO: Only generate mipmaps for RGBA textures
             // RGBA uncompressed textures: generate mipmaps
@@ -434,6 +437,7 @@ MaterialData initMaterialData(
             cudaTextureObject_t tex_obj = 0;
             REQ_CUDA(cudaCreateTextureObject(&tex_obj, &res_desc, &tex_desc, nullptr));
             cpu_mat_data.textures[i] = tex_obj;
+            cpu_mat_data.textureMipmapBufferIndices[i] = (int32_t)mipmap_idx;
             cpu_mat_data.mipmapTextureBuffers[mipmap_idx++] = mipArray;
         }
     }
@@ -491,6 +495,57 @@ MaterialData initMaterialData(
     gpu_mat_data.materialTextures = gpu_mat_texs;
 
     return gpu_mat_data;
+}
+
+void updateMaterialTexture(
+    const MaterialData &mat_data,
+    uint32_t texture_idx,
+    const uint8_t *rgba,
+    uint32_t width,
+    uint32_t height)
+{
+    if (texture_idx >= mat_data.numTextures) {
+        FATAL("Texture %u is out of range, the scene holds %u textures",
+              texture_idx, mat_data.numTextures);
+    }
+    int32_t buffer_idx = mat_data.textureMipmapBufferIndices[texture_idx];
+    if (buffer_idx < 0) {
+        FATAL("Texture %u is compressed, whose pixels cannot be written",
+              texture_idx);
+    }
+    cudaMipmappedArray_t mip_array = mat_data.mipmapTextureBuffers[buffer_idx];
+
+    cudaArray_t level0;
+    REQ_CUDA(cudaGetMipmappedArrayLevel(&level0, mip_array, 0));
+    cudaChannelFormatDesc channel_desc;
+    cudaExtent extent;
+    unsigned int flags;
+    REQ_CUDA(cudaArrayGetInfo(&channel_desc, &extent, &flags, level0));
+    if (extent.width != width || extent.height != height) {
+        FATAL("Texture %u is %zux%zu, written with %ux%u pixels",
+              texture_idx, extent.width, extent.height, width, height);
+    }
+
+    const uint32_t MAX_MIPS = 16;
+    void* mip_data[MAX_MIPS] = {};
+    uint32_t mip_widths[MAX_MIPS];
+    uint32_t mip_heights[MAX_MIPS];
+    uint32_t num_mips;
+    generateMipmaps(rgba, width, height,
+                    mip_data, mip_widths, mip_heights, num_mips);
+
+    for (uint32_t mip = 0; mip < num_mips; mip++) {
+        cudaArray_t cuda_array;
+        REQ_CUDA(cudaGetMipmappedArrayLevel(&cuda_array, mip_array, mip));
+        REQ_CUDA(cudaMemcpy2DToArray(cuda_array, 0, 0, mip_data[mip],
+                                     mip_widths[mip] * 4,
+                                     mip_widths[mip] * 4,
+                                     mip_heights[mip],
+                                     cudaMemcpyHostToDevice));
+    }
+    for (uint32_t mip = 1; mip < num_mips; mip++) {
+        free(mip_data[mip]);
+    }
 }
 #endif
 

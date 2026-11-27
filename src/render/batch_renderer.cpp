@@ -431,7 +431,8 @@ static PipelineMP<1> makeDrawPipeline(const vk::Device &dev,
     };
 }
 
-static vk::PipelineShaders makeShadowDrawShaders(const vk::Device &dev)
+static vk::PipelineShaders makeShadowDrawShaders(
+    const vk::Device &dev, VkSampler repeat_sampler, uint32_t max_textures)
 {
     const char *py_root_env = getenv("MADRONA_ROOT_PATH");
     std::filesystem::path root_dir = py_root_env ? (std::string(py_root_env) + "/src/render") : STRINGIFY(MADRONA_RENDER_DATA_DIR);
@@ -444,17 +445,30 @@ static vk::PipelineShaders makeShadowDrawShaders(const vk::Device &dev)
         compiler.compileHLSLFileToSPV(shader_path.c_str(), {}, {}, { "frag", ShaderStage::Fragment }),
     };
 
+    // The texture set matches the one of the RGB pass (see 'makeDrawShaders'),
+    // which binds the same descriptor set
     StackAlloc tmp_alloc;
-    return vk::PipelineShaders(dev, tmp_alloc, shaders, {});
+    return vk::PipelineShaders(
+        dev, tmp_alloc, shaders,
+        Span<const vk::BindingOverride>({
+            vk::BindingOverride {
+                3, 0, VK_NULL_HANDLE, max_textures,
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+            },
+            vk::BindingOverride {3, 1, repeat_sampler, 1, 0}
+        })
+    );
 }
 
 static PipelineMP<1> makeShadowDrawPipeline(const vk::Device &dev,
                                     VkPipelineCache pipeline_cache,
                                     VkRenderPass render_pass,
                                     uint32_t num_frames,
-                                    uint32_t num_pools)
+                                    uint32_t num_pools,
+                                    VkSampler repeat_sampler,
+                                    uint32_t max_textures)
 {
-    auto shaders = makeShadowDrawShaders(dev);
+    auto shaders = makeShadowDrawShaders(dev, repeat_sampler, max_textures);
 
     VkPipelineVertexInputStateCreateInfo vert_info {};
     VkPipelineInputAssemblyStateCreateInfo input_assembly_info {};
@@ -513,10 +527,11 @@ static PipelineMP<1> makeShadowDrawPipeline(const vk::Device &dev,
     gfx_layout_info.flags = 0;
     
     // Descriptor set layouts
-    std::array<VkDescriptorSetLayout, 3> draw_desc_layouts {{
+    std::array<VkDescriptorSetLayout, 4> draw_desc_layouts {{
         shaders.getLayout(0),
         shaders.getLayout(1),
         shaders.getLayout(2),
+        shaders.getLayout(3),
     }};
     gfx_layout_info.setLayoutCount = static_cast<uint32_t>(draw_desc_layouts.size());
     gfx_layout_info.pSetLayouts = draw_desc_layouts.data();
@@ -1350,6 +1365,7 @@ static void issueShadowDraw(vk::Device &dev,
                             DrawCommandPackage &view_batch,
                             BatchFrame &batch_frame,
                             VkDescriptorSet asset_set,
+                            VkDescriptorSet asset_mat_tex_set,
                             const DynArray<AssetData> &loaded_assets)
 {
     // Pre shadow draw barrier
@@ -1431,10 +1447,11 @@ static void issueShadowDraw(vk::Device &dev,
         draw_cmd, loaded_assets[0].buf.buffer, loaded_assets[0].idxBufferOffset, VK_INDEX_TYPE_UINT32
     );
 
-    std::array<VkDescriptorSet, 3> draw_descriptors {
+    std::array<VkDescriptorSet, 4> draw_descriptors {
         batch_frame.shadowDrawSet,
         view_batch.drawBufferSetDraw,
         asset_set,
+        asset_mat_tex_set,
     };
 
     dev.dt.cmdBindDescriptorSets(
@@ -1616,7 +1633,8 @@ BatchRenderer::Impl::Impl(const Config &cfg, RenderContext &rctx):
     shadowDraw(
         makeShadowDrawPipeline(
             dev, rctx.pipelineCache, VK_NULL_HANDLE, 
-            consts::numDrawCmdBuffers * cfg.numFrames, 3)),
+            consts::numDrawCmdBuffers * cfg.numFrames, 3,
+            rctx.repeatSampler, rctx.max_textures_)),
     batchFrames(cfg.numFrames),
     assetSetPrepare(rctx.asset_set_cull_),
     assetSetTextureMat(rctx.asset_set_mat_tex_),
@@ -2381,6 +2399,7 @@ void BatchRenderer::renderViews(BatchRenderInfo info,
                         draw_package,
                         frame_data,
                         impl->assetSetLighting,
+                        impl->assetSetTextureMat,
                         loaded_assets);
         
         // Now, start the rasterization

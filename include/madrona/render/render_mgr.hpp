@@ -54,6 +54,13 @@ public:
 
     void configureLighting(Span<const LightDesc> lights);
 
+    // Overwrite the RGBA8 pixels of a loaded texture, of the size it was
+    // loaded with, and regenerate its mipmaps.
+    void updateTexture(uint32_t texture_idx,
+                       const uint8_t *rgba,
+                       uint32_t width,
+                       uint32_t height);
+
     const RenderECSBridge * bridge() const;
     inline RenderContext & renderContext() const;
 

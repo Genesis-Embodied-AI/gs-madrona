@@ -30,6 +30,8 @@ While gs-madrona currently depends on Genesis, we plan to decouple it in the nea
 - Support for normal and semantic/instance segmentation output
 - Per-camera dynamic FOV, near/far plane control
 - Light color specification and attenuation based on distance and angle
+- Material switching and texture writes at runtime, per world (`set_geom_mat_ids`, `update_textures`), which Genesis uses to draw `gs.textures.DynamicTexture`
+- Texture alpha in both pipelines: texels of zero alpha show what lies behind them and cast no shadow. The ray tracer blends translucent texels front to back and attenuates the shadows they cast, and the rasterizer covers a fraction of the pixels equal to their alpha (4x4 ordered dither)
 
 ## Removed Features
 - Legacy depth-only rendering via color buffer
