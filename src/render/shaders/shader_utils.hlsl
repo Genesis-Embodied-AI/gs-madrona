@@ -1,11 +1,24 @@
 #include "shader_common.h"
 #include "../../render/vk/shaders/utils.hlsl"
 
-// The alpha from which a surface covers a pixel (the glTF MASK default). The
-// rasterizer draws a surface below it in no output and one above it opaque,
-// as the ray tracer reports the depth, the normal and the segmentation of the
-// first surface reaching it.
-static const float kAlphaCutoff = 0.5;
+// The alpha from which a surface covers a pixel of a view: the texels of zero
+// alpha of a cutout cover none, and a surface of alpha a covers a fraction a
+// of the pixels of each 4x4 block (ordered dither), showing what lies behind
+// through the others. The ray tracer picks the surface giving the depth, the
+// normal and the segmentation of each pixel with the same threshold (see
+// 'ditheredCoverage' in bvh_raycast.cpp), so both pipelines report the same
+// surface at each pixel.
+float ditheredAlphaThreshold(uint2 pixel)
+{
+    static const float bayer[16] = {
+        0.0, 8.0, 2.0, 10.0,
+        12.0, 4.0, 14.0, 6.0,
+        3.0, 11.0, 1.0, 9.0,
+        15.0, 7.0, 13.0, 5.0,
+    };
+    uint2 cell = pixel & 3u;
+    return (bayer[cell.y * 4u + cell.x] + 0.5) / 16.0;
+}
 
 float4 composeQuats(float4 a, float4 b)
 {

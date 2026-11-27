@@ -83,10 +83,21 @@ struct TraceResult {
 static constexpr float kTransparentOpacity = 0.5f / 255.f;
 
 // The opacity from which a surface covers a pixel in the depth, normal and
-// segmentation outputs, as an alpha cutoff (the glTF MASK default). The
-// rasterizer draws a surface below it in no output and one above it opaque, so
-// that both pipelines report the same surface at each pixel.
-static constexpr float kCoverageOpacity = 0.5f;
+// segmentation outputs: a surface of opacity a covers a fraction a of the
+// pixels of each 4x4 block, by the ordered dither the rasterizer discards its
+// pixels with (see 'ditheredAlphaThreshold' in shader_utils.hlsl), so that
+// both pipelines report the same surface at each pixel.
+static __device__ inline float ditheredCoverage(uint32_t pixel_x,
+                                                uint32_t pixel_y)
+{
+    constexpr float bayer[16] = {
+        0.f, 8.f, 2.f, 10.f,
+        12.f, 4.f, 14.f, 6.f,
+        3.f, 11.f, 1.f, 9.f,
+        15.f, 7.f, 13.f, 5.f,
+    };
+    return (bayer[(pixel_y & 3u) * 4u + (pixel_x & 3u)] + 0.5f) / 16.f;
+}
 
 // The number of translucent surfaces a camera ray crosses before the last one
 // counts as opaque, and a shadow ray crosses before it stops, letting through
@@ -885,7 +896,7 @@ static __device__ float compute_attenuating(float d, float attenuation) {
 }
 
 struct FragmentResult {
-    // Whether a surface covers the pixel (see 'kCoverageOpacity'), which the
+    // Whether a surface covers the pixel (see 'ditheredCoverage'), which the
     // depth, the normal and the segmentation are those of
     bool hit;
     // The color of the pixel, which translucent surfaces that cover it in no
@@ -1006,7 +1017,8 @@ static __device__ Vector3 shadeHit(const TraceInfo &trace_info,
 
 static __device__ FragmentResult computeFragment(
     TraceInfo trace_info,
-    TraceWorldInfo world_info)
+    TraceWorldInfo world_info,
+    float coverage_opacity)
 {
     // Direct hit first
     TraceResult layer_hit = traceRay(trace_info, world_info);
@@ -1019,8 +1031,8 @@ static __device__ FragmentResult computeFragment(
     };
 
     // The ray goes through the surfaces it hits, front to back. The first one
-    // whose opacity reaches the coverage cutoff gives the depth, the normal
-    // and the segmentation. Each one adds its color in proportion to its
+    // whose opacity reaches the coverage threshold of the pixel gives the
+    // depth, the normal and the segmentation. Each one adds its color in proportion to its
     // opacity and to what the surfaces before it let through, the black
     // background where the ray leaves the scene, and the last one counting as
     // opaque.
@@ -1032,7 +1044,7 @@ static __device__ FragmentResult computeFragment(
         if (!layer_hit.hit) {
             break;
         }
-        if (!result.hit && layer_hit.opacity >= kCoverageOpacity) {
+        if (!result.hit && layer_hit.opacity >= coverage_opacity) {
             result.hit = true;
             result.depth = layer_info.lodDistance - trace_info.lodDistance +
                 layer_hit.depth;
@@ -1105,7 +1117,8 @@ extern "C" __global__ void bvhRaycastEntry()
                 .instances = bvhParams.instances + internal_nodes_offset,
                 .lights = &bvhParams.lights[bvhParams.lightOffsets[world_idx]],
                 .numLights = (uint32_t)bvhParams.lightCounts[world_idx]
-            }
+            },
+            ditheredCoverage(pixel_x, pixel_y)
         );
 
         uint32_t linear_pixel_idx = 4 * (pixel_x + pixel_y * bvhParams.renderOutputWidth);

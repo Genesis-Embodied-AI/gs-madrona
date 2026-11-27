@@ -8,6 +8,10 @@ struct BatchDrawPushConst {
     uint maxShadowMapsYPerTarget;
     uint shadowMapWidth;
     uint shadowMapHeight;
+    // The pixel of the target the view starts at, which the pixels of the
+    // view are counted from
+    uint viewOffsetX;
+    uint viewOffsetY;
 };
 
 struct GridDrawPushConst {

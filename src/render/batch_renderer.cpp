@@ -1214,7 +1214,9 @@ static void issueRasterization(vk::Device &dev,
             .maxShadowMapsXPerTarget = max_shadow_map_x,
             .maxShadowMapsYPerTarget = max_shadow_map_y,
             .shadowMapWidth = target.shadowMapSize,
-            .shadowMapHeight = target.shadowMapSize
+            .shadowMapHeight = target.shadowMapSize,
+            .viewOffsetX = image_x * target.viewWidth,
+            .viewOffsetY = image_y * target.viewHeight,
         };
 
         dev.dt.cmdPushConstants(

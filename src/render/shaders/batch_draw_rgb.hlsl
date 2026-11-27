@@ -282,7 +282,9 @@ PixelOutput frag(in V2F v2f, in uint prim_id : SV_PrimitiveID)
 
     // A pixel the surface leaves uncovered shows what lies behind it, in
     // every output
-    if (color.a < kAlphaCutoff) {
+    uint2 view_pixel = uint2(v2f.position.xy) -
+        uint2(pushConst.viewOffsetX, pushConst.viewOffsetY);
+    if (color.a < ditheredAlphaThreshold(view_pixel)) {
         discard;
     }
 
