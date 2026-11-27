@@ -117,9 +117,10 @@ public:
 
     // Set the material each world draws each geom with, from a device array
     // [numWorlds, numGeoms] of material indices, -1 drawing the geom with the
-    // material of its mesh. The next render draws them, after checking them
-    // on the host once it has synchronized: an id out of [-1, numMaterials)
-    // throws std::invalid_argument and restores the last valid ids.
+    // material of its mesh and, for the ray tracer, -2 with its color. The
+    // next render draws them, after checking them on the host once it has
+    // synchronized: an id it cannot draw is reported by 'argumentError', and
+    // the last valid ids are restored before anything draws them.
     MGR_EXPORT void setGeomMatIDs(const int32_t *mat_ids);
 
     // Overwrite the RGBA8 pixels of some textures, each of the size it was

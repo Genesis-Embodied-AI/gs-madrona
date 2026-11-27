@@ -247,9 +247,10 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
             raiseManagerError(mgr);
         }, nb::arg("mat_ids"),
         "Set the material each world draws each geom with, -1 for the "
-        "material of its mesh, from the next render on. That render checks "
-        "the ids once it reads them back and raises a ValueError for one out "
-        "of [-1, num_materials), restoring the last valid ids.")
+        "material of its mesh (and -2 for the color of the geom with the ray "
+        "tracer), from the next render on. That render checks the ids once "
+        "it reads them back and raises a ValueError for one it cannot draw, "
+        "restoring the last valid ids.")
         .def("update_textures", [](Manager &mgr,
             nb::ndarray<const int32_t, nb::shape<-1>, nb::c_contig,
                         nb::device::cpu> texture_ids,

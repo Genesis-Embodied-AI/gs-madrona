@@ -167,9 +167,9 @@ class MadronaBatchRendererAdapter:
         ----------
         geom_mat_ids : torch.Tensor
             The int32 material indices of shape (num_worlds, num_geoms) on the GPU, -1 drawing a geom with the material
-            of its mesh. Switching between the materials of a geom, such as one per image of a texture, uploads nothing.
-            The next render checks them once it reads them back, and raises a ValueError for an index out of
-            [-1, num_materials), the geoms keeping the materials they had.
+            of its mesh, and -2 with its color for the ray tracer. Switching between the materials of a geom, such as
+            one per image of a texture, uploads nothing. The next render checks them once it reads them back, and raises
+            a ValueError for an index it cannot draw, the geoms keeping the materials they had.
         """
         self.madrona.set_geom_mat_ids(geom_mat_ids.to(dtype=torch.int32).contiguous())
 
@@ -178,12 +178,14 @@ class MadronaBatchRendererAdapter:
 
         Parameters
         ----------
-        texture_ids : array_like
+        texture_ids : array_like | torch.Tensor
             The indices of the textures to write, among those passed at construction.
         pixels : np.ndarray | torch.Tensor
             The 8-bit sRGB RGBA pixels of shape (len(texture_ids), height, width, 4) and of type uint8, each texture
             keeping the size it was created with.
         """
+        if isinstance(texture_ids, torch.Tensor):
+            texture_ids = texture_ids.detach().cpu().numpy()
         if isinstance(pixels, torch.Tensor):
             if pixels.dtype != torch.uint8:
                 raise TypeError(f"Pixels are uint8, got {pixels.dtype}.")

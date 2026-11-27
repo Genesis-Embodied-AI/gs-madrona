@@ -100,8 +100,7 @@ static __device__ inline float ditheredCoverage(uint32_t pixel_x,
 }
 
 // The number of translucent surfaces a camera ray crosses before the last one
-// counts as opaque, and a shadow ray crosses before it stops, letting through
-// what is left.
+// counts as opaque. A shadow ray crosses them all in one traversal.
 static constexpr int kMaxTranslucentLayers = 8;
 
 struct TraceInfo {
@@ -109,7 +108,9 @@ struct TraceInfo {
     Vector3 rayDirection;
     float tMin;
     float tMax;
-    bool dOnly; // Depth only
+    // A shadow ray, which reads no color and goes through translucent
+    // surfaces, multiplying the light they let through (see 'traceRay')
+    bool dOnly;
     // The distance from the camera to the origin of the ray, for a ray
     // continuing past a surface or toward a light, which selects the level of
     // detail of the textures it samples along with the distance it travels
@@ -577,13 +578,16 @@ static __device__ SurfaceSample sampleSurface(const InstanceData *instance,
     if (mat->numTextures > 0) {
         int32_t texture_idx = bvhParams.materialTextures[
             mat->textureOffset + instance->worldID % mat->numTextures];
-        cudaTextureObject_t *tex = bvhParams.textures + texture_idx;
-        float4 texel = tex2DLod<float4>(
-            *tex, tri_hit.uv.x, tri_hit.uv.y, textureLod(dist));
-        sample.color.x *= texel.x;
-        sample.color.y *= texel.y;
-        sample.color.z *= texel.z;
-        sample.opacity *= texel.w;
+        // A world without a texture in the material (-1) draws its color
+        if (texture_idx >= 0) {
+            cudaTextureObject_t *tex = bvhParams.textures + texture_idx;
+            float4 texel = tex2DLod<float4>(
+                *tex, tri_hit.uv.x, tri_hit.uv.y, textureLod(dist));
+            sample.color.x *= texel.x;
+            sample.color.y *= texel.y;
+            sample.color.z *= texel.z;
+            sample.opacity *= texel.w;
+        }
     }
 
     return sample;
@@ -649,6 +653,16 @@ static __device__ TraceResult traceRay(
         .hit = false,
         .instanceIdx = -1
     };
+
+    // A scene whose materials are all opaque skips the opacity of the surfaces
+    // the ray hits
+    bool any_translucent = bvhParams.anyTranslucent != nullptr &&
+        *bvhParams.anyTranslucent != 0;
+
+    // The light a shadow ray lets through, the product of one minus the
+    // opacity of each translucent surface it crosses, which their order does
+    // not change, so that one traversal visits them all without stopping
+    float transmittance = 1.f;
 
     for (;;) {
         if (GroupType parent_grp_type = getGroupType(current_grp); 
@@ -772,12 +786,17 @@ static __device__ TraceResult traceRay(
                 // A ray goes through the texels of a cutout, whose alpha is
                 // zero, and stops at any other part of a surface
                 if (hit_info.hit) {
-                    InstanceData *hit_instance =
-                        world_info.instances + instance_idx;
-                    float opacity = surfaceOpacity(
-                        hit_instance, hit_info,
-                        trace_info.lodDistance + hit_info.tHit / t_scale);
-                    if (opacity > kTransparentOpacity) {
+                    float opacity = 1.f;
+                    if (any_translucent) {
+                        opacity = surfaceOpacity(
+                            world_info.instances + instance_idx, hit_info,
+                            trace_info.lodDistance + hit_info.tHit / t_scale);
+                    }
+                    if (opacity <= kTransparentOpacity) {
+                        // Through a cutout
+                    } else if (trace_info.dOnly && opacity < 1.f) {
+                        transmittance *= 1.f - opacity;
+                    } else {
                         t_max = hit_info.tHit;
                         tri_hit = hit_info;
                         tri_hit.instanceIdx = instance_idx;
@@ -832,12 +851,20 @@ static __device__ TraceResult traceRay(
             }
             result.normal = instance->rotation.rotateVec(tri_hit.normal);
             result.segmentation = instance->objectID;
-        } else {
-            result.opacity = surfaceOpacity(instance, tri_hit, lod_dist);
+        } else if (!trace_info.dOnly) {
+            result.opacity = any_translucent ?
+                surfaceOpacity(instance, tri_hit, lod_dist) : 1.f;
         }
 
         result.depth = tri_hit.tHit;
         result.hit = true;
+    }
+
+    // A shadow ray reports the opacity of everything it crossed, one with an
+    // opaque surface
+    if (trace_info.dOnly) {
+        result.hit = tri_hit.hit || transmittance < 1.f;
+        result.opacity = tri_hit.hit ? 1.f : 1.f - transmittance;
     }
 
     return result;
@@ -932,27 +959,15 @@ static __device__ float shadowTransmittance(Vector3 origin,
                                             float lod_distance,
                                             TraceWorldInfo world_info)
 {
-    float transmittance = 1.f;
-    TraceInfo info = {
+    TraceResult hit = traceRay(TraceInfo {
         .rayOrigin = origin,
         .rayDirection = to_light,
         .tMin = 0.000001f,
         .tMax = max_dist,
         .dOnly = true,
         .lodDistance = lod_distance,
-    };
-    for (int layer = 0; layer < kMaxTranslucentLayers; ++layer) {
-        TraceResult hit = traceRay(info, world_info);
-        if (!hit.hit) {
-            return transmittance;
-        }
-        transmittance *= 1.f - hit.opacity;
-        if (transmittance < 1e-3f) {
-            return 0.f;
-        }
-        continueRay(info, hit.depth);
-    }
-    return transmittance;
+    }, world_info);
+    return hit.hit ? 1.f - hit.opacity : 1.f;
 }
 
 // The linear radiance of the surface a camera ray hit, lit by the lights of
@@ -1032,10 +1047,10 @@ static __device__ FragmentResult computeFragment(
 
     // The ray goes through the surfaces it hits, front to back. The first one
     // whose opacity reaches the coverage threshold of the pixel gives the
-    // depth, the normal and the segmentation. Each one adds its color in proportion to its
-    // opacity and to what the surfaces before it let through, the black
-    // background where the ray leaves the scene, and the last one counting as
-    // opaque.
+    // depth, the normal and the segmentation. Each one adds its color in
+    // proportion to its opacity and to what the surfaces before it let
+    // through, the black background where the ray leaves the scene, and the
+    // last one counting as opaque.
     bool is_rgb = bvhParams.raycastRGBD;
     Vector3 color = { 0.f, 0.f, 0.f };
     float transmittance = 1.f;

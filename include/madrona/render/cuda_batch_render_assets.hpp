@@ -39,6 +39,9 @@ struct MaterialData {
     int32_t *hostMaterialTextures;
     uint8_t *textureHasAlpha;
     uint32_t numMaterials;
+    // Device flag: whether some material may be translucent, which a ray
+    // reads to skip the opacity of the surfaces it hits in an opaque scene
+    uint32_t *anyTranslucent;
 };
 
 

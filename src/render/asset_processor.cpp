@@ -376,6 +376,7 @@ MaterialData initMaterialData(
         .hostMaterialTextures = nullptr,
         .textureHasAlpha = (uint8_t *) malloc(num_textures > 0 ? num_textures : 1),
         .numMaterials = num_materials,
+        .anyTranslucent = nullptr,
     };
 
     // A compressed texture counts as holding alpha, its blocks unread
@@ -520,6 +521,14 @@ MaterialData initMaterialData(
                 sizeof(Material) * num_materials,
                 cudaMemcpyHostToDevice));
 
+    uint32_t any_translucent = 0;
+    for (uint32_t i = 0; i < num_materials; ++i) {
+        any_translucent |= cpu_mat_data.materials[i].mayBeTranslucent;
+    }
+    REQ_CUDA(cudaMalloc(&cpu_mat_data.anyTranslucent, sizeof(uint32_t)));
+    REQ_CUDA(cudaMemcpy(cpu_mat_data.anyTranslucent, &any_translucent,
+                        sizeof(uint32_t), cudaMemcpyHostToDevice));
+
     int32_t *gpu_mat_texs;
     REQ_CUDA(cudaMalloc(&gpu_mat_texs, sizeof(int32_t) * num_material_textures));
     REQ_CUDA(cudaMemcpy(gpu_mat_texs, cpu_mat_data.materialTextures, 
@@ -606,6 +615,7 @@ void updateMaterialTexture(
         return;
     }
     mat_data.textureHasAlpha[texture_idx] = has_alpha;
+    uint32_t any_translucent = 0;
     for (uint32_t i = 0; i < mat_data.numMaterials; ++i) {
         Material &mat = mat_data.hostMaterials[i];
         uint32_t flag = materialMayBeTranslucent(
@@ -615,7 +625,10 @@ void updateMaterialTexture(
             REQ_CUDA(cudaMemcpy(mat_data.materials + i, &mat, sizeof(Material),
                                 cudaMemcpyHostToDevice));
         }
+        any_translucent |= flag;
     }
+    REQ_CUDA(cudaMemcpy(mat_data.anyTranslucent, &any_translucent,
+                        sizeof(uint32_t), cudaMemcpyHostToDevice));
 }
 #endif
 

@@ -154,6 +154,9 @@ struct BVHParams {
     Material *materials;
     cudaTextureObject_t *textures;
     int32_t *materialTextures;
+    // Whether some material may be translucent (see 'MaterialData'), nullptr
+    // without materials
+    uint32_t *anyTranslucent;
 
     // Used to determine how many thread blocks per SM.
     uint32_t numSMs;

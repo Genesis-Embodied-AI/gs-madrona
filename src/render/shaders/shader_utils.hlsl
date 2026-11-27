@@ -7,7 +7,8 @@
 // through the others. The ray tracer picks the surface giving the depth, the
 // normal and the segmentation of each pixel with the same threshold (see
 // 'ditheredCoverage' in bvh_raycast.cpp), so both pipelines report the same
-// surface at each pixel.
+// surface at each pixel of a surface of uniform alpha, textured cutouts
+// differing at the edges they filter at different mip levels.
 float ditheredAlphaThreshold(uint2 pixel)
 {
     static const float bayer[16] = {

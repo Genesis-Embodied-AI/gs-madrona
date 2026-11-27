@@ -368,17 +368,23 @@ struct Manager::Impl {
         }
     }
 
-    // The message for the first material id out of [-1, numMats), nullptr
-    // when they are all valid
+    // The message for the first material id the pipeline cannot draw,
+    // nullptr when it draws them all: a material, -1 for the material of the
+    // mesh, and for the ray tracer -2 for the color of the geom (geom_rgb),
+    // which the rasterizer has no use for.
     inline const char * findInvalidMatID(const int32_t *ids)
     {
+        int32_t min_id = cfg.useRT ?
+            (int32_t)MaterialOverride::UseOverrideColor :
+            (int32_t)MaterialOverride::UseDefaultMaterial;
         size_t num_ids = (size_t)cfg.numWorlds * numGeoms;
         for (size_t i = 0; i < num_ids; i++) {
-            if (ids[i] < -1 || ids[i] >= (int32_t)numMats) {
+            if (ids[i] < min_id || ids[i] >= (int32_t)numMats) {
                 matIDError = "Material id " + std::to_string(ids[i]) +
                     " of geom " + std::to_string(i % numGeoms) +
                     " in world " + std::to_string(i / numGeoms) +
-                    " is out of [-1, " + std::to_string(numMats) +
+                    " is out of [" + std::to_string(min_id) + ", " +
+                    std::to_string(numMats) +
                     "); the materials of the geoms are left as they were";
                 return matIDError.c_str();
             }
