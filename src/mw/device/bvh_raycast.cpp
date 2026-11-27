@@ -1059,7 +1059,10 @@ static __device__ FragmentResult computeFragment(
         if (!layer_hit.hit) {
             break;
         }
-        if (!result.hit && layer_hit.opacity >= coverage_opacity) {
+        // The last layer counts as opaque in every output
+        bool is_last = layer == kMaxTranslucentLayers - 1;
+        if (!result.hit &&
+                (is_last || layer_hit.opacity >= coverage_opacity)) {
             result.hit = true;
             result.depth = layer_info.lodDistance - trace_info.lodDistance +
                 layer_hit.depth;
@@ -1067,8 +1070,7 @@ static __device__ FragmentResult computeFragment(
             result.segmentation = layer_hit.segmentation;
         }
         if (is_rgb && transmittance >= 1.f / 512.f) {
-            float opacity = layer == kMaxTranslucentLayers - 1 ?
-                1.f : layer_hit.opacity;
+            float opacity = is_last ? 1.f : layer_hit.opacity;
             color += (transmittance * opacity) *
                 shadeHit(layer_info, layer_hit, world_info);
             transmittance *= 1.f - opacity;

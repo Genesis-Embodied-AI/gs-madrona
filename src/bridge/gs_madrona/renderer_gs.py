@@ -186,6 +186,8 @@ class MadronaBatchRendererAdapter:
         """
         if isinstance(texture_ids, torch.Tensor):
             texture_ids = texture_ids.detach().cpu().numpy()
+        if len(texture_ids) == 0:
+            return
         if isinstance(pixels, torch.Tensor):
             if pixels.dtype != torch.uint8:
                 raise TypeError(f"Pixels are uint8, got {pixels.dtype}.")

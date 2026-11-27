@@ -28,6 +28,28 @@ using namespace madrona::imp;
 
 namespace madGS {
 
+// An argument the manager refuses, which leaves it usable (see
+// 'Manager::argumentError'), told apart from the failures of the libraries it
+// calls
+struct ArgumentError : std::invalid_argument {
+    using std::invalid_argument::invalid_argument;
+};
+
+// Frees the host arrays of the ray tracer's material data, which the manager
+// owns once it is made, should the construction fail before
+struct RTMaterialHostArrays {
+    render::MaterialData *data = nullptr;
+    ~RTMaterialHostArrays()
+    {
+        if (data != nullptr) {
+            free(data->textureMipmapBufferIndices);
+            free(data->hostMaterials);
+            free(data->hostMaterialTextures);
+            free(data->textureHasAlpha);
+        }
+    }
+};
+
 struct RenderGPUState {
     render::APILibHandle apiLib;
     render::APIManager apiMgr;
@@ -363,7 +385,7 @@ struct Manager::Impl {
             if (err != nullptr) {
                 validMatIDs.assign(num_ids, -1);
                 restoreValidMatIDs();
-                throw std::invalid_argument(err);
+                throw ArgumentError(err);
             }
         }
     }
@@ -409,7 +431,7 @@ struct Manager::Impl {
             return;
         }
         restoreValidMatIDs();
-        throw std::invalid_argument(err);
+        throw ArgumentError(err);
     }
 
     // Write the last valid material ids back into the instances, which the
@@ -426,7 +448,7 @@ struct Manager::Impl {
     inline void setGeomMatIDs(const int32_t *mat_ids)
     {
         if (!renderInitGraph.has_value()) {
-            throw std::logic_error(
+            throw ArgumentError(
                 "The materials of the geoms are set after init");
         }
         size_t num_ids = (size_t)cfg.numWorlds * numGeoms;
@@ -832,6 +854,10 @@ Manager::Impl * Manager::Impl::make(
         initRenderManager(mgr_cfg, gs_model, viz_gpu_hdls, render_gpu_state);
 
     RTAssets rt_assets = loadRenderObjects(gs_model, render_mgr, use_rt);
+    RTMaterialHostArrays rt_host_arrays;
+    if (use_rt) {
+        rt_host_arrays.data = &rt_assets.matData;
+    }
     if (render_mgr.has_value()) {
         sim_cfg.renderBridge = render_mgr->bridge();
     } else {
@@ -948,6 +974,7 @@ Manager::Impl * Manager::Impl::make(
                             gs_model.texHeights + gs_model.numTextures);
     if (use_rt) {
         impl->rtMatData = rt_assets.matData;
+        rt_host_arrays.data = nullptr;
     }
     return impl;
 }
@@ -1004,7 +1031,7 @@ void Manager::init(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
             geom_pos, geom_rot, cam_pos, cam_rot, mat_ids, geom_rgb, geom_sizes,
             light_pos, light_dir, light_rgb, light_isdir, light_castshadow,
             light_cutoff, light_attenuation, light_intensity);
-    } catch (const std::invalid_argument &err) {
+    } catch (const ArgumentError &err) {
         argumentError_ = err.what();
     } catch (const std::exception &err) {
         recordFailure(err);
@@ -1020,7 +1047,7 @@ void Manager::render(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
     }
     try {
         impl_->render(geom_pos, geom_rot, cam_pos, cam_rot, render_options);
-    } catch (const std::invalid_argument &err) {
+    } catch (const ArgumentError &err) {
         // Material ids out of range, which were replaced before anything drew
         // them, leave the manager usable
         argumentError_ = err.what();
@@ -1036,7 +1063,7 @@ void Manager::setGeomMatIDs(const int32_t *mat_ids)
     }
     try {
         impl_->setGeomMatIDs(mat_ids);
-    } catch (const std::logic_error &err) {
+    } catch (const ArgumentError &err) {
         argumentError_ = err.what();
     } catch (const std::exception &err) {
         recordFailure(err);
