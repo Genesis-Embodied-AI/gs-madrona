@@ -13,6 +13,20 @@ namespace nb = nanobind;
 
 namespace madGS {
 
+// Raise the failure of the last operation of a manager. An invalid argument
+// leaves it usable and is cleared as it is raised.
+static void raiseManagerError(Manager &mgr)
+{
+    if (const char *err = mgr.argumentError()) {
+        std::string message = err;
+        mgr.clearArgumentError();
+        throw std::invalid_argument(message);
+    }
+    if (const char *err = mgr.lastError()) {
+        throw std::runtime_error(err);
+    }
+}
+
 // This file creates the python bindings used by the learning code.
 // Refer to the nanobind documentation for more details on these functions.
 NB_MODULE(_gs_madrona_batch_renderer, m) {
@@ -200,9 +214,7 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                 light_attenuation.shape(0) > 0 ? reinterpret_cast<const float *>(light_attenuation.data()) : nullptr,
                 light_intensity.shape(0) > 0 ? reinterpret_cast<const float *>(light_intensity.data()) : nullptr
             );
-            if (const char *err = mgr.lastError()) {
-                throw std::runtime_error(err);
-            }
+            raiseManagerError(mgr);
         })
         .def("render", [](Manager &mgr,
             nb::ndarray<nb::pytorch, const float, nb::shape<-1, -1, 3>> geom_pos,
@@ -218,9 +230,7 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                 reinterpret_cast<const math::Quat *>(cam_rot.data()),
                 reinterpret_cast<const uint32_t *>(render_options.data())
             );
-            if (const char *err = mgr.lastError()) {
-                throw std::runtime_error(err);
-            }
+            raiseManagerError(mgr);
         })
         .def("set_geom_mat_ids", [](Manager &mgr,
             nb::ndarray<nb::pytorch, const int32_t, nb::shape<-1, -1>,
@@ -234,12 +244,12 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                     std::to_string(mgr.numGeoms()) + ")");
             }
             mgr.setGeomMatIDs(reinterpret_cast<const int32_t *>(mat_ids.data()));
-            if (const char *err = mgr.lastError()) {
-                throw std::runtime_error(err);
-            }
+            raiseManagerError(mgr);
         }, nb::arg("mat_ids"),
         "Set the material each world draws each geom with, -1 for the "
-        "material of its mesh, from the next render on.")
+        "material of its mesh, from the next render on. That render checks "
+        "the ids once it reads them back and raises a ValueError for one out "
+        "of [-1, num_materials), restoring the last valid ids.")
         .def("update_textures", [](Manager &mgr,
             nb::ndarray<const int32_t, nb::shape<-1>, nb::c_contig,
                         nb::device::cpu> texture_ids,
@@ -256,9 +266,7 @@ NB_MODULE(_gs_madrona_batch_renderer, m) {
                 reinterpret_cast<const uint8_t *>(pixels.data()),
                 (uint32_t)pixels.shape(2),
                 (uint32_t)pixels.shape(1));
-            if (const char *err = mgr.lastError()) {
-                throw std::runtime_error(err);
-            }
+            raiseManagerError(mgr);
         }, nb::arg("texture_ids"), nb::arg("pixels"),
         "Overwrite the RGBA8 pixels (num_textures, height, width, 4) of some "
         "textures, each of the size it was loaded with.")

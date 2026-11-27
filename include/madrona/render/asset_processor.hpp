@@ -23,7 +23,7 @@ namespace AssetProcessor {
     // regenerate its mipmaps, keeping its texture object. The image keeps the
     // size it was loaded with, which the pixels must match.
     void updateMaterialTexture(
-        const MaterialData &mat_data,
+        MaterialData &mat_data,
         uint32_t texture_idx,
         const uint8_t *rgba,
         uint32_t width,

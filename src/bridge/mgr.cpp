@@ -126,6 +126,13 @@ struct Manager::Impl {
         Optional<MWCudaLaunchGraph>::none();
     bool matsDirty = false;
 
+    // The material ids last set, copied to pinned host memory as they are set
+    // and checked once the render reads them back (see 'checkGeomMatIDs'),
+    // and the last ones found valid, which an invalid set restores
+    int32_t *hostMatIDs = nullptr;
+    bool matIDsPending = false;
+    std::vector<int32_t> validMatIDs;
+
     // The textures of the scene, which 'updateTextures' writes into those of
     // the pipeline drawing them
     uint32_t numMats = 0;
@@ -161,8 +168,14 @@ struct Manager::Impl {
 
     inline ~Impl()
     {
+        if (hostMatIDs != nullptr) {
+            REQ_CUDA_NOTHROW(cudaFreeHost(hostMatIDs));
+        }
         if (rtMatData.has_value()) {
             free(rtMatData->textureMipmapBufferIndices);
+            free(rtMatData->hostMaterials);
+            free(rtMatData->hostMaterialTextures);
+            free(rtMatData->textureHasAlpha);
         }
     }
 
@@ -340,6 +353,68 @@ struct Manager::Impl {
 
         gpuExec.run(*renderInitGraph);
         matsDirty = false;
+
+        size_t num_ids = (size_t)cfg.numWorlds * numGeoms;
+        validMatIDs.assign(num_ids, -1);
+        if (mat_ids != nullptr && num_ids > 0) {
+            REQ_CUDA(cudaMemcpy(validMatIDs.data(), mat_ids,
+                                sizeof(int32_t) * num_ids, cudaMemcpyDefault));
+            const char *err = findInvalidMatID(validMatIDs.data());
+            if (err != nullptr) {
+                validMatIDs.assign(num_ids, -1);
+                restoreValidMatIDs();
+                throw std::invalid_argument(err);
+            }
+        }
+    }
+
+    // The message for the first material id out of [-1, numMats), nullptr
+    // when they are all valid
+    inline const char * findInvalidMatID(const int32_t *ids)
+    {
+        size_t num_ids = (size_t)cfg.numWorlds * numGeoms;
+        for (size_t i = 0; i < num_ids; i++) {
+            if (ids[i] < -1 || ids[i] >= (int32_t)numMats) {
+                matIDError = "Material id " + std::to_string(ids[i]) +
+                    " of geom " + std::to_string(i % numGeoms) +
+                    " in world " + std::to_string(i / numGeoms) +
+                    " is out of [-1, " + std::to_string(numMats) +
+                    "); the materials of the geoms are left as they were";
+                return matIDError.c_str();
+            }
+        }
+        return nullptr;
+    }
+    std::string matIDError;
+
+    // Check the material ids set since the last render, once the stream that
+    // copied them to the host has finished, before anything draws them. An
+    // invalid set is replaced by the last valid one before it is drawn.
+    inline void checkGeomMatIDs()
+    {
+        if (!matIDsPending) {
+            return;
+        }
+        matIDsPending = false;
+        const char *err = findInvalidMatID(hostMatIDs);
+        if (err == nullptr) {
+            validMatIDs.assign(
+                hostMatIDs, hostMatIDs + (size_t)cfg.numWorlds * numGeoms);
+            return;
+        }
+        restoreValidMatIDs();
+        throw std::invalid_argument(err);
+    }
+
+    // Write the last valid material ids back into the instances, which the
+    // next render draws
+    inline void restoreValidMatIDs()
+    {
+        REQ_CUDA(cudaMemcpy(
+            gpuExec.getExported((CountT)ExportID::InstanceMatOverrides),
+            validMatIDs.data(), sizeof(int32_t) * validMatIDs.size(),
+            cudaMemcpyHostToDevice));
+        matsDirty = true;
     }
 
     inline void setGeomMatIDs(const int32_t *mat_ids)
@@ -348,10 +423,17 @@ struct Manager::Impl {
             throw std::logic_error(
                 "The materials of the geoms are set after init");
         }
+        size_t num_ids = (size_t)cfg.numWorlds * numGeoms;
+        if (hostMatIDs == nullptr) {
+            REQ_CUDA(cudaMallocHost(&hostMatIDs, sizeof(int32_t) * num_ids));
+        }
         copyInProperties(nullptr, const_cast<int32_t *>(mat_ids), nullptr,
                          nullptr, nullptr, nullptr, nullptr, nullptr,
                          nullptr, nullptr, nullptr, 0);
+        REQ_CUDA(cudaMemcpyAsync(hostMatIDs, mat_ids, sizeof(int32_t) * num_ids,
+                                 cudaMemcpyDeviceToHost, 0));
         matsDirty = true;
+        matIDsPending = true;
     }
 
     inline void updateTextures(uint32_t num_textures,
@@ -410,6 +492,9 @@ struct Manager::Impl {
         // instances for Vulkan
         // TODO: Can we remove this? where is the total number read after this?
         REQ_CUDA(cudaStreamSynchronize(0));
+
+        // The material ids are read back by now, and nothing has drawn them
+        checkGeomMatIDs();
 
         renderImpl(makeRenderOptions(render_options));
     }
@@ -886,6 +971,16 @@ const char * Manager::lastError() const
     return lastError_.empty() ? nullptr : lastError_.c_str();
 }
 
+const char * Manager::argumentError() const
+{
+    return argumentError_.empty() ? nullptr : argumentError_.c_str();
+}
+
+void Manager::clearArgumentError()
+{
+    argumentError_.clear();
+}
+
 void Manager::init(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
                    const math::Vector3 *cam_pos, const math::Quat *cam_rot,
                    const int32_t *mat_ids, const uint32_t *geom_rgb,
@@ -903,6 +998,8 @@ void Manager::init(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
             geom_pos, geom_rot, cam_pos, cam_rot, mat_ids, geom_rgb, geom_sizes,
             light_pos, light_dir, light_rgb, light_isdir, light_castshadow,
             light_cutoff, light_attenuation, light_intensity);
+    } catch (const std::invalid_argument &err) {
+        argumentError_ = err.what();
     } catch (const std::exception &err) {
         recordFailure(err);
     }
@@ -917,6 +1014,10 @@ void Manager::render(const math::Vector3 *geom_pos, const math::Quat *geom_rot,
     }
     try {
         impl_->render(geom_pos, geom_rot, cam_pos, cam_rot, render_options);
+    } catch (const std::invalid_argument &err) {
+        // Material ids out of range, which were replaced before anything drew
+        // them, leave the manager usable
+        argumentError_ = err.what();
     } catch (const std::exception &err) {
         recordFailure(err);
     }
@@ -929,8 +1030,8 @@ void Manager::setGeomMatIDs(const int32_t *mat_ids)
     }
     try {
         impl_->setGeomMatIDs(mat_ids);
-    } catch (const std::logic_error &) {
-        throw;
+    } catch (const std::logic_error &err) {
+        argumentError_ = err.what();
     } catch (const std::exception &err) {
         recordFailure(err);
     }
@@ -950,19 +1051,21 @@ void Manager::updateTextures(uint32_t num_textures,
         int32_t texture_idx = texture_ids[i];
         if (texture_idx < 0 ||
                 (size_t)texture_idx >= impl_->texWidths.size()) {
-            throw std::out_of_range(
+            argumentError_ =
                 "Texture " + std::to_string(texture_idx) +
                 " is out of range, the scene holds " +
-                std::to_string(impl_->texWidths.size()) + " textures");
+                std::to_string(impl_->texWidths.size()) + " textures";
+            return;
         }
         if (impl_->texWidths[texture_idx] != width ||
                 impl_->texHeights[texture_idx] != height) {
-            throw std::invalid_argument(
+            argumentError_ =
                 "Texture " + std::to_string(texture_idx) + " is " +
                 std::to_string(impl_->texWidths[texture_idx]) + "x" +
                 std::to_string(impl_->texHeights[texture_idx]) +
                 ", written with " + std::to_string(width) + "x" +
-                std::to_string(height) + " pixels");
+                std::to_string(height) + " pixels";
+            return;
         }
     }
     try {

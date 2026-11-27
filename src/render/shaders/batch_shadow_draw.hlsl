@@ -116,10 +116,9 @@ struct PixelOutput {
 [shader("pixel")]
 PixelOutput frag(in V2F v2f)
 {
-    // A surface casts the shadow of the pixels of the shadow map it covers,
-    // so that a cutout casts its pattern and a translucent surface a partial
-    // shadow once the shadow map is filtered
-    if (surfaceAlpha(v2f) < ditheredAlphaThreshold(v2f.position.xy)) {
+    // A surface casts the shadow of the part it draws, so that a cutout casts
+    // its pattern
+    if (surfaceAlpha(v2f) < kAlphaCutoff) {
         discard;
     }
 

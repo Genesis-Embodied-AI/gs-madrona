@@ -78,13 +78,20 @@ struct TraceResult {
     float depth;
 };
 
-// The opacity at or below which a surface counts as a hole: a ray goes through
-// it as if nothing were there, the texels of zero alpha of a cutout.
+// The opacity at or below which a ray goes through a surface as if nothing
+// were there, the texels of zero alpha of a cutout.
 static constexpr float kTransparentOpacity = 0.5f / 255.f;
 
-// The number of translucent surfaces a camera ray or a shadow ray crosses
-// before the last one counts as opaque.
-static constexpr int kMaxTranslucentLayers = 4;
+// The opacity from which a surface covers a pixel in the depth, normal and
+// segmentation outputs, as an alpha cutoff (the glTF MASK default). The
+// rasterizer draws a surface below it in no output and one above it opaque, so
+// that both pipelines report the same surface at each pixel.
+static constexpr float kCoverageOpacity = 0.5f;
+
+// The number of translucent surfaces a camera ray crosses before the last one
+// counts as opaque, and a shadow ray crosses before it stops, letting through
+// what is left.
+static constexpr int kMaxTranslucentLayers = 8;
 
 struct TraceInfo {
     Vector3 rayOrigin;
@@ -92,6 +99,10 @@ struct TraceInfo {
     float tMin;
     float tMax;
     bool dOnly; // Depth only
+    // The distance from the camera to the origin of the ray, for a ray
+    // continuing past a surface or toward a light, which selects the level of
+    // detail of the textures it samples along with the distance it travels
+    float lodDistance;
 };
 
 struct TraceWorldInfo {
@@ -567,6 +578,28 @@ static __device__ SurfaceSample sampleSurface(const InstanceData *instance,
     return sample;
 }
 
+// The opacity of the surface of an instance at a hit (see 'sampleSurface'),
+// one without sampling anything for a material that holds no alpha below one.
+static __device__ float surfaceOpacity(const InstanceData *instance,
+                                       const TriHitInfo &tri_hit,
+                                       float dist)
+{
+    int32_t override_mat_id = instance->matID;
+    if (override_mat_id == MaterialOverride::UseOverrideColor ||
+            bvhParams.materials == nullptr) {
+        return 1.f;
+    }
+    int32_t material_idx = override_mat_id;
+    if (override_mat_id == MaterialOverride::UseDefaultMaterial) {
+        material_idx = tri_hit.bvh->getMaterialIDX(tri_hit.leafMaterialIndex);
+    }
+    if (material_idx == -1 ||
+            !bvhParams.materials[material_idx].mayBeTranslucent) {
+        return 1.f;
+    }
+    return sampleSurface(instance, tri_hit, dist).opacity;
+}
+
 static __device__ TraceResult traceRay(
     TraceInfo trace_info,
     TraceWorldInfo world_info)
@@ -730,9 +763,10 @@ static __device__ TraceResult traceRay(
                 if (hit_info.hit) {
                     InstanceData *hit_instance =
                         world_info.instances + instance_idx;
-                    SurfaceSample surface = sampleSurface(
-                        hit_instance, hit_info, hit_info.tHit / t_scale);
-                    if (surface.opacity > kTransparentOpacity) {
+                    float opacity = surfaceOpacity(
+                        hit_instance, hit_info,
+                        trace_info.lodDistance + hit_info.tHit / t_scale);
+                    if (opacity > kTransparentOpacity) {
                         t_max = hit_info.tHit;
                         tri_hit = hit_info;
                         tri_hit.instanceIdx = instance_idx;
@@ -774,10 +808,11 @@ static __device__ TraceResult traceRay(
         tri_hit.tHit = t_max;
 
         InstanceData *instance = world_info.instances + tri_hit.instanceIdx;
-        SurfaceSample surface = sampleSurface(instance, tri_hit, tri_hit.tHit);
-        result.opacity = surface.opacity;
+        float lod_dist = trace_info.lodDistance + tri_hit.tHit;
 
         if (bvhParams.raycastRGBD && (!trace_info.dOnly)) {
+            SurfaceSample surface = sampleSurface(instance, tri_hit, lod_dist);
+            result.opacity = surface.opacity;
             result.color = surface.color;
             if (surface.materialIdx != -1) {
                 const Material *mat = &bvhParams.materials[surface.materialIdx];
@@ -786,6 +821,8 @@ static __device__ TraceResult traceRay(
             }
             result.normal = instance->rotation.rotateVec(tri_hit.normal);
             result.segmentation = instance->objectID;
+        } else {
+            result.opacity = surfaceOpacity(instance, tri_hit, lod_dist);
         }
 
         result.depth = tri_hit.tHit;
@@ -848,20 +885,31 @@ static __device__ float compute_attenuating(float d, float attenuation) {
 }
 
 struct FragmentResult {
+    // Whether a surface covers the pixel (see 'kCoverageOpacity'), which the
+    // depth, the normal and the segmentation are those of
     bool hit;
+    // The color of the pixel, which translucent surfaces that cover it in no
+    // other output still tint
     Vector3 color;
     Vector3 normal;
     int segmentation;
     float depth;
 };
 
-// The origin of a ray continuing past a surface hit at some distance along
-// another ray, moved off the surface so that it does not hit it again.
-static __device__ inline Vector3 continuationOrigin(const TraceInfo &info,
-                                                    float depth)
+// The distance a ray continuing past a surface hit at some depth starts beyond
+// that surface, so that it does not hit it again.
+static __device__ inline float continuationDistance(float depth)
 {
-    float offset = 1e-4f * (1.f + depth);
-    return info.rayOrigin + (depth + offset) * info.rayDirection;
+    return depth + 1e-4f * (1.f + depth);
+}
+
+// Move a ray past the surface it hit at some depth.
+static __device__ inline void continueRay(TraceInfo &info, float depth)
+{
+    float dist = continuationDistance(depth);
+    info.rayOrigin += dist * info.rayDirection;
+    info.tMax -= dist;
+    info.lodDistance += dist;
 }
 
 // The fraction of the light leaving a point toward a light that reaches it,
@@ -870,6 +918,7 @@ static __device__ inline Vector3 continuationOrigin(const TraceInfo &info,
 static __device__ float shadowTransmittance(Vector3 origin,
                                             Vector3 to_light,
                                             float max_dist,
+                                            float lod_distance,
                                             TraceWorldInfo world_info)
 {
     float transmittance = 1.f;
@@ -878,7 +927,8 @@ static __device__ float shadowTransmittance(Vector3 origin,
         .rayDirection = to_light,
         .tMin = 0.000001f,
         .tMax = max_dist,
-        .dOnly = true
+        .dOnly = true,
+        .lodDistance = lod_distance,
     };
     for (int layer = 0; layer < kMaxTranslucentLayers; ++layer) {
         TraceResult hit = traceRay(info, world_info);
@@ -889,10 +939,9 @@ static __device__ float shadowTransmittance(Vector3 origin,
         if (transmittance < 1e-3f) {
             return 0.f;
         }
-        info.rayOrigin = continuationOrigin(info, hit.depth);
-        info.tMax -= hit.depth;
+        continueRay(info, hit.depth);
     }
-    return 0.f;
+    return transmittance;
 }
 
 // The linear radiance of the surface a camera ray hit, lit by the lights of
@@ -902,6 +951,7 @@ static __device__ Vector3 shadeHit(const TraceInfo &trace_info,
                                    TraceWorldInfo world_info)
 {
     Vector3 hit_pos = trace_info.rayOrigin + hit.depth * trace_info.rayDirection;
+    float hit_lod_distance = trace_info.lodDistance + hit.depth;
 
     Vector3 totalLighting = {0.f, 0.f, 0.f};
 
@@ -931,7 +981,7 @@ static __device__ Vector3 shadeHit(const TraceInfo &trace_info,
         if (light.castShadow) {
             if (ray_dir.dot(hit.normal) < 0.f) {
                 attenuating_factor *= shadowTransmittance(
-                    hit_pos, -ray_dir, 10000.f, world_info);
+                    hit_pos, -ray_dir, 10000.f, hit_lod_distance, world_info);
                 if (attenuating_factor <= 0.f) {
                     continue;
                 }
@@ -959,62 +1009,56 @@ static __device__ FragmentResult computeFragment(
     TraceWorldInfo world_info)
 {
     // Direct hit first
-    TraceResult first_hit = traceRay(trace_info, world_info);
+    TraceResult layer_hit = traceRay(trace_info, world_info);
 
     __syncwarp();
 
-    if (!bvhParams.raycastRGBD) {
-        if (first_hit.hit) {
-            return FragmentResult {
-                .hit = true,
-                .depth = first_hit.depth
-            };
+    FragmentResult result = {
+        .hit = false,
+        .color = { 0.f, 0.f, 0.f },
+    };
+
+    // The ray goes through the surfaces it hits, front to back. The first one
+    // whose opacity reaches the coverage cutoff gives the depth, the normal
+    // and the segmentation. Each one adds its color in proportion to its
+    // opacity and to what the surfaces before it let through, the black
+    // background where the ray leaves the scene, and the last one counting as
+    // opaque.
+    bool is_rgb = bvhParams.raycastRGBD;
+    Vector3 color = { 0.f, 0.f, 0.f };
+    float transmittance = 1.f;
+    TraceInfo layer_info = trace_info;
+    for (int layer = 0; layer < kMaxTranslucentLayers; ++layer) {
+        if (!layer_hit.hit) {
+            break;
         }
-    } else if (first_hit.hit) {
-        // A translucent surface shows the surfaces behind it in proportion to
-        // one minus its opacity, blended front to back, and the black
-        // background where the ray leaves the scene. The depth, the normal and
-        // the segmentation are those of the first surface hit.
-        Vector3 finalColor = {0.f, 0.f, 0.f};
-        float transmittance = 1.f;
-        TraceInfo layer_info = trace_info;
-        TraceResult layer_hit = first_hit;
-        for (int layer = 0; layer < kMaxTranslucentLayers; ++layer) {
+        if (!result.hit && layer_hit.opacity >= kCoverageOpacity) {
+            result.hit = true;
+            result.depth = layer_info.lodDistance - trace_info.lodDistance +
+                layer_hit.depth;
+            result.normal = layer_hit.normal;
+            result.segmentation = layer_hit.segmentation;
+        }
+        if (is_rgb && transmittance >= 1.f / 512.f) {
             float opacity = layer == kMaxTranslucentLayers - 1 ?
                 1.f : layer_hit.opacity;
-            finalColor += (transmittance * opacity) *
+            color += (transmittance * opacity) *
                 shadeHit(layer_info, layer_hit, world_info);
             transmittance *= 1.f - opacity;
-            if (transmittance < 1.f / 512.f) {
-                break;
-            }
-            layer_info.rayOrigin = continuationOrigin(layer_info, layer_hit.depth);
-            layer_info.tMax -= layer_hit.depth;
-            layer_hit = traceRay(layer_info, world_info);
-            if (!layer_hit.hit) {
-                break;
-            }
         }
-
-        // Convert to sRGB
-        finalColor = linearToSRGB(finalColor);
-
-        // Clamp to 0-1
-        finalColor = Vector3::max(Vector3::zero(), Vector3::min(Vector3::one(), finalColor));
-
-        // If we are still here, just do normal lighting calculation.
-        return FragmentResult {
-            .hit = true,
-            .color = finalColor,
-            .normal = first_hit.normal,
-            .segmentation = first_hit.segmentation,
-            .depth = first_hit.depth
-        };
+        if (result.hit && (!is_rgb || transmittance < 1.f / 512.f)) {
+            break;
+        }
+        continueRay(layer_info, layer_hit.depth);
+        layer_hit = traceRay(layer_info, world_info);
     }
 
-    return FragmentResult {
-        .hit = false
-    };
+    if (is_rgb) {
+        // Convert to sRGB and clamp to 0-1
+        color = linearToSRGB(color);
+        result.color = Vector3::max(Vector3::zero(), Vector3::min(Vector3::one(), color));
+    }
+    return result;
 }
 
 extern "C" __global__ void bvhRaycastEntry()
@@ -1053,7 +1097,8 @@ extern "C" __global__ void bvhRaycastEntry()
                 .rayDirection = ray_dir,
                 .tMin = view_data->zNear,
                 .tMax = view_data->zFar,
-                .dOnly = false
+                .dOnly = false,
+                .lodDistance = 0.f,
             },
             TraceWorldInfo {
                 .nodes = bvhParams.internalData->traversalNodes + internal_nodes_offset,
@@ -1068,13 +1113,12 @@ extern "C" __global__ void bvhRaycastEntry()
 
         if (bvhParams.raycastRGBD) {
             // Write both depth and color information
+            writeRGB(global_pixel_byte_off, result.color);
             if (result.hit) {
-                writeRGB(global_pixel_byte_off, result.color);
                 writeDepth(global_pixel_byte_off, result.depth);
                 writeNormal(global_pixel_byte_off, (result.normal + 1.0) * 0.5);
                 writeSegmentation(global_pixel_byte_off, result.segmentation);
             } else {
-                writeRGB(global_pixel_byte_off, { 0.f, 0.f, 0.f });
                 writeDepth(global_pixel_byte_off, INFINITY);
                 writeNormal(global_pixel_byte_off, { 0.f, 0.f, 0.f });
                 writeSegmentation(global_pixel_byte_off, -1);

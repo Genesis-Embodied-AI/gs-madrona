@@ -117,7 +117,9 @@ public:
 
     // Set the material each world draws each geom with, from a device array
     // [numWorlds, numGeoms] of material indices, -1 drawing the geom with the
-    // material of its mesh. The next render draws them.
+    // material of its mesh. The next render draws them, after checking them
+    // on the host once it has synchronized: an id out of [-1, numMaterials)
+    // throws std::invalid_argument and restores the last valid ids.
     MGR_EXPORT void setGeomMatIDs(const int32_t *mat_ids);
 
     // Overwrite the RGBA8 pixels of some textures, each of the size it was
@@ -154,6 +156,13 @@ public:
     // manager carrying a failure ignores every further operation.
     MGR_EXPORT const char * lastError() const;
 
+    // The invalid argument the last operation refused, nullptr when none. It
+    // leaves the manager usable, unlike 'lastError', and stays until
+    // 'clearArgumentError'. Errors cross the library boundary as strings,
+    // since its exceptions cannot be caught outside it.
+    MGR_EXPORT const char * argumentError() const;
+    MGR_EXPORT void clearArgumentError();
+
 private:
     struct Impl;
     struct CPUImpl;
@@ -163,6 +172,7 @@ private:
 
     std::unique_ptr<Impl> impl_;
     std::string lastError_;
+    std::string argumentError_;
 };
 
 }
